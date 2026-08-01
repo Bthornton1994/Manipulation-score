@@ -1,0 +1,13 @@
+{
+  "install": "node --test tests/*.test.js",
+  "terminals": [
+    {
+      "name": "dev",
+      "command": "python3 -m http.server 4173",
+      "description": "Static file server on port 4173"
+    }
+  ],
+  "ports": [
+    { "name": "web", "port": 4173 }
+  ]
+}

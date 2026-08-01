@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://bthornton1994.github.io/Manipulation-score/sitemap.xml

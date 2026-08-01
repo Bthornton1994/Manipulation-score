@@ -33,9 +33,11 @@ node --test tests/*.test.js
 
 GitHub Actions deploys to GitHub Pages on pushes to `main`. Enable Pages under repository Settings → Pages → Source: **GitHub Actions**.
 
-**Production URL:** https://manipulationscore.com
+**Production URLs:** https://manipulationscore.com and https://www.manipulationscore.com
 
-The `CNAME` file points GitHub Pages to `manipulationscore.com`. Configure DNS at your registrar:
+The `CNAME` file sets the apex domain as canonical. GitHub Pages serves both hostnames and redirects `www` to the apex domain once DNS is configured.
+
+Configure DNS at your registrar:
 
 ### Apex domain (`manipulationscore.com`)
 
@@ -57,15 +59,19 @@ Optional **AAAA** records for IPv6:
 | AAAA | @ | `2606:50c0:8002::153` |
 | AAAA | @ | `2606:50c0:8003::153` |
 
-### `www` subdomain (optional)
+### `www` subdomain (`www.manipulationscore.com`)
 
 | Type | Name | Value |
 |------|------|-------|
 | CNAME | www | `bthornton1994.github.io` |
 
-If you use `www`, also add it under repository Settings → Pages → Custom domain.
+### GitHub Pages settings
 
-After DNS propagates, enable **Enforce HTTPS** in Pages settings. GitHub will provision a TLS certificate automatically.
+1. Settings → Pages → Source: **GitHub Actions**
+2. Settings → Pages → Custom domain: `manipulationscore.com`
+3. After DNS checks pass for both hostnames, enable **Enforce HTTPS**
+
+GitHub provisions TLS for both `manipulationscore.com` and `www.manipulationscore.com`. Visitors on `www` are redirected to the apex domain (canonical URL for SEO and sharing).
 
 ## Important
 

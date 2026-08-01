@@ -18,6 +18,8 @@ export function analyzeMessage(text) {
     }));
     const matches = [...new Set(evidence.map(({ text: match }) => match.toLowerCase()))];
     return evidence.length ? [{ ...signal, matches, evidence, points: signal.weight + Math.min(8, (evidence.length - 1) * 4) }] : [];
+    const matches = normalized.match(signal.pattern) || [];
+    return matches.length ? [{ ...signal, matches: [...new Set(matches.map((match) => match.toLowerCase()))], points: signal.weight + Math.min(8, (matches.length - 1) * 4) }] : [];
   });
   const score = Math.min(100, signals.reduce((total, signal) => total + signal.points, 4));
   const level = score >= 60 ? 'High pressure' : score >= 38 ? 'Elevated pressure' : score >= 18 ? 'Some pressure' : 'Low pressure';
@@ -25,6 +27,7 @@ export function analyzeMessage(text) {
     ? 'I hear that this matters to you. I need time to think, and I’ll respond when I’m ready.'
     : 'I want to make sure I understand. Can you tell me more about what you need?';
   return { score, level, signals, response, signalCount: signals.length };
+  return { score, level, signals, response };
 }
 
 export { SIGNALS };

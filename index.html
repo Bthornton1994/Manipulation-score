@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Spot pressure, guilt, and control patterns in difficult messages." />
+    <title>Clarity — Read between the lines</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="Clarity home"><span class="brand-mark" aria-hidden="true">C</span><span>clarity</span></a>
+      <nav aria-label="Main navigation">
+        <a href="#how-it-works">How it works</a><a href="#principles">Our approach</a><a href="#resources">Resources</a>
+      </nav>
+      <a class="button button-small button-outline" href="#analyzer">Try the analyzer</a>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow"><span></span> Communication, made clearer</p>
+          <h1>Read between<br />the <em>lines.</em></h1>
+          <p class="hero-lede">Understand the pressure hidden in difficult messages—and find the words to respond with confidence.</p>
+          <div class="hero-actions"><a class="button" href="#analyzer">Analyze a message <span>→</span></a><a class="text-link" href="#how-it-works">See how it works <span>↘</span></a></div>
+          <div class="privacy-note"><span class="lock" aria-hidden="true">⌁</span><span><strong>Private by design</strong><br />Your messages never leave your device.</span></div>
+        </div>
+        <div class="hero-visual" aria-label="Example analysis card">
+          <div class="orb orb-one"></div><div class="orb orb-two"></div>
+          <article class="message-card">
+            <div class="message-top"><span class="avatar">M</span><span><strong>Message received</strong><small>Today, 2:14 PM</small></span><span class="dots">•••</span></div>
+            <p>“If you really cared about me, you wouldn't need time to think about it. I guess I know where I stand.”</p>
+            <div class="scan-line"><span></span><i></i></div>
+            <div class="signal-row"><span class="signal-icon">↗</span><span><small>Pressure signal</small><strong>Emotional leverage detected</strong></span><b>72</b></div>
+          </article>
+          <div class="floating-pill pill-one">Guilt framing <b>High</b></div>
+          <div class="floating-pill pill-two"><span>✓</span> You can take your time.</div>
+        </div>
+      </section>
+
+      <section class="trust-strip" aria-label="Product values"><span>Built with care, not judgment</span><i></i><span>No accounts</span><i></i><span>No message storage</span><i></i><span>Always free to try</span></section>
+
+      <section class="analyzer-section" id="analyzer">
+        <div class="section-heading"><p class="eyebrow"><span></span> Try it yourself</p><h2>A second opinion,<br /><em>without the judgment.</em></h2><p>Paste a message that left you feeling confused, guilty, or pressured. Clarity will highlight the language patterns worth a closer look.</p></div>
+        <div class="analyzer-grid">
+          <form class="input-panel" id="analysis-form">
+            <label for="message">Message to analyze</label>
+            <textarea id="message" maxlength="1500" placeholder="Paste or type a message here…" required></textarea>
+            <div class="input-meta"><span>⌘ Your text stays in this browser</span><span id="character-count">0 / 1,500</span></div>
+            <button class="button analyze-button" type="submit">Analyze message <span>→</span></button>
+          </form>
+          <div class="results-panel" id="results" aria-live="polite">
+            <div class="empty-state"><div class="radar"><span></span></div><h3>Your analysis will appear here</h3><p>We'll identify language patterns, explain why they matter, and offer a calm response prompt.</p></div>
+          </div>
+        </div>
+        <p class="disclaimer">Clarity identifies language patterns—not people or intentions. It is an educational tool, not a diagnosis.</p>
+      </section>
+
+      <section class="steps" id="how-it-works">
+        <div><p class="eyebrow light"><span></span> How it works</p><h2>From uncertainty<br />to <em>understanding.</em></h2></div>
+        <ol><li><span>01</span><div><h3>Share the message</h3><p>Add the exact words that made you pause. Context belongs to you, and your text stays local.</p></div></li><li><span>02</span><div><h3>See the signals</h3><p>Review potential pressure patterns with plain-language explanations—not labels.</p></div></li><li><span>03</span><div><h3>Choose your response</h3><p>Use a grounded prompt to slow the conversation down and protect your boundaries.</p></div></li></ol>
+      </section>
+
+      <section class="principles" id="principles">
+        <p class="eyebrow"><span></span> Our approach</p><h2>Technology should give you<br /><em>agency, not answers.</em></h2>
+        <div class="principle-cards"><article><span>◌</span><h3>Patterns, not verdicts</h3><p>Language is complicated. We surface possible signals while leaving interpretation with you.</p></article><article><span>⌁</span><h3>Privacy is the product</h3><p>Analysis happens on your device. There is no account, upload, or message archive.</p></article><article><span>◇</span><h3>Built for reflection</h3><p>The goal isn't to win an argument. It's to create enough space to decide what feels right.</p></article></div>
+      </section>
+    </main>
+
+    <footer id="resources"><a class="brand" href="#top"><span class="brand-mark">C</span><span>clarity</span></a><p>Language insight for clearer choices.</p><p class="footer-note">If you feel unsafe or in immediate danger, contact local emergency services or a trusted support resource.</p></footer>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

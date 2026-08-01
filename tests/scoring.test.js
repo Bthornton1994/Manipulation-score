@@ -11,6 +11,13 @@ test('detects multiple pressure patterns', () => {
   assert.equal(result.level, 'High pressure');
   assert.deepEqual(result.signals.map(({ id }) => id), ['guilt', 'urgency', 'threat']);
   assert.ok(result.score <= 100);
+  assert.equal(result.signalCount, 3);
+  assert.deepEqual(result.signals[0].evidence[0], { text: 'If you really cared', start: 0, end: 19 });
+});
+
+test('returns exact evidence offsets for safe UI rendering', () => {
+  const result = analyzeMessage('Please do not say I am too sensitive.');
+  assert.deepEqual(result.signals[0].evidence, [{ text: 'too sensitive', start: 23, end: 36 }]);
 });
 
 test('keeps neutral language in the low range', () => {

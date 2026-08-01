@@ -11,6 +11,13 @@ export function analyzeMessage(text) {
   const normalized = text.trim();
   if (!normalized) return { score: 0, level: 'No message', signals: [], response: '' };
   const signals = SIGNALS.flatMap((signal) => {
+    const evidence = [...normalized.matchAll(signal.pattern)].map((match) => ({
+      text: match[0],
+      start: match.index,
+      end: match.index + match[0].length
+    }));
+    const matches = [...new Set(evidence.map(({ text: match }) => match.toLowerCase()))];
+    return evidence.length ? [{ ...signal, matches, evidence, points: signal.weight + Math.min(8, (evidence.length - 1) * 4) }] : [];
     const matches = normalized.match(signal.pattern) || [];
     return matches.length ? [{ ...signal, matches: [...new Set(matches.map((match) => match.toLowerCase()))], points: signal.weight + Math.min(8, (matches.length - 1) * 4) }] : [];
   });
@@ -19,6 +26,7 @@ export function analyzeMessage(text) {
   const response = signals.length
     ? 'I hear that this matters to you. I need time to think, and I’ll respond when I’m ready.'
     : 'I want to make sure I understand. Can you tell me more about what you need?';
+  return { score, level, signals, response, signalCount: signals.length };
   return { score, level, signals, response };
 }
 

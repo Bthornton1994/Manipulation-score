@@ -50,3 +50,9 @@ test('sitemap uses production domain', async () => {
   assert.match(sitemap, /https:\/\/manipulationscore\.com\//);
   assert.doesNotMatch(sitemap, /github\.io/);
 });
+
+test('readme documents apex and www hostnames', async () => {
+  const readme = await readFile('README.md', 'utf8');
+  assert.match(readme, /manipulationscore\.com/);
+  assert.match(readme, /www\.manipulationscore\.com/);
+});

@@ -1,7 +1,10 @@
 {
-  "name": "clarity-manipulation-score",
+  "name": "clarity",
   "version": "1.0.0",
   "private": true,
+  "description": "Privacy-first on-device language pressure analyzer",
   "type": "module",
-  "scripts": { "test": "node --test tests/*.test.js" }
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  }
 }

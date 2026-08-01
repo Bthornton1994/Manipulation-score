@@ -1,0 +1,17 @@
+{
+  "name": "Clarity — Language Pressure Analyzer",
+  "short_name": "Clarity",
+  "description": "Private, on-device language pattern analysis for difficult messages.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#fffdf8",
+  "theme_color": "#103c37",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

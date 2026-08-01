@@ -7,53 +7,19 @@ const SIGNALS = [
   { id: 'absolutes', label: 'All-or-nothing framing', weight: 9, pattern: /\b(?:always|never|everyone|nobody|everything|nothing)\b/gi, detail: 'Absolute language can flatten nuance and make disagreement feel impossible.' }
 ];
 
-export function analyzeMessage(text, options = {}) {
-  const normalized = String(text ?? '');
-  const context = ['personal', 'work', 'family'].includes(options.context) ? options.context : 'personal';
-  if (!normalized.trim()) return { score: 0, level: 'No message', signals: [], evidence: [], response: '', responses: {}, signalCount: 0, context };
+export function analyzeMessage(text) {
+  const normalized = text.trim();
+  if (!normalized) return { score: 0, level: 'No message', signals: [], response: '' };
   const signals = SIGNALS.flatMap((signal) => {
-    const evidence = [...normalized.matchAll(signal.pattern)].map((match) => ({
-      text: match[0],
-      start: match.index,
-      end: match.index + match[0].length
-    }));
-    const matches = [...new Set(evidence.map(({ text: match }) => match.toLowerCase()))];
-    return evidence.length ? [{ ...signal, matches, evidence, points: signal.weight + Math.min(8, (evidence.length - 1) * 4) }] : [];
+    const matches = normalized.match(signal.pattern) || [];
+    return matches.length ? [{ ...signal, matches: [...new Set(matches.map((match) => match.toLowerCase()))], points: signal.weight + Math.min(8, (matches.length - 1) * 4) }] : [];
   });
-  const score = Math.min(100, signals.reduce((total, signal) => total + signal.points, 0));
+  const score = Math.min(100, signals.reduce((total, signal) => total + signal.points, 4));
   const level = score >= 60 ? 'High pressure' : score >= 38 ? 'Elevated pressure' : score >= 18 ? 'Some pressure' : 'Low pressure';
-  const responses = buildResponses(signals, context);
-  const evidence = signals.flatMap((signal) => signal.evidence.map((item) => ({ ...item, signalId: signal.id, label: signal.label })))
-    .sort((a, b) => a.start - b.start || b.end - a.end);
-  return { score, level, signals, evidence, response: responses.pause, responses, signalCount: signals.length, context };
-}
-
-function buildResponses(signals, context) {
-  if (!signals.length) return {
-    pause: 'I want to make sure I understand. Can you tell me more about what you need?',
-    boundary: 'I’m open to talking about this, as long as we can both speak respectfully.',
-    clarify: 'What would a good outcome from this conversation look like for you?'
-  };
-
-  const ids = new Set(signals.map(({ id }) => id));
-  const defaultBoundary = context === 'work'
-    ? 'I can discuss the request, but I need us to keep the conversation professional and free from pressure.'
-    : context === 'family'
-      ? 'I care about our relationship, and I still need this boundary to be respected.'
-      : 'I care about this conversation, and I won’t continue it while I’m being pressured.';
-  const boundary = ids.has('threat')
-    ? 'I’m not willing to make a decision under a threat. I’m stepping away from this conversation for now.'
-    : ids.has('isolation')
-      ? 'I make important decisions with people I trust. I’m not comfortable keeping this conversation secret.'
-      : ids.has('dismissal')
-        ? 'My experience is real to me. I’m willing to talk when it can be discussed without dismissing my feelings.'
-        : defaultBoundary;
-
-  return {
-    pause: 'I hear that this matters to you. I need time to think, and I’ll respond when I’m ready.',
-    boundary,
-    clarify: 'Can you tell me what you’re asking for without tying it to how much I care about you?'
-  };
+  const response = signals.length
+    ? 'I hear that this matters to you. I need time to think, and I’ll respond when I’m ready.'
+    : 'I want to make sure I understand. Can you tell me more about what you need?';
+  return { score, level, signals, response };
 }
 
 export { SIGNALS };

@@ -5,10 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Spot pressure, guilt, and control patterns in difficult messages." />
     <title>Clarity — Read between the lines</title>
-    <meta name="theme-color" content="#103c37" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'" />
-    <link rel="manifest" href="manifest.webmanifest" />
-    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -48,30 +47,16 @@
         <div class="section-heading"><p class="eyebrow"><span></span> Try it yourself</p><h2>A second opinion,<br /><em>without the judgment.</em></h2><p>Paste a message that left you feeling confused, guilty, or pressured. Clarity will highlight the language patterns worth a closer look.</p></div>
         <div class="analyzer-grid">
           <form class="input-panel" id="analysis-form">
-            <fieldset class="context-field">
-              <legend>Conversation context <span>(optional)</span></legend>
-              <div class="context-options">
-                <label><input type="radio" name="context" value="personal" checked /><span>Personal</span></label>
-                <label><input type="radio" name="context" value="work" /><span>Work</span></label>
-                <label><input type="radio" name="context" value="family" /><span>Family</span></label>
-              </div>
-            </fieldset>
             <label for="message">Message to analyze</label>
             <textarea id="message" maxlength="1500" placeholder="Paste or type a message here…" required></textarea>
             <div class="input-meta"><span>⌘ Your text stays in this browser</span><span id="character-count">0 / 1,500</span></div>
-            <div class="example-row">
-              <span>Not sure where to start?</span>
-              <button class="example-button" id="load-example" type="button">Use an example</button>
-              <button class="clear-button" id="clear-message" type="button" hidden>Clear</button>
-            </div>
             <button class="button analyze-button" type="submit">Analyze message <span>→</span></button>
           </form>
-          <div class="results-panel" id="results" aria-live="polite" tabindex="-1">
+          <div class="results-panel" id="results" aria-live="polite">
             <div class="empty-state"><div class="radar"><span></span></div><h3>Your analysis will appear here</h3><p>We'll identify language patterns, explain why they matter, and offer a calm response prompt.</p></div>
           </div>
         </div>
         <p class="disclaimer">Clarity identifies language patterns—not people or intentions. It is an educational tool, not a diagnosis.</p>
-        <details class="methodology"><summary>How is the score calculated?</summary><div><p>Each detected language pattern has a fixed weight based on how strongly it can constrain choice. Repeated instances add a small amount, and the total is capped at 100.</p><ul><li><b>0–17</b> Low pressure</li><li><b>18–37</b> Some pressure</li><li><b>38–59</b> Elevated pressure</li><li><b>60–100</b> High pressure</li></ul><p>The score only describes words in this message. Tone, history, power dynamics, and your own experience remain essential context.</p></div></details>
       </section>
 
       <section class="steps" id="how-it-works">
@@ -83,14 +68,9 @@
         <p class="eyebrow"><span></span> Our approach</p><h2>Technology should give you<br /><em>agency, not answers.</em></h2>
         <div class="principle-cards"><article><span>◌</span><h3>Patterns, not verdicts</h3><p>Language is complicated. We surface possible signals while leaving interpretation with you.</p></article><article><span>⌁</span><h3>Privacy is the product</h3><p>Analysis happens on your device. There is no account, upload, or message archive.</p></article><article><span>◇</span><h3>Built for reflection</h3><p>The goal isn't to win an argument. It's to create enough space to decide what feels right.</p></article></div>
       </section>
-
-      <section class="support" id="resources">
-        <div><p class="eyebrow light"><span></span> A thoughtful next step</p><h2>A score is a starting point,<br /><em>not the whole story.</em></h2></div>
-        <div><p>Pay attention to patterns over time, how the interaction makes you feel, and whether your boundaries are respected. You do not need a high score to ask for space or support.</p><p>If you feel unsafe, reach out to someone you trust or a qualified local support service. In an emergency, contact local emergency services.</p></div>
-      </section>
     </main>
 
-    <footer><a class="brand" href="#top"><span class="brand-mark">C</span><span>clarity</span></a><p>Language insight for clearer choices.</p><p class="footer-note">Educational reflection tool · Not a diagnosis or safety assessment</p></footer>
+    <footer id="resources"><a class="brand" href="#top"><span class="brand-mark">C</span><span>clarity</span></a><p>Language insight for clearer choices.</p><p class="footer-note">If you feel unsafe or in immediate danger, contact local emergency services or a trusted support resource.</p></footer>
     <script type="module" src="app.js"></script>
   </body>
 </html>

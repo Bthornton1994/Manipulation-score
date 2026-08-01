@@ -4,142 +4,19 @@ const form = document.querySelector('#analysis-form');
 const message = document.querySelector('#message');
 const count = document.querySelector('#character-count');
 const results = document.querySelector('#results');
-const exampleButton = document.querySelector('#load-example');
-const clearButton = document.querySelector('#clear-message');
-const EXAMPLE = "If you really cared about me, you'd answer right now. Don't tell anyone—I'm the only one who understands you.";
 
-const element = (tag, className, text) => {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
-};
+message.addEventListener('input', () => { count.textContent = `${message.value.length.toLocaleString()} / 1,500`; });
 
-function updateInputState() {
-  count.textContent = `${message.value.length.toLocaleString()} / 1,500`;
-  clearButton.hidden = !message.value;
-}
-
-function createScoreHeader(analysis) {
-  const tone = analysis.score >= 60 ? 'high' : analysis.score >= 38 ? 'medium' : 'low';
-  const header = element('div', 'score-head');
-  const ring = element('div', `score-ring ${tone}`);
-  ring.style.setProperty('--score', `${analysis.score * 3.6}deg`);
-  ring.setAttribute('role', 'img');
-  ring.setAttribute('aria-label', `Pressure score ${analysis.score} out of 100`);
-  const value = element('span');
-  value.append(element('b', '', String(analysis.score)), element('small', '', '/ 100'));
-  ring.append(value);
-  const copy = element('div');
-  copy.append(element('small', '', 'Language pressure score'), element('h3', '', analysis.level), element('p', '', 'A reflection aid—not a verdict.'));
-  header.append(ring, copy);
-  return header;
-}
-
-function createSignalList(analysis) {
-  const section = element('div', 'found-signals');
-  section.append(element('h4', '', `Signals worth noticing · ${analysis.signalCount}`));
-  const list = element('ul');
-  const signals = analysis.signals.length ? analysis.signals : [{
-    label: 'No strong pressure patterns found',
-    detail: 'This message may still feel difficult. Context and your experience matter more than a text score.',
-    matches: []
-  }];
-  signals.forEach((signal) => {
-    const item = element('li');
-    const content = element('div');
-    content.append(element('strong', '', signal.label), element('p', '', signal.detail));
-    if (signal.matches.length) content.append(element('small', '', `Found: “${signal.matches.join('”, “')}”`));
-    item.append(element('span', 'result-dot'), content);
-    list.append(item);
-  });
-  section.append(list);
-  return section;
-}
-
-function createEvidencePreview(source, analysis) {
-  if (!analysis.evidence.length) return null;
-  const section = element('div', 'evidence-preview');
-  section.append(element('h4', '', 'Message evidence'));
-  const quote = element('blockquote');
-  let cursor = 0;
-  analysis.evidence.forEach((evidence) => {
-    if (evidence.start < cursor) return;
-    quote.append(document.createTextNode(source.slice(cursor, evidence.start)));
-    const highlight = element('mark', '', source.slice(evidence.start, evidence.end));
-    highlight.title = evidence.label;
-    quote.append(highlight);
-    cursor = evidence.end;
-  });
-  quote.append(document.createTextNode(source.slice(cursor)));
-  section.append(quote);
-  return section;
-}
-
-function createResponse(analysis) {
-  const card = element('div', 'response-prompt');
-  const heading = element('small', '', 'Grounded responses to adapt');
-  const tabs = element('div', 'response-tabs');
-  tabs.setAttribute('role', 'tablist');
-  tabs.setAttribute('aria-label', 'Response approach');
-  const responseText = element('p', 'response-text', `“${analysis.responses.pause}”`);
-  responseText.setAttribute('aria-live', 'polite');
-  const button = element('button', '', 'Copy response');
-  button.type = 'button';
-  let selectedResponse = analysis.responses.pause;
-  const approaches = [['pause', 'Create space'], ['boundary', 'Set a boundary'], ['clarify', 'Ask for clarity']];
-  approaches.forEach(([key, label], index) => {
-    const tab = element('button', index ? '' : 'active', label);
-    tab.type = 'button';
-    tab.setAttribute('role', 'tab');
-    tab.setAttribute('aria-selected', String(index === 0));
-    tab.addEventListener('click', () => {
-      selectedResponse = analysis.responses[key];
-      responseText.textContent = `“${selectedResponse}”`;
-      tabs.querySelectorAll('[role="tab"]').forEach((item) => {
-        const active = item === tab;
-        item.classList.toggle('active', active);
-        item.setAttribute('aria-selected', String(active));
-      });
-      button.textContent = 'Copy response';
-    });
-    tabs.append(tab);
-  });
-  button.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(selectedResponse);
-      button.textContent = 'Copied';
-    } catch {
-      button.textContent = 'Select and copy the text above';
-    }
-  });
-  card.append(heading, tabs, responseText, button);
-  return card;
-}
-
-function renderAnalysis(analysis, source) {
-  const sections = [createScoreHeader(analysis), createEvidencePreview(source, analysis), createSignalList(analysis), createResponse(analysis)].filter(Boolean);
-  results.replaceChildren(...sections);
-  results.focus({ preventScroll: true });
-}
-
-message.addEventListener('input', updateInputState);
-exampleButton.addEventListener('click', () => {
-  message.value = EXAMPLE;
-  updateInputState();
-  message.focus();
-});
-clearButton.addEventListener('click', () => {
-  form.reset();
-  updateInputState();
-  message.focus();
-});
 form.addEventListener('submit', (event) => {
   event.preventDefault();
-  const context = new FormData(form).get('context');
-  renderAnalysis(analyzeMessage(message.value, { context }), message.value);
+  const analysis = analyzeMessage(message.value);
+  const tone = analysis.score >= 60 ? 'high' : analysis.score >= 38 ? 'medium' : 'low';
+  const signalMarkup = analysis.signals.length
+    ? analysis.signals.map((signal) => `<li><span class="result-dot"></span><div><strong>${signal.label}</strong><p>${signal.detail}</p><small>Found: “${signal.matches.join('”, “')}”</small></div></li>`).join('')
+    : '<li><span class="result-dot"></span><div><strong>No strong pressure patterns found</strong><p>This message may still feel difficult. Context and your experience matter more than a text score.</p></div></li>';
+  results.innerHTML = `<div class="score-head"><div class="score-ring ${tone}" style="--score:${analysis.score * 3.6}deg"><span><b>${analysis.score}</b><small>/ 100</small></span></div><div><small>Language pressure score</small><h3>${analysis.level}</h3><p>A reflection aid—not a verdict.</p></div></div><div class="found-signals"><h4>Signals worth noticing</h4><ul>${signalMarkup}</ul></div><div class="response-prompt"><small>A grounded response to adapt</small><p>“${analysis.response}”</p><button type="button" id="copy-response">Copy response</button></div>`;
+  document.querySelector('#copy-response').addEventListener('click', async (event) => {
+    await navigator.clipboard.writeText(analysis.response);
+    event.currentTarget.textContent = 'Copied';
+  });
 });
-
-if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-  window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js'));
-}

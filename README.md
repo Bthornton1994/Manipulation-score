@@ -1,6 +1,6 @@
 # Manipulation Score
 
-A privacy-first communication analysis dashboard that helps people identify potentially manipulative language, understand the signals behind a score, and choose a grounded response.
+A privacy-first communication analysis dashboard that helps people identify potentially manipulative language, understand the signals behind a score, and choose from grounded pause, boundary, and clarification responses.
 
 ## Run locally
 
@@ -18,4 +18,4 @@ Then open <http://localhost:4173>.
 node --test tests/*.test.js
 ```
 
-The scoring engine is deterministic and runs entirely in the browser. It is an educational aid—not a diagnosis, safety assessment, or substitute for professional advice.
+The scoring engine is deterministic and runs entirely in the browser. Evidence is rendered with safe DOM APIs rather than inserted as HTML, so pasted content cannot become executable markup. It is an educational aid—not a diagnosis, safety assessment, or substitute for professional advice.

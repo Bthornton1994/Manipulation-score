@@ -33,9 +33,39 @@ node --test tests/*.test.js
 
 GitHub Actions deploys to GitHub Pages on pushes to `main`. Enable Pages under repository Settings → Pages → Source: **GitHub Actions**.
 
-Default URL: https://bthornton1994.github.io/Manipulation-score/
+**Production URL:** https://manipulationscore.com
 
-Update `sitemap.xml` and `robots.txt` if you use a custom domain.
+The `CNAME` file points GitHub Pages to `manipulationscore.com`. Configure DNS at your registrar:
+
+### Apex domain (`manipulationscore.com`)
+
+Add **A** records for `@`:
+
+| Type | Name | Value |
+|------|------|-------|
+| A | @ | `185.199.108.153` |
+| A | @ | `185.199.109.153` |
+| A | @ | `185.199.110.153` |
+| A | @ | `185.199.111.153` |
+
+Optional **AAAA** records for IPv6:
+
+| Type | Name | Value |
+|------|------|-------|
+| AAAA | @ | `2606:50c0:8000::153` |
+| AAAA | @ | `2606:50c0:8001::153` |
+| AAAA | @ | `2606:50c0:8002::153` |
+| AAAA | @ | `2606:50c0:8003::153` |
+
+### `www` subdomain (optional)
+
+| Type | Name | Value |
+|------|------|-------|
+| CNAME | www | `bthornton1994.github.io` |
+
+If you use `www`, also add it under repository Settings → Pages → Custom domain.
+
+After DNS propagates, enable **Enforce HTTPS** in Pages settings. GitHub will provision a TLS certificate automatically.
 
 ## Important
 

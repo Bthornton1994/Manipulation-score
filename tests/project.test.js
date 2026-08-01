@@ -35,3 +35,14 @@ test('fonts are self-hosted', async () => {
   const paths = [...fontsCss.matchAll(/url\('\.\/(.*?)'\)/g)].map(([, path]) => path);
   await Promise.all(paths.map((path) => access(path)));
 });
+
+test('custom domain CNAME is configured', async () => {
+  const cname = (await readFile('CNAME', 'utf8')).trim();
+  assert.equal(cname, 'manipulationscore.com');
+});
+
+test('sitemap uses production domain', async () => {
+  const sitemap = await readFile('sitemap.xml', 'utf8');
+  assert.match(sitemap, /https:\/\/manipulationscore\.com\//);
+  assert.doesNotMatch(sitemap, /github\.io/);
+});

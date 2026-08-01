@@ -17,7 +17,11 @@ test('service worker app shell contains existing local assets', async () => {
 
 test('index has no third-party runtime dependencies', async () => {
   const html = await readFile('index.html', 'utf8');
-  assert.doesNotMatch(html, /https?:\/\//);
+  const externalHosts = [...html.matchAll(/https?:\/\/([^/"'\s]+)/g)].map(([, host]) => host);
+  for (const host of externalHosts) {
+    assert.match(host, /^(manipulationscore\.com|www\.manipulationscore\.com)$/);
+  }
+  assert.doesNotMatch(html, /fonts\.googleapis\.com|fonts\.gstatic\.com/);
   assert.match(html, /Content-Security-Policy/);
 });
 

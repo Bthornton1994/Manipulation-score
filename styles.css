@@ -100,6 +100,13 @@
 .signal-excerpt{margin:0;padding:12px;background:#fff;border:1px solid var(--line);border-radius:4px;font:500 13px/1.55 Manrope;color:#284e48}
 .signal-responses{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
 .signal-responses-label{font:600 10px Manrope;text-transform:uppercase;letter-spacing:1px;margin:0 0 8px;color:var(--muted)}
+.leverage-insights{margin:0 0 20px;padding:16px;background:#f4f8f6;border:1px solid var(--line);border-radius:8px}
+.leverage-insights .results-heading{font-size:13px;margin:0 0 8px}
+.leverage-insights-note{font-size:12px;color:var(--muted);margin:0 0 14px;line-height:1.5}
+.leverage-insight-cards{display:grid;gap:12px}
+.leverage-insight-card{padding:12px 14px;background:#fff;border:1px solid var(--line);border-radius:6px}
+.leverage-insight-card h4{font:600 14px Manrope;margin:0 0 6px}
+.leverage-insight-function{font-size:13px;color:#4d6964;margin:0;line-height:1.55}
 .response-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px}
 .response-text{font:500 12px/1.5 Manrope;margin:0;flex:1}
 .copy-chip{border:1px solid var(--line);background:#fff;padding:8px 12px;border-radius:4px;font:600 11px Manrope;color:var(--teal);cursor:pointer;min-height:36px;min-width:64px}

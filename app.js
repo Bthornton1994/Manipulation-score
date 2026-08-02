@@ -129,7 +129,7 @@ function createPatternGuide() {
   details.append(summary);
   const list = element('dl', 'pattern-guide-list');
   SIGNALS.forEach((signal) => {
-    list.append(element('dt', '', signal.label), element('dd', '', signal.education));
+    list.append(element('dt', '', signal.label), element('dd', '', signal.function || signal.education));
   });
   details.append(list);
   return details;
@@ -144,7 +144,7 @@ function createSignalCard(signal) {
   );
   card.append(header);
 
-  card.append(element('p', 'signal-why', signal.detail));
+  card.append(element('p', 'signal-why', signal.function || signal.detail));
 
   const excerptWrap = element('div', 'signal-excerpt-wrap');
   excerptWrap.append(element('p', 'signal-excerpt-label', 'In your message'));
@@ -166,9 +166,35 @@ function createSignalCard(signal) {
   return card;
 }
 
+function createLeverageInsightsSection(insights) {
+  if (!insights?.length) return null;
+
+  const section = element('section', 'leverage-insights');
+  section.append(
+    element('h3', 'results-heading', 'How the pressure works'),
+    element(
+      'p',
+      'leverage-insights-note',
+      'These readings focus on what the language is designed to do—not labels for intent or diagnosis.'
+    )
+  );
+
+  const list = element('div', 'leverage-insight-cards');
+  insights.forEach((insight) => {
+    const card = element('article', 'leverage-insight-card');
+    card.append(element('h4', '', insight.label), element('p', 'leverage-insight-function', insight.function));
+    list.append(card);
+  });
+  section.append(list);
+  return section;
+}
+
 function createPatternsSection(analysis) {
   const section = element('section', 'patterns-section');
-  section.append(element('h3', 'results-heading', `Detected patterns · ${analysis.signalCount}`));
+  section.append(element('h3', 'results-heading', `Language functions · ${analysis.signalCount}`));
+
+  const leverageSection = createLeverageInsightsSection(analysis.leverageInsights);
+  if (leverageSection) section.append(leverageSection);
 
   if (!analysis.signals.length) {
     const empty = element('div', 'patterns-empty');

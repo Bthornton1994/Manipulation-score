@@ -1,7 +1,6 @@
 /**
  * Safety classification independent of manipulation-pattern scoring.
- * Detects explicit harm language — not a diagnosis of danger.
- * Evaluates candidates per sentence with local negation and attribution.
+ * Evaluates harm candidates per clause with candidate-specific negation.
  */
 
 export const SAFETY_NOTICE = {
@@ -115,19 +114,27 @@ const CANDIDATE_RULES = [
   }
 ];
 
-const NEGATION_NEAR_HARM =
-  /\b(?:never|not|no|cannot|can't|won't|would\s+never|do\s+not|don't|does\s+not|doesn't|should\s+not|shouldn't|wouldn't)\b[^.!?]{0,32}\b(?:kill|hurt|harm|murder|shoot|stab)\b/i;
+const CLAUSE_SPLIT_RE = /\s*;\s*|\s+\bbut\s+|\s+\bhowever\s+|\s+\byet\s+/gi;
 
 const THIRD_PARTY_ATTRIBUTION =
-  /(?:character|villain|actor|suspect|defendant|attacker|witness|police|suspect|they|he|she|someone)\s+said\b/i;
+  /(?:character|villain|actor|suspect|defendant|attacker|witness|police|they|he|she|someone)\s+said\b/i;
 
 const REPORTED_QUOTE_ATTRIBUTION =
   /(?:article|report|news|story|headline)\s+(?:said|reported|quoted|described)\b/i;
 
+const INSTRUCTIONAL_ATTRIBUTION =
+  /(?:instructor|trainer|teacher|facilitator|coach)\s+(?:used|quoted|said|showed|gave)\b/i;
+
 const TRAINING_SEGMENT =
   /(?:safety|workplace|de-?escalation|crisis\s+line)\s+training|training\s+example|fictional\s+(?:scene|dialogue|example)|in\s+a\s+(?:movie|book|script|novel)/i;
 
+const TRAINING_EXAMPLE_PHRASE =
+  /as\s+an\s+example|example\s+of\s+threatening\s+language|training\s+scenario|fictional\s+training/i;
+
 const MEDICAL_CONTEXT = /\b(?:doctor|treatment|medication|procedure|therapy)\b/i;
+
+const NEGATION_WORD =
+  '(?:never|not|no|cannot|can\'t|won\'t|would\\s+never|do\\s+not|don\'t|does\\s+not|doesn\'t|should\\s+not|shouldn\'t|wouldn\'t)';
 
 function normalizeForSafety(text) {
   return (text || '')
@@ -136,11 +143,7 @@ function normalizeForSafety(text) {
     .trim();
 }
 
-/**
- * @param {string} text
- * @returns {{ text: string, start: number, end: number }[]}
- */
-function splitSegments(text) {
+function splitSentences(text) {
   const segments = [];
   const re = /[^.!?]+(?:[.!?]+|$)/g;
   let match;
@@ -162,14 +165,46 @@ function splitSegments(text) {
   return segments;
 }
 
-function findCandidates(segmentText) {
+/**
+ * @returns {{ text: string, start: number, end: number }[]}
+ */
+function splitClauses(segmentText) {
+  const clauses = [];
+  let lastEnd = 0;
+  CLAUSE_SPLIT_RE.lastIndex = 0;
+  let splitMatch;
+
+  while ((splitMatch = CLAUSE_SPLIT_RE.exec(segmentText)) !== null) {
+    const chunk = segmentText.slice(lastEnd, splitMatch.index).trim();
+    if (chunk) {
+      const start = segmentText.indexOf(chunk, lastEnd);
+      clauses.push({ text: chunk, start, end: start + chunk.length });
+    }
+    lastEnd = splitMatch.index + splitMatch[0].length;
+  }
+
+  const tail = segmentText.slice(lastEnd).trim();
+  if (tail) {
+    const start = segmentText.indexOf(tail, lastEnd);
+    clauses.push({ text: tail, start, end: start + tail.length });
+  }
+
+  if (!clauses.length && segmentText.trim()) {
+    const trimmed = segmentText.trim();
+    clauses.push({ text: trimmed, start: 0, end: trimmed.length });
+  }
+
+  return clauses;
+}
+
+function findCandidates(clauseText) {
   const matches = [];
 
   for (const rule of CANDIDATE_RULES) {
     const flags = rule.pattern.flags.includes('g') ? rule.pattern.flags : `${rule.pattern.flags}g`;
     const re = new RegExp(rule.pattern.source, flags);
     let match;
-    while ((match = re.exec(segmentText)) !== null) {
+    while ((match = re.exec(clauseText)) !== null) {
       matches.push({
         id: rule.id,
         start: match.index,
@@ -180,58 +215,97 @@ function findCandidates(segmentText) {
     }
   }
 
-  return matches;
+  return matches.sort((a, b) => a.start - b.start || a.end - b.end);
 }
 
-function isNegatedHarm(segmentText, matchStart, matchText) {
-  const localStart = Math.max(0, matchStart - 8);
-  const localEnd = Math.min(segmentText.length, matchStart + matchText.length + 8);
-  const window = segmentText.slice(localStart, localEnd);
-  const beforeHarm = segmentText.slice(Math.max(0, matchStart - 48), matchStart + matchText.length);
+function extractHarmVerb(matchText) {
+  const verb = matchText.match(/\b(kill|hurt|harm|murder|shoot|stab)\b/i);
+  return verb ? verb[1].toLowerCase() : null;
+}
 
-  if (NEGATION_NEAR_HARM.test(beforeHarm)) return true;
+function isNegatedForCandidate(clauseText, matchStart, matchText) {
+  const harmVerb = extractHarmVerb(matchText);
+  if (!harmVerb) return false;
 
-  if (
-    /\b(?:do\s+not|don't|would\s+never|should\s+not|shouldn't)\b[^.!?]{0,40}\b(?:want\s+to\s+)?(?:hurt|harm|kill)\s+you\b/i.test(
-      window
-    )
-  ) {
-    return true;
+  const prefix = clauseText.slice(0, matchStart);
+  const escaped = harmVerb.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const candidatePhrase = clauseText.slice(matchStart, matchStart + matchText.length);
+
+  const negatedVerb = new RegExp(
+    `\\b${NEGATION_WORD}(?:\\s+\\w+){0,8}\\s+${escaped}\\b`,
+    'i'
+  );
+  if (negatedVerb.test(prefix + candidatePhrase)) return true;
+
+  if (harmVerb === 'hurt' || harmVerb === 'harm') {
+    if (
+      new RegExp(
+        `\\b${NEGATION_WORD}(?:\\s+\\w+){0,12}\\b(?:want\\s+to\\s+)?(?:hurt|harm)\\s+you\\b`,
+        'i'
+      ).test(prefix + candidatePhrase)
+    ) {
+      return true;
+    }
   }
 
   return false;
 }
 
-function isThirdPartyQuote(segmentText, matchStart) {
-  const before = segmentText.slice(0, matchStart);
+function isThirdPartyQuote(clauseText, matchStart) {
+  const before = clauseText.slice(0, matchStart);
   const recent = before.slice(-120);
   if (THIRD_PARTY_ATTRIBUTION.test(recent)) return true;
   if (REPORTED_QUOTE_ATTRIBUTION.test(recent) && /["']/.test(recent)) return true;
   return false;
 }
 
-function isTrainingOnlySegment(segmentText) {
-  if (!TRAINING_SEGMENT.test(segmentText)) return false;
+function isInstructionalQuote(clauseText, matchStart) {
+  const before = clauseText.slice(0, matchStart);
+  const recent = before.slice(-140);
+
+  if (INSTRUCTIONAL_ATTRIBUTION.test(recent)) {
+    if (TRAINING_EXAMPLE_PHRASE.test(clauseText) || /during\s+(?:safety\s+)?training/i.test(clauseText)) {
+      return true;
+    }
+  }
+
+  if (
+    /during\s+(?:safety\s+)?training/i.test(clauseText.slice(0, matchStart + 20)) &&
+    TRAINING_EXAMPLE_PHRASE.test(clauseText)
+  ) {
+    const firstPersonBefore =
+      /\b(?:i'?m|i am|i will|i'?ll)\s+(?:going\s+to|will)\s+(?:kill|hurt|harm|shoot|stab)/i.test(
+        clauseText.slice(0, matchStart)
+      );
+    if (!firstPersonBefore) return true;
+  }
+
+  return false;
+}
+
+function isTrainingOnlyClause(clauseText) {
+  if (!TRAINING_SEGMENT.test(clauseText)) return false;
   const firstPersonThreat =
     /\b(?:i'?m|i am|i will|i'?ll)\s+(?:going\s+to|will)\s+(?:kill|hurt|harm|shoot|stab|murder)\s+you\b/i.test(
-      segmentText
+      clauseText
     );
   return !firstPersonThreat;
 }
 
-function isMedicalReassurance(segmentText, matchStart, matchText) {
-  const before = segmentText.slice(Math.max(0, matchStart - 80), matchStart);
+function isMedicalReassurance(clauseText, matchStart, matchText) {
+  const before = clauseText.slice(Math.max(0, matchStart - 80), matchStart);
   if (!MEDICAL_CONTEXT.test(before)) return false;
   return /\bshould\s+not\s+harm\b/i.test(
-    segmentText.slice(Math.max(0, matchStart - 20), matchStart + matchText.length)
+    clauseText.slice(Math.max(0, matchStart - 20), matchStart + matchText.length)
   );
 }
 
-function isExcludedCandidate(segmentText, match) {
-  if (isNegatedHarm(segmentText, match.start, match.text)) return true;
-  if (isThirdPartyQuote(segmentText, match.start)) return true;
-  if (isTrainingOnlySegment(segmentText)) return true;
-  if (isMedicalReassurance(segmentText, match.start, match.text)) return true;
+function isExcludedCandidate(clauseText, match) {
+  if (isNegatedForCandidate(clauseText, match.start, match.text)) return true;
+  if (isThirdPartyQuote(clauseText, match.start)) return true;
+  if (isInstructionalQuote(clauseText, match.start)) return true;
+  if (isTrainingOnlyClause(clauseText)) return true;
+  if (isMedicalReassurance(clauseText, match.start, match.text)) return true;
   return false;
 }
 
@@ -242,26 +316,30 @@ export function detectSafetyNotice(text) {
   const normalized = normalizeForSafety(text);
   if (!normalized) return null;
 
-  const segments = splitSegments(normalized);
+  const sentences = splitSentences(normalized);
 
-  for (const segment of segments) {
-    const candidates = findCandidates(segment.text);
+  for (const sentence of sentences) {
+    const clauses = splitClauses(sentence.text);
 
-    for (const candidate of candidates) {
-      if (isExcludedCandidate(segment.text, candidate)) continue;
+    for (const clause of clauses) {
+      const candidates = findCandidates(clause.text);
 
-      const globalStart = segment.start + candidate.start;
-      const globalEnd = segment.start + candidate.end;
+      for (const candidate of candidates) {
+        if (isExcludedCandidate(clause.text, candidate)) continue;
 
-      return {
-        ...SAFETY_NOTICE,
-        category: candidate.id,
-        evidenceSpan: {
-          start: globalStart,
-          end: globalEnd,
-          text: normalized.slice(globalStart, globalEnd)
-        }
-      };
+        const globalStart = sentence.start + clause.start + candidate.start;
+        const globalEnd = sentence.start + clause.start + candidate.end;
+
+        return {
+          ...SAFETY_NOTICE,
+          category: candidate.id,
+          evidenceSpan: {
+            start: globalStart,
+            end: globalEnd,
+            text: normalized.slice(globalStart, globalEnd)
+          }
+        };
+      }
     }
   }
 

@@ -126,7 +126,7 @@ const SIGNALS = [
   }
 ];
 
-export const METHODOLOGY_VERSION = '0.2.1';
+export const METHODOLOGY_VERSION = '0.2.2';
 export const MIN_MEANINGFUL_WORDS = 15;
 
 const EXCLUSION_CONTEXT_RULES = {
@@ -145,7 +145,9 @@ const EXCLUSION_CONTEXT_RULES = {
     /nobody\s+is\s+required/i,
     /not\s+required\s+to\s+participate/i,
     /no\s+pressure/i,
-    /nothing\s+needs\s+to\s+be\s+decided/i
+    /nothing\s+needs\s+to\s+be\s+decided/i,
+    /never\s+(?:hurt|harm|kill)\s+you/i,
+    /want\s+you\s+to\s+feel\s+safe/i
   ],
   obligation: [
     /legal\s+deadline/i,
@@ -273,8 +275,8 @@ function isOffsetExcluded(signalId, text, offset) {
   if (rules?.some((rule) => rule.test(context))) return true;
 
   if (signalId === 'urgency' && /(?:^|\s)no\s+[^.!?]{0,30}right\s+now/i.test(context)) return true;
-  if (signalId === 'absolutes' && /(?:care|understand|choices|invited|welcome|required\s+to\s+participate)/i.test(context)) {
-    if (/always\s+have\s+choices|everyone\s+is\s+invited|nobody\s+is\s+required/i.test(context)) return true;
+  if (signalId === 'absolutes' && /(?:care|understand|choices|invited|welcome|required\s+to\s+participate|feel\s+safe)/i.test(context)) {
+    if (/always\s+have\s+choices|everyone\s+is\s+invited|nobody\s+is\s+required|never\s+(?:hurt|harm|kill)\s+you/i.test(context)) return true;
   }
 
   return false;

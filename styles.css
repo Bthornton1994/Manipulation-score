@@ -22,8 +22,14 @@
 .site-header-static{position:relative;background:var(--paper)}
 .button-secondary{background:#eef4f2;color:var(--ink);border:1px solid var(--line);font-size:12px;padding:11px 14px;gap:8px}
 .button-secondary:hover{background:#e4efec;transform:none}
-.input-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:4px}
-.input-actions .analyze-button{flex:1;min-width:160px}
+.input-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}
+.input-actions .analyze-button{flex:1 1 140px;min-width:0;min-height:44px}
+.button-compact{padding:10px 14px;font-size:12px;gap:6px;min-height:44px;flex:0 0 auto}
+.button-tertiary{background:transparent;border:1px solid var(--line);color:var(--muted);font-size:11px;padding:10px 12px;min-height:44px;flex:0 0 auto}
+.button-tertiary:hover{background:#f4f8f6;color:var(--ink);transform:none}
+.image-upload-btn,.image-remove-btn{flex:0 0 auto;width:auto}
+.image-remove-btn[hidden]{display:none!important}
+.image-upload-note{font-size:10px;color:var(--muted);margin:10px 0 0;line-height:1.45}
 .highlighted-message{margin:20px 0}
 .highlighted-message h4{font:600 12px Manrope;text-transform:uppercase;letter-spacing:1px;margin:0 0 10px}
 .highlighted-text{margin:0;padding:14px;background:#fcfcf9;border:1px solid var(--line);border-radius:4px;font:500 14px/1.6 Manrope;color:#284e48}
@@ -115,10 +121,6 @@
 .intensity-legend-list{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:4px}
 .intensity-legend-list li{font-size:11px;line-height:1.45;color:#4d6964}
 .intensity-legend-list strong{font-weight:600;color:var(--ink)}
-.image-upload-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
-.image-upload-btn,.image-remove-btn{font-size:12px;padding:11px 14px;gap:8px;flex:1;min-width:0}
-.image-remove-btn[hidden]{display:none!important}
-.image-upload-note{font-size:10px;color:var(--muted);margin:8px 0 0;line-height:1.45}
 .image-upload-status{font-size:11px;margin:8px 0 0;line-height:1.45;padding:8px 10px;border-radius:4px}
 .image-upload-status-info{background:#eaf4f1;color:#2d5f56}
 .image-upload-status-ok{background:#eaf4f1;color:#2d5f56}

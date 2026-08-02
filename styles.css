@@ -22,7 +22,10 @@
 .site-header-static{position:relative;background:var(--paper)}
 .button-secondary{background:#eef4f2;color:var(--ink);border:1px solid var(--line);font-size:12px;padding:11px 14px;gap:8px}
 .button-secondary:hover{background:#e4efec;transform:none}
-.input-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}
+.input-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0 0}
+.input-panel .input-meta{margin:8px 0 16px}
+.image-upload-note{font-size:10px;color:var(--muted);margin:10px 0 0;line-height:1.45}
+.example-row{margin-top:4px;margin-bottom:12px}
 .input-actions .analyze-button{flex:1 1 140px;min-width:0;min-height:44px}
 .button-compact{padding:10px 14px;font-size:12px;gap:6px;min-height:44px;flex:0 0 auto}
 .button-tertiary{background:transparent;border:1px solid var(--line);color:var(--muted);font-size:11px;padding:10px 12px;min-height:44px;flex:0 0 auto}

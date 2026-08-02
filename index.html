@@ -116,18 +116,6 @@
           <form class="input-panel" id="analysis-form">
             <label for="message">Message</label>
             <textarea id="message" maxlength="2500" placeholder="Paste a message, or attach an image below…" required></textarea>
-            <p class="image-upload-note" id="image-upload-note">Images are read on your device only—the image is not stored or uploaded.</p>
-            <p class="image-upload-status" id="image-upload-status" hidden></p>
-            <div class="input-meta">
-              <span>Text stored on this device only when you analyze</span>
-              <span id="character-count">0 / 2,500</span>
-            </div>
-            <div class="example-row">
-              <label for="example-select">Try an example</label>
-              <select id="example-select" class="example-select">
-                <option value="">Choose a pattern…</option>
-              </select>
-            </div>
             <div class="input-actions">
               <input
                 type="file"
@@ -139,6 +127,18 @@
               <button class="button button-secondary button-compact image-upload-btn" type="button" id="image-upload-btn">Attach image</button>
               <button class="button button-tertiary button-compact image-remove-btn" type="button" id="image-remove-btn" hidden>Remove image</button>
               <button class="button analyze-button" type="submit">Analyze message <span>→</span></button>
+            </div>
+            <p class="image-upload-note" id="image-upload-note">Images are read on your device only—the image is not stored or uploaded.</p>
+            <p class="image-upload-status" id="image-upload-status" hidden></p>
+            <div class="input-meta">
+              <span>Text stored on this device only when you analyze</span>
+              <span id="character-count">0 / 2,500</span>
+            </div>
+            <div class="example-row">
+              <label for="example-select">Try an example</label>
+              <select id="example-select" class="example-select">
+                <option value="">Choose a pattern…</option>
+              </select>
             </div>
             <details class="history-panel" id="history-panel">
               <summary class="history-toggle">

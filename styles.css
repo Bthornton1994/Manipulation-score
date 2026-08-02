@@ -32,7 +32,6 @@
 .button-tertiary:hover{background:#f4f8f6;color:var(--ink);transform:none}
 .image-upload-btn,.image-remove-btn{flex:0 0 auto;width:auto}
 .image-remove-btn[hidden]{display:none!important}
-.image-upload-note{font-size:10px;color:var(--muted);margin:10px 0 0;line-height:1.45}
 .highlighted-message{margin:20px 0}
 .highlighted-message h4{font:600 12px Manrope;text-transform:uppercase;letter-spacing:1px;margin:0 0 10px}
 .highlighted-text{margin:0;padding:14px;background:#fcfcf9;border:1px solid var(--line);border-radius:4px;font:500 14px/1.6 Manrope;color:#284e48}

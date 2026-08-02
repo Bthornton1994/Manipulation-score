@@ -85,41 +85,67 @@ function appendHighlightedExcerpt(container, excerptData, signalId) {
 function createScoreSection(analysis) {
   const section = element('section', 'score-section');
   const tone = analysis.band?.id || 'low';
+  const headline = analysis.bandHeadline || analysis.band?.headline || analysis.level;
 
-  const ring = element('div', `score-ring score-ring-lg ${tone}`);
-  ring.style.setProperty('--score', `${analysis.score * 3.6}deg`);
-  ring.setAttribute('role', 'img');
-  ring.setAttribute('aria-label', `Manipulation Score ${analysis.score} out of 100`);
-
-  const value = element('span', 'score-value');
-  value.append(element('b', '', String(analysis.score)), element('small', '', '/ 100'));
-  ring.append(value);
-
-  const meta = element('div', 'score-meta');
-  meta.append(
-    element('p', 'score-label', 'Manipulation Score'),
-    element('h3', 'score-band', analysis.level),
-    element('p', 'score-summary', analysis.bandSummary || 'Paste a message to see how language patterns may be creating pressure.')
+  const hero = element('div', `assessment-hero assessment-${tone}`);
+  hero.append(
+    element('p', 'assessment-eyebrow', 'Overall assessment'),
+    element('h2', 'assessment-headline', headline),
+    element('p', 'assessment-summary', analysis.bandSummary || 'Paste a message to see how language patterns may be creating pressure.')
   );
 
-  const scale = element('div', 'score-scale');
-  scale.append(element('p', 'score-scale-title', 'What this number means'));
+  const meter = element('div', 'assessment-meter');
+  const meterTrack = element('div', 'assessment-meter-track');
+  const meterFill = element('div', `assessment-meter-fill assessment-meter-fill-${tone}`);
+  meterFill.style.width = `${Math.min(100, Math.max(0, analysis.score))}%`;
+  meterTrack.append(meterFill);
+  meter.append(meterTrack);
+
+  const meterLabels = element('div', 'assessment-meter-labels');
+  meterLabels.append(
+    element('span', '', 'Low'),
+    element('span', '', 'Moderate'),
+    element('span', '', 'High')
+  );
+  meter.append(meterLabels);
+
+  const context = element('div', 'assessment-context');
+  context.append(
+    meter,
+    element(
+      'p',
+      'assessment-index',
+      `Pressure index ${analysis.score}/100 — a reflection aid, not proof of intent or diagnosis.`
+    )
+  );
+
+  const scale = element('details', 'score-scale-details');
+  const scaleSummary = element('summary', '', 'What this rating means');
+  scale.append(scaleSummary);
+
+  const scaleBody = element('div', 'score-scale');
+  scaleBody.append(element('p', 'score-scale-title', 'Rating bands'));
   const bands = element('ul', 'score-bands');
   [
-    { label: 'Low', range: '0–30', note: 'Few or mild patterns' },
-    { label: 'Moderate', range: '31–60', note: 'Several noticeable patterns' },
-    { label: 'High', range: '61–100', note: 'Multiple strong patterns' }
+    { label: 'Low', range: '0–30', note: 'Mild or ambiguous patterns only' },
+    { label: 'Moderate', range: '31–60', note: 'Clear pressure language present' },
+    { label: 'High', range: '61–100', note: 'Multiple clear pressure functions' }
   ].forEach((item) => {
     const li = element('li', item.label.toLowerCase() === analysis.level?.toLowerCase() ? 'active' : '');
     li.append(element('strong', '', `${item.label} (${item.range})`), element('span', '', item.note));
     bands.append(li);
   });
-  scale.append(bands);
-  scale.append(element('p', 'score-note', 'A reflection aid—not a verdict. Patterns are not proof of intent.'));
+  scaleBody.append(bands);
+  scaleBody.append(
+    element(
+      'p',
+      'score-note',
+      'The index supports reflection—it does not measure intent, character, or whether you should stay in a relationship.'
+    )
+  );
+  scale.append(scaleBody);
 
-  const head = element('div', 'score-head');
-  head.append(ring, meta);
-  section.append(head, scale);
+  section.append(hero, context, scale);
   return section;
 }
 

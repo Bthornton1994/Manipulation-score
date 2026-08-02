@@ -4,21 +4,24 @@ export const SCORE_BANDS = [
     label: 'Low',
     min: 0,
     max: 30,
-    summary: 'Few or mild language patterns. The message may still feel difficult—context matters more than the score.'
+    headline: 'Low pressure patterns',
+    summary: 'Few or mild language patterns. The message may still feel difficult—context matters more than the rating.'
   },
   {
     id: 'moderate',
     label: 'Moderate',
     min: 31,
     max: 60,
-    summary: 'Several patterns that may narrow your space to think, question, or respond at your own pace.'
+    headline: 'Moderate pressure patterns',
+    summary: 'Clear language functions are present that may narrow your space to think, question, or respond at your own pace.'
   },
   {
     id: 'high',
     label: 'High',
     min: 61,
     max: 100,
-    summary: 'Multiple strong patterns detected. This reflects language, not intent—a starting point for reflection.'
+    headline: 'High pressure patterns',
+    summary: 'Multiple clear pressure functions appear together—language that can significantly compress your room to pause, refuse, or seek support.'
   }
 ];
 
@@ -127,6 +130,15 @@ const SIGNAL_FAMILIES = {
   distortion: ['dismissal', 'minimization', 'absolutes', 'isolation']
 };
 
+const CLEAR_PRESSURE_IDS = new Set([
+  ...SIGNAL_FAMILIES.pressure,
+  ...SIGNAL_FAMILIES.withdrawal,
+  'isolation',
+  'dismissal'
+]);
+
+const SOFT_SIGNAL_IDS = new Set(['absolutes', 'minimization']);
+
 const LEVERAGE_CLUSTERS = [
   {
     id: 'withdrawal_leverage',
@@ -232,8 +244,8 @@ export function getScoreBand(score) {
 
 export function getSignalSeverity(signal) {
   const extra = signal.points - signal.weight;
-  if (extra >= 6 || signal.points >= 28) return { label: 'Strong', level: 'strong' };
-  if (extra >= 3 || signal.points >= 20) return { label: 'Moderate', level: 'moderate' };
+  if (extra >= 6 || signal.points >= 28) return { label: 'Clear', level: 'strong' };
+  if (extra >= 3 || signal.points >= 20) return { label: 'Noticeable', level: 'moderate' };
   return { label: 'Mild', level: 'mild' };
 }
 
@@ -343,32 +355,56 @@ function computeAggregateScore(signals) {
   return total;
 }
 
+function isClearPressure(signalId) {
+  return CLEAR_PRESSURE_IDS.has(signalId);
+}
+
 function isPressureSignal(signalId) {
   return SIGNAL_FAMILIES.pressure.includes(signalId) || SIGNAL_FAMILIES.withdrawal.includes(signalId);
 }
 
-function applyScoreConsistency(score, signals) {
-  let adjusted = score;
-  const hasStrongPressure = signals.some(
-    (s) => s.severity.level === 'strong' && isPressureSignal(s.id)
-  );
-  const hasStrong = signals.some((s) => s.severity.level === 'strong');
-  const distinctCount = signals.length;
-  const withdrawalCount = signals.filter((s) => SIGNAL_FAMILIES.withdrawal.includes(s.id)).length;
+function calibrateScore(rawScore, signals, clusters) {
+  if (!signals.length) return 0;
 
-  if (hasStrongPressure && adjusted < 42) adjusted = 42;
-  else if (hasStrong && adjusted < 31) adjusted = 31;
-  if (distinctCount >= 2 && adjusted < 31) adjusted = 31;
-  if (withdrawalCount >= 2 && adjusted < 35) adjusted = 35;
+  const clearSignals = signals.filter((s) => isClearPressure(s.id));
+  const clearCount = clearSignals.length;
+  const softOnly = signals.every((s) => SOFT_SIGNAL_IDS.has(s.id));
+  const pressureCount = signals.filter((s) => SIGNAL_FAMILIES.pressure.includes(s.id)).length;
+  let score = rawScore;
 
-  return Math.min(100, adjusted);
+  if (clearCount === 1) {
+    const primary = clearSignals[0];
+    score = Math.max(score, 46);
+    if (primary.offsets.length >= 2 || primary.severity.level === 'strong') score = Math.max(score, 50);
+    if (primary.offsets.length >= 3) score = Math.max(score, 54);
+  }
+
+  if (clearCount >= 2) score = Math.max(score, 54);
+  if (clearCount >= 3) score = Math.max(score, 58);
+  if (clearCount >= 4) score = Math.max(score, 60);
+
+  if (pressureCount >= 3) score = Math.max(score, 65);
+  if (clearCount >= 3 && pressureCount >= 2) score = Math.max(score, 66);
+  if (clusters.length >= 2 && clearCount >= 2) score = Math.max(score, 64);
+
+  if (softOnly && clearCount === 0) {
+    score = Math.min(score, signals.length >= 3 ? 30 : 22);
+  }
+
+  return Math.min(100, Math.round(score));
 }
 
 function scoreOffsets(weight, offsets, signalId) {
   const matchBonus = Math.min(12, Math.max(0, offsets.length - 1) * 5);
   let points = weight + matchBonus;
-  if (isPressureSignal(signalId) && offsets.length >= 3) points += 12;
-  return Math.min(points, 52);
+
+  if (isClearPressure(signalId)) {
+    if (offsets.length >= 1) points = Math.max(points, 40);
+    if (offsets.length >= 2) points = Math.max(points, 46);
+    if (offsets.length >= 3) points = Math.max(points, 52);
+  }
+
+  return Math.min(points, 55);
 }
 
 function analyzeSingleMessage(normalized) {
@@ -407,7 +443,7 @@ function analyzeSingleMessage(normalized) {
     signal.severity = getSignalSeverity(signal);
   });
 
-  score = Math.round(applyScoreConsistency(score, signals));
+  score = calibrateScore(score, signals, clusters);
 
   const band = getScoreBand(score);
   const responses = buildResponses(signals);
@@ -424,6 +460,7 @@ function analyzeSingleMessage(normalized) {
     score,
     level: band.label,
     band,
+    bandHeadline: band.headline,
     bandSummary: band.summary,
     signals,
     signalCount: signals.length,

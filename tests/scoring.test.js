@@ -12,6 +12,9 @@ import {
 const LEVERAGE_EXAMPLE =
   "Fine, forget it. I guess I know where I stand. Don't bother reaching out if you can't make time for me.";
 
+const URGENCY_EXAMPLE =
+  'I need an answer immediately. This is your last chance before it is too late to fix this.';
+
 test('returns an empty result for whitespace', () => {
   const result = analyzeMessage('   ');
   assert.equal(result.score, 0);
@@ -21,12 +24,12 @@ test('returns an empty result for whitespace', () => {
 
 test('detects multiple pressure patterns', () => {
   const result = analyzeMessage("If you really cared, you'd answer right now or else you'll regret it.");
-  assert.equal(result.level, 'Moderate');
+  assert.equal(result.level, 'High');
   assert.deepEqual(
     [...result.signals.map(({ id }) => id)].sort(),
     ['guilt', 'threat', 'urgency']
   );
-  assert.ok(result.score <= 100);
+  assert.ok(result.score >= 61);
   assert.ok(result.highlights.length >= 3);
 });
 
@@ -47,6 +50,7 @@ test('deduplicates repeated matched phrases in signal metadata', () => {
   const result = analyzeMessage('You always do this. Always, always.');
   assert.deepEqual(result.signals[0].matches, ['always']);
   assert.equal(result.signals[0].offsets.length, 3);
+  assert.equal(result.level, 'Low');
 });
 
 test('buildResponses returns pause, boundary, and clarify styles', () => {
@@ -71,20 +75,25 @@ test('splits multi-message threads on blank lines', () => {
   assert.equal(result.segments?.length, 2);
 });
 
-test('scores classic withdrawal leverage in the moderate band', () => {
+test('scores classic withdrawal leverage appropriately', () => {
   const result = analyzeMessage(LEVERAGE_EXAMPLE);
-  assert.equal(result.level, 'Moderate');
-  assert.ok(result.score >= 31);
-  assert.ok(result.score <= 60);
+  assert.ok(result.score >= 58);
   assert.ok(result.signals.some((s) => s.id === 'implied_rejection'));
   assert.ok(result.signals.some((s) => s.id === 'conditional_access'));
   assert.ok(result.leverageInsights.some((i) => i.id === 'withdrawal_leverage'));
 });
 
-test('does not show low overall score with strong withdrawal leverage alone', () => {
-  const result = analyzeMessage(LEVERAGE_EXAMPLE);
-  const hasStrong = result.signals.some((s) => s.severity.level === 'strong');
-  if (hasStrong) assert.notEqual(result.level, 'Low');
+test('single clear guilt framing lands in mid-moderate', () => {
+  const result = analyzeMessage("If you really cared about me, you'd answer.");
+  assert.equal(result.level, 'Moderate');
+  assert.ok(result.score >= 46);
+  assert.ok(result.score <= 60);
+});
+
+test('single clear isolation lands in mid-moderate', () => {
+  const result = analyzeMessage("Don't tell anyone—I'm the only one who understands you.");
+  assert.equal(result.level, 'Moderate');
+  assert.ok(result.score >= 46);
 });
 
 test('signals explain language function not just pattern labels', () => {
@@ -100,18 +109,27 @@ test('includes expanded signal catalog', () => {
 });
 
 test('scores classic forced urgency in mid-moderate range', () => {
-  const result = analyzeMessage(
-    'I need an answer immediately. This is your last chance before it is too late to fix this.'
-  );
+  const result = analyzeMessage(URGENCY_EXAMPLE);
   assert.equal(result.level, 'Moderate');
-  assert.ok(result.score >= 40);
+  assert.ok(result.score >= 46);
   assert.ok(result.score <= 60);
   assert.equal(result.signals[0].id, 'urgency');
   assert.equal(result.signals[0].severity.level, 'strong');
+});
+
+test('overall score aligns with clear severity labels', () => {
+  const result = analyzeMessage(URGENCY_EXAMPLE);
+  const hasClear = result.signals.some((s) => s.severity.level === 'strong');
+  if (hasClear) assert.ok(result.score >= 46);
 });
 
 test('highlight ranges cover matched phrases', () => {
   const result = analyzeMessage(LEVERAGE_EXAMPLE);
   const ranges = getHighlightRanges(result.signals);
   assert.ok(ranges.length >= 3);
+});
+
+test('bands include assessment headlines', () => {
+  const result = analyzeMessage(URGENCY_EXAMPLE);
+  assert.match(result.bandHeadline, /Moderate pressure/);
 });

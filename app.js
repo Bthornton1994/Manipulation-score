@@ -802,8 +802,10 @@ function showUpdateBanner() {
 }
 
 if ('serviceWorker' in navigator) {
+  const hadControllerAtLoad = Boolean(navigator.serviceWorker.controller);
+
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    showUpdateBanner();
+    if (hadControllerAtLoad) showUpdateBanner();
   });
 
   navigator.serviceWorker.register('./service-worker.js').then((registration) => {
@@ -811,7 +813,11 @@ if ('serviceWorker' in navigator) {
       const newWorker = registration.installing;
       if (!newWorker) return;
       newWorker.addEventListener('statechange', () => {
-        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+        if (
+          newWorker.state === 'installed' &&
+          hadControllerAtLoad &&
+          navigator.serviceWorker.controller
+        ) {
           showUpdateBanner();
         }
       });

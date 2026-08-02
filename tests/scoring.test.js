@@ -99,6 +99,17 @@ test('includes expanded signal catalog', () => {
   assert.ok(SIGNALS.length >= 12);
 });
 
+test('scores classic forced urgency in mid-moderate range', () => {
+  const result = analyzeMessage(
+    'I need an answer immediately. This is your last chance before it is too late to fix this.'
+  );
+  assert.equal(result.level, 'Moderate');
+  assert.ok(result.score >= 40);
+  assert.ok(result.score <= 60);
+  assert.equal(result.signals[0].id, 'urgency');
+  assert.equal(result.signals[0].severity.level, 'strong');
+});
+
 test('highlight ranges cover matched phrases', () => {
   const result = analyzeMessage(LEVERAGE_EXAMPLE);
   const ranges = getHighlightRanges(result.signals);

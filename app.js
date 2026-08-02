@@ -266,11 +266,31 @@ function renderEmptyState() {
     </div>`;
 }
 
+function normalizeHistoryKey(text) {
+  return text.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function dedupeHistory(items) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = normalizeHistoryKey(item.text || item.preview || '');
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function saveHistory(text, analysis) {
   try {
     const trimmed = text.trim();
-    const items = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    items.unshift({
+    const key = normalizeHistoryKey(trimmed);
+    if (!key) return;
+
+    const items = dedupeHistory(JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'));
+    const withoutDuplicate = items.filter(
+      (item) => normalizeHistoryKey(item.text || item.preview || '') !== key
+    );
+    withoutDuplicate.unshift({
       id: Date.now(),
       text: trimmed.slice(0, 2500),
       preview: trimmed.slice(0, 100),
@@ -278,7 +298,7 @@ function saveHistory(text, analysis) {
       level: analysis.level,
       timestamp: Date.now()
     });
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items.slice(0, MAX_HISTORY)));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(withoutDuplicate.slice(0, MAX_HISTORY)));
   } catch {
     /* localStorage unavailable */
   }
@@ -286,7 +306,7 @@ function saveHistory(text, analysis) {
 
 function loadHistory() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    return dedupeHistory(JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'));
   } catch {
     return [];
   }

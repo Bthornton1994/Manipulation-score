@@ -130,7 +130,14 @@
 .example-row label{display:block;font:600 11px Manrope;margin-bottom:6px}
 .example-select{width:100%;padding:12px;border:1px solid var(--line);border-radius:4px;font:14px Manrope;background:#fcfcf9;min-height:44px}
 .history-panel{margin-top:20px;padding-top:16px;border-top:1px solid var(--line)}
-.history-panel h4{font:600 11px Manrope;text-transform:uppercase;letter-spacing:1px;margin:0 0 10px;color:var(--muted)}
+.history-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;font:600 11px Manrope;text-transform:uppercase;letter-spacing:1px;color:var(--muted);cursor:pointer;list-style:none;min-height:44px;padding:4px 0}
+.history-toggle::-webkit-details-marker{display:none}
+.history-toggle::marker{display:none}
+.history-toggle-label{flex:1}
+.history-chevron{width:22px;height:22px;border:1px solid var(--line);border-radius:50%;display:grid;place-items:center;flex-shrink:0;transition:transform .2s ease}
+.history-chevron::before{content:"";width:6px;height:6px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(45deg) translateY(-1px);display:block}
+.history-panel[open] .history-chevron{transform:rotate(180deg)}
+.history-panel .history-list{margin-top:10px}
 .history-list{display:grid;gap:8px}
 .history-empty{font-size:11px;color:var(--muted)}
 .history-item{display:grid;grid-template-columns:36px 1fr auto;gap:8px;align-items:center;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:6px;background:#fcfcf9;cursor:pointer;text-align:left;min-height:48px}

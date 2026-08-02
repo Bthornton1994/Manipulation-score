@@ -35,8 +35,8 @@ const SIGNALS = [
     id: 'urgency',
     label: 'Forced urgency',
     function: 'Compresses your decision window so agreement happens before you can think, check facts, or consult others.',
-    weight: 15,
-    pattern: /right now|immediately|last chance|before it(?:'s| is) too late|need an answer now|no time to wait/gi,
+    weight: 22,
+    pattern: /right now|immediately|last chance|before it(?:'s| is) too late|need an answer(?:\s+now|\s+immediately)?|no time to wait|answer (?:right )?now/gi,
     education: 'Forced urgency shrinks reflection time. It can push you to agree before you have processed what you need.'
   },
   {
@@ -343,22 +343,32 @@ function computeAggregateScore(signals) {
   return total;
 }
 
+function isPressureSignal(signalId) {
+  return SIGNAL_FAMILIES.pressure.includes(signalId) || SIGNAL_FAMILIES.withdrawal.includes(signalId);
+}
+
 function applyScoreConsistency(score, signals) {
   let adjusted = score;
+  const hasStrongPressure = signals.some(
+    (s) => s.severity.level === 'strong' && isPressureSignal(s.id)
+  );
   const hasStrong = signals.some((s) => s.severity.level === 'strong');
   const distinctCount = signals.length;
   const withdrawalCount = signals.filter((s) => SIGNAL_FAMILIES.withdrawal.includes(s.id)).length;
 
-  if (hasStrong && adjusted < 31) adjusted = 31;
+  if (hasStrongPressure && adjusted < 42) adjusted = 42;
+  else if (hasStrong && adjusted < 31) adjusted = 31;
   if (distinctCount >= 2 && adjusted < 31) adjusted = 31;
   if (withdrawalCount >= 2 && adjusted < 35) adjusted = 35;
 
   return Math.min(100, adjusted);
 }
 
-function scoreOffsets(weight, offsets) {
-  const matchBonus = Math.min(10, Math.max(0, offsets.length - 1) * 4);
-  return weight + matchBonus;
+function scoreOffsets(weight, offsets, signalId) {
+  const matchBonus = Math.min(12, Math.max(0, offsets.length - 1) * 5);
+  let points = weight + matchBonus;
+  if (isPressureSignal(signalId) && offsets.length >= 3) points += 12;
+  return Math.min(points, 52);
 }
 
 function analyzeSingleMessage(normalized) {
@@ -367,7 +377,7 @@ function analyzeSingleMessage(normalized) {
     if (!offsets.length) return [];
 
     const matches = [...new Set(offsets.map((o) => o.text.toLowerCase()))];
-    const points = scoreOffsets(signal.weight, offsets);
+    const points = scoreOffsets(signal.weight, offsets, signal.id);
     const severity = getSignalSeverity({ ...signal, points });
     const responses = getSignalResponses(signal.id);
 

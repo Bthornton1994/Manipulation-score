@@ -71,9 +71,11 @@ test('logo shows clarity and MANIPULATION SCORE without uses', async () => {
   assert.doesNotMatch(html, /uses/i);
 });
 
-test('index supports client-side screenshot upload', async () => {
+test('index supports client-side image upload', async () => {
   const html = await readFile('index.html', 'utf8');
   assert.match(html, /id="image-upload-btn"/);
+  assert.match(html, />Attach image</);
+  assert.match(html, /Images are read on your device only/);
   assert.match(html, /id="message-image"/);
   assert.match(html, /worker-src/);
   assert.match(html, /blob:/);

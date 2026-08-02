@@ -25,6 +25,30 @@ test('describeImageFile reports type or extension', () => {
   assert.match(describeImageFile(mockFile('a.png', '')), /png/i);
 });
 
+test('cleanScreenshotText removes status bar and header noise from real OCR junk', () => {
+  const raw = [
+    '12:37 N\\ all TE',
+    'Lauren)',
+    '3 Lauren x',
+    '@ Encrypted',
+    'If you really cared you would answer right now'
+  ].join('\n');
+
+  const { text, quality } = cleanScreenshotText(raw);
+  assert.match(text, /If you really cared you would answer right now/i);
+  assert.doesNotMatch(text, /12:37/i);
+  assert.doesNotMatch(text, /Lauren/i);
+  assert.doesNotMatch(text, /Encrypted/i);
+  assert.notEqual(quality, 'empty');
+});
+
+test('cleanScreenshotText returns empty when only chrome remains', () => {
+  const raw = ['12:37', 'LTE', '@ Encrypted', 'Lauren)', '3 Lauren x'].join('\n');
+  const { text, quality } = cleanScreenshotText(raw);
+  assert.equal(text, '');
+  assert.equal(quality, 'empty');
+});
+
 test('cleanScreenshotText removes common chat UI chrome', () => {
   const raw = [
     '9:41',

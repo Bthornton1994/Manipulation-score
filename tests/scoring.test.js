@@ -9,6 +9,9 @@ import {
   SIGNALS
 } from '../scoring.js';
 
+const LEVERAGE_EXAMPLE =
+  "Fine, forget it. I guess I know where I stand. Don't bother reaching out if you can't make time for me.";
+
 test('returns an empty result for whitespace', () => {
   const result = analyzeMessage('   ');
   assert.equal(result.score, 0);
@@ -19,7 +22,10 @@ test('returns an empty result for whitespace', () => {
 test('detects multiple pressure patterns', () => {
   const result = analyzeMessage("If you really cared, you'd answer right now or else you'll regret it.");
   assert.equal(result.level, 'Moderate');
-  assert.deepEqual(result.signals.map(({ id }) => id), ['guilt', 'urgency', 'threat']);
+  assert.deepEqual(
+    [...result.signals.map(({ id }) => id)].sort(),
+    ['guilt', 'threat', 'urgency']
+  );
   assert.ok(result.score <= 100);
   assert.ok(result.highlights.length >= 3);
 });
@@ -65,11 +71,36 @@ test('splits multi-message threads on blank lines', () => {
   assert.equal(result.segments?.length, 2);
 });
 
-test('detects implied withdrawal pattern', () => {
-  const result = analyzeMessage('Fine, forget it. I guess I know where I stand.');
-  assert.ok(result.signals.some((s) => s.id === 'withdrawal'));
+test('scores classic withdrawal leverage in the moderate band', () => {
+  const result = analyzeMessage(LEVERAGE_EXAMPLE);
+  assert.equal(result.level, 'Moderate');
+  assert.ok(result.score >= 31);
+  assert.ok(result.score <= 60);
+  assert.ok(result.signals.some((s) => s.id === 'implied_rejection'));
+  assert.ok(result.signals.some((s) => s.id === 'conditional_access'));
+  assert.ok(result.leverageInsights.some((i) => i.id === 'withdrawal_leverage'));
+});
+
+test('does not show low overall score with strong withdrawal leverage alone', () => {
+  const result = analyzeMessage(LEVERAGE_EXAMPLE);
+  const hasStrong = result.signals.some((s) => s.severity.level === 'strong');
+  if (hasStrong) assert.notEqual(result.level, 'Low');
+});
+
+test('signals explain language function not just pattern labels', () => {
+  const result = analyzeMessage(LEVERAGE_EXAMPLE);
+  for (const signal of result.signals) {
+    assert.ok(signal.function);
+    assert.ok(signal.function.length > 30);
+  }
 });
 
 test('includes expanded signal catalog', () => {
-  assert.ok(SIGNALS.length >= 9);
+  assert.ok(SIGNALS.length >= 12);
+});
+
+test('highlight ranges cover matched phrases', () => {
+  const result = analyzeMessage(LEVERAGE_EXAMPLE);
+  const ranges = getHighlightRanges(result.signals);
+  assert.ok(ranges.length >= 3);
 });

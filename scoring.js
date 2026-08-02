@@ -25,75 +25,139 @@ export const SCORE_BANDS = [
 const SIGNALS = [
   {
     id: 'guilt',
-    label: 'Guilt framing',
-    weight: 18,
-    pattern: /if you (?:really )?(?:cared|loved)|after all i(?:'ve| have) done|you owe me|selfish|ungrateful/gi,
-    detail: 'Care or loyalty is being used as a condition for compliance.',
-    education: 'Guilt framing ties your affection or loyalty to a specific action. It can make a normal boundary feel like betrayal.'
+    label: 'Guilt leverage',
+    function: 'Uses care, loyalty, or past effort as currency—making a boundary or delay feel like proof you do not care enough.',
+    weight: 20,
+    pattern: /if you (?:really )?(?:cared|loved|loved me)|after all i(?:'ve| have) done|you owe me|selfish|ungrateful|how could you/gi,
+    education: 'Guilt framing ties affection or loyalty to a specific action. A normal boundary can be reframed as betrayal.'
   },
   {
     id: 'urgency',
     label: 'Forced urgency',
-    weight: 14,
-    pattern: /right now|immediately|last chance|before it(?:'s| is) too late|need an answer now|no time/gi,
-    detail: 'Time pressure may be limiting your space to think or ask questions.',
-    education: 'Forced urgency compresses your decision window. It can push you to agree before you have processed what you need.'
+    function: 'Compresses your decision window so agreement happens before you can think, check facts, or consult others.',
+    weight: 15,
+    pattern: /right now|immediately|last chance|before it(?:'s| is) too late|need an answer now|no time to wait/gi,
+    education: 'Forced urgency shrinks reflection time. It can push you to agree before you have processed what you need.'
   },
   {
     id: 'threat',
     label: 'Conditional threat',
-    weight: 24,
-    pattern: /or else|you(?:'ll| will) regret|if you don(?:'t|’t| not)|i(?:'ll| will) leave|never (?:speak|talk) to you/gi,
-    detail: 'A negative consequence is tied to doing what the sender wants.',
-    education: 'Conditional threats link cooperation to punishment or withdrawal. They can make safety and honesty feel risky.'
+    function: 'Links cooperation to a stated or implied penalty—making honesty or refusal feel risky.',
+    weight: 26,
+    pattern: /or else|you(?:'ll| will) regret|if you don(?:'t|’t| not)|i(?:'ll| will) leave|never (?:speak|talk) to you|you(?:'ll| will) be sorry/gi,
+    education: 'Conditional threats connect compliance to punishment or withdrawal. Safety and honesty can feel costly.'
   },
   {
     id: 'isolation',
-    label: 'Isolation language',
+    label: 'Isolation pressure',
+    function: 'Discourages outside perspective—positioning support networks as threats to the relationship or secrecy as required.',
     weight: 22,
     pattern: /they(?:'re| are) against you|only one who understands|don(?:'t|’t) tell (?:them|anyone)|your friends don(?:'t|’t) care|just between us/gi,
-    detail: 'The message may discourage outside perspective or support.',
-    education: 'Isolation language discourages checking with others. Outside perspective is often healthy—not a threat to the relationship.'
+    education: 'Isolation language discourages checking with others. Outside perspective is often healthy—not a threat.'
   },
   {
     id: 'dismissal',
     label: 'Reality dismissal',
-    weight: 17,
+    function: 'Challenges your memory, perception, or emotional response instead of engaging with what you experienced.',
+    weight: 18,
     pattern: /you(?:'re| are) imagining|that never happened|too sensitive|you(?:'re| are) crazy|making things up|overreacting/gi,
-    detail: 'Your memory, feelings, or perception may be dismissed rather than discussed.',
-    education: 'Reality dismissal challenges your perception instead of engaging with it. Your experience deserves space in the conversation.'
+    education: 'Reality dismissal targets your perception rather than the content of your concern. Your experience deserves space.'
   },
   {
     id: 'absolutes',
     label: 'All-or-nothing framing',
-    weight: 9,
+    function: 'Turns a single moment into a permanent character verdict—making nuance or partial agreement feel impossible.',
+    weight: 10,
     pattern: /\b(?:always|never|everyone|nobody|everything|nothing)\b/gi,
-    detail: 'Absolute language can flatten nuance and make disagreement feel impossible.',
-    education: 'Words like “always” and “never” turn one moment into a permanent pattern. Specifics are often more accurate than absolutes.'
+    education: 'Words like “always” and “never” flatten specifics into permanent patterns. One event rarely proves a rule.'
   },
   {
     id: 'obligation',
-    label: 'Obligation pressure',
-    weight: 12,
-    pattern: /you (?:should|must|have to|need to)|after everything|it's your (?:job|duty|responsibility)/gi,
-    detail: 'Obligation language may frame your compliance as required rather than chosen.',
-    education: 'Obligation pressure reframes a request as a duty. You can still care about someone without accepting assigned responsibility.'
+    label: 'Assigned obligation',
+    function: 'Reframes a request as duty or requirement—so compliance feels mandatory rather than chosen.',
+    weight: 14,
+    pattern: /you (?:should|must|have to|need to)|after everything|it(?:'s| is) your (?:job|duty|responsibility)/gi,
+    education: 'Obligation pressure assigns responsibility to you. You can care about someone without accepting assigned duties.'
   },
   {
     id: 'minimization',
-    label: 'Minimization',
-    weight: 11,
+    label: 'Reaction minimization',
+    function: 'Shrinks or ridicules your response to close the topic—implying the problem is your reaction, not the issue.',
+    weight: 12,
     pattern: /you(?:'re| are) being dramatic|not that bad|calm down|stop being so|you(?:'re| are) too much/gi,
-    detail: 'Your reaction may be minimized to shut down the conversation.',
-    education: 'Minimization shrinks your reaction to close the topic. Your response size does not prove you are wrong.'
+    education: 'Minimization shrinks your reaction to end the conversation. Response size does not prove you are wrong.'
   },
   {
-    id: 'withdrawal',
-    label: 'Implied withdrawal',
-    weight: 16,
-    pattern: /i guess i know where i stand|where i stand|don't bother|you'll be sorry|fine, forget it|i'm done trying/gi,
-    detail: 'The message may hint at pulling away to pressure you into compliance.',
-    education: 'Implied withdrawal suggests you will lose the relationship if you do not comply. It can create fear without stating a clear threat.'
+    id: 'resigned_withdrawal',
+    label: 'Resigned withdrawal',
+    function: 'Signals pulling back or giving up while leaving the rupture unresolved—often inviting you to chase or repair.',
+    weight: 18,
+    pattern: /fine,?\s*forget it|i'm done(?: trying)?|whatever\.?$|i guess so|forget about it/gi,
+    education: 'Resigned withdrawal ends engagement abruptly. The unfinished tension can pressure you to re-open the conversation.'
+  },
+  {
+    id: 'implied_rejection',
+    label: 'Implied rejection',
+    function: 'Draws a negative conclusion about your value or place in the relationship without stating it directly—inviting you to disprove it.',
+    weight: 22,
+    pattern: /i guess i know where i stand|know where i stand|how little i matter|obviously don'?t care|not important (?:to you|enough)|clear where i stand/gi,
+    education: 'Implied rejection states a hurtful conclusion indirectly. You may feel pushed to prove you do care or value them.'
+  },
+  {
+    id: 'conditional_access',
+    label: 'Conditional access',
+    function: 'Offers or withholds connection based on your behavior—making attention feel like a reward you must earn or chase.',
+    weight: 20,
+    pattern: /don'?t bother (?:reaching out|contacting|calling|texting|messaging)|if you can'?t make time|unless you(?: can)?|when you have time for me|don'?t expect me to reach out/gi,
+    education: 'Conditional access ties warmth or contact to compliance. Your limits can be reframed as withholding care.'
+  },
+  {
+    id: 'responsibility_shift',
+    label: 'Responsibility shifting',
+    function: 'Frames your limits (time, energy, boundaries) as the cause of the speaker’s hurt—moving accountability onto you.',
+    weight: 19,
+    pattern: /if you can'?t make time|if you don'?t have time|you don'?t (?:care|prioritize)|too busy for me|can'?t be bothered|make time for me/gi,
+    education: 'Responsibility shifting converts your boundaries into evidence of neglect. Their feelings are valid—but not always your assignment to fix.'
+  }
+];
+
+const SIGNAL_FAMILIES = {
+  withdrawal: ['resigned_withdrawal', 'implied_rejection', 'conditional_access', 'responsibility_shift'],
+  pressure: ['guilt', 'urgency', 'threat', 'obligation'],
+  distortion: ['dismissal', 'minimization', 'absolutes', 'isolation']
+};
+
+const LEVERAGE_CLUSTERS = [
+  {
+    id: 'withdrawal_leverage',
+    label: 'Emotional leverage via withdrawal',
+    function:
+      'The message withdraws warmth, access, or effort while implying you caused it—pressuring you to chase, apologize, or rearrange priorities to restore connection.',
+    indicators: ['resigned_withdrawal', 'implied_rejection', 'conditional_access', 'responsibility_shift', 'guilt'],
+    minIndicators: 2
+  },
+  {
+    id: 'pressure_stack',
+    label: 'Stacked pressure tactics',
+    function:
+      'Several distinct pressure functions appear together—narrowing room to pause, question, seek support, or respond at your own pace.',
+    minDistinctSignals: 3
+  },
+  {
+    id: 'urgency_consequence',
+    label: 'Deadline with consequence',
+    function:
+      'Urgency is paired with a threat or withdrawal—raising the cost of taking time to think before you answer.',
+    required: ['urgency', 'threat'],
+    scoreBonus: 10
+  },
+  {
+    id: 'guilt_obligation',
+    label: 'Guilt plus assigned duty',
+    function:
+      'Care or loyalty is weaponized alongside assigned responsibility—so refusing feels like both uncaring and disobedient.',
+    required: ['guilt', 'obligation'],
+    scoreBonus: 8
   }
 ];
 
@@ -107,7 +171,10 @@ const RESPONSES = {
     absolutes: 'I don’t think it’s always or never. Let’s talk about what happened specifically.',
     obligation: 'I hear what you want. I need time before I commit to anything.',
     minimization: 'How I feel matters to me. I’d like to finish this conversation later.',
-    withdrawal: 'I hear that you’re hurt. I still need time before I respond.',
+    resigned_withdrawal: 'I hear that you’re pulling back. I still need time before I respond.',
+    implied_rejection: 'I hear that you feel hurt. I’d like to understand what you need without rushing.',
+    conditional_access: 'I’m not available to talk right now, but that isn’t proof I don’t care.',
+    responsibility_shift: 'I hear you’re upset. My limits on time aren’t the same as not caring.',
     default: 'I need time to think. I’ll respond when I’m ready.'
   },
   boundary: {
@@ -119,7 +186,10 @@ const RESPONSES = {
     absolutes: 'I won’t accept being defined in absolute terms.',
     obligation: 'I get to choose what I’m responsible for.',
     minimization: 'I won’t minimize how this affects me.',
-    withdrawal: 'I won’t respond to pressure created by hints of leaving.',
+    resigned_withdrawal: 'I won’t chase a conversation that was ended to pressure me.',
+    implied_rejection: 'I won’t accept being told where I “stand” without a direct conversation.',
+    conditional_access: 'Connection shouldn’t be offered only when I comply.',
+    responsibility_shift: 'I’m not responsible for fixing this by abandoning my limits.',
     default: 'I’m willing to talk, but not under pressure.'
   },
   clarify: {
@@ -131,11 +201,16 @@ const RESPONSES = {
     absolutes: 'Can we focus on this specific situation instead of always/never?',
     obligation: 'What do you see as my responsibility here?',
     minimization: 'Can you help me understand why my reaction feels unreasonable to you?',
-    withdrawal: 'Are you saying you want to end this, or that you need something from me?',
+    resigned_withdrawal: 'Are you ending this conversation, or asking for something from me?',
+    implied_rejection: 'What conclusion are you drawing about me or this relationship?',
+    conditional_access: 'Are you saying contact depends on how I behave?',
+    responsibility_shift: 'Are my limits being taken as proof I don’t care?',
     default: 'I want to make sure I understand. Can you tell me more about what you need?'
   },
   none: 'I want to make sure I understand. Can you tell me more about what you need?'
 };
+
+const SEVERITY_RANK = { mild: 0, moderate: 1, strong: 2 };
 
 function findOffsets(text, pattern) {
   const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
@@ -217,6 +292,139 @@ export function excerptForOffsets(text, offsets, padding = 36) {
   };
 }
 
+function detectLeverageClusters(signalIds) {
+  const ids = new Set(signalIds);
+  const clusters = [];
+
+  for (const cluster of LEVERAGE_CLUSTERS) {
+    if (cluster.required) {
+      if (cluster.required.every((id) => ids.has(id))) clusters.push(cluster);
+      continue;
+    }
+    if (cluster.minDistinctSignals && ids.size >= cluster.minDistinctSignals) {
+      clusters.push(cluster);
+      continue;
+    }
+    if (cluster.indicators) {
+      const matched = cluster.indicators.filter((id) => ids.has(id));
+      if (matched.length >= cluster.minIndicators) {
+        clusters.push({ ...cluster, matchedIndicators: matched });
+      }
+    }
+  }
+
+  return clusters;
+}
+
+function scoreSignalFamily(signalsInFamily) {
+  if (!signalsInFamily.length) return 0;
+  const sorted = [...signalsInFamily].sort((a, b) => b.points - a.points);
+  let total = sorted[0].points;
+  for (let i = 1; i < sorted.length; i += 1) {
+    total += sorted[i].points * 0.42;
+  }
+  return Math.min(total, 52);
+}
+
+function computeAggregateScore(signals) {
+  const familyBuckets = Object.fromEntries(Object.keys(SIGNAL_FAMILIES).map((key) => [key, []]));
+  const standalone = [];
+
+  for (const signal of signals) {
+    const family = Object.entries(SIGNAL_FAMILIES).find(([, ids]) => ids.includes(signal.id))?.[0];
+    if (family) familyBuckets[family].push(signal);
+    else standalone.push(signal);
+  }
+
+  let total = standalone.reduce((sum, signal) => sum + signal.points, 0);
+  for (const familySignals of Object.values(familyBuckets)) {
+    total += scoreSignalFamily(familySignals);
+  }
+  return total;
+}
+
+function applyScoreConsistency(score, signals) {
+  let adjusted = score;
+  const hasStrong = signals.some((s) => s.severity.level === 'strong');
+  const distinctCount = signals.length;
+  const withdrawalCount = signals.filter((s) => SIGNAL_FAMILIES.withdrawal.includes(s.id)).length;
+
+  if (hasStrong && adjusted < 31) adjusted = 31;
+  if (distinctCount >= 2 && adjusted < 31) adjusted = 31;
+  if (withdrawalCount >= 2 && adjusted < 35) adjusted = 35;
+
+  return Math.min(100, adjusted);
+}
+
+function scoreOffsets(weight, offsets) {
+  const matchBonus = Math.min(10, Math.max(0, offsets.length - 1) * 4);
+  return weight + matchBonus;
+}
+
+function analyzeSingleMessage(normalized) {
+  const rawSignals = SIGNALS.flatMap((signal) => {
+    const offsets = findOffsets(normalized, signal.pattern);
+    if (!offsets.length) return [];
+
+    const matches = [...new Set(offsets.map((o) => o.text.toLowerCase()))];
+    const points = scoreOffsets(signal.weight, offsets);
+    const severity = getSignalSeverity({ ...signal, points });
+    const responses = getSignalResponses(signal.id);
+
+    return [{
+      ...signal,
+      detail: signal.function,
+      matches,
+      offsets,
+      points,
+      severity,
+      responses,
+      excerpt: excerptForOffsets(
+        normalized,
+        offsets.map((o) => ({ ...o, id: signal.id, label: signal.label }))
+      )
+    }];
+  });
+
+  const clusters = detectLeverageClusters(rawSignals.map((s) => s.id));
+  const clusterBonus = clusters.reduce((sum, cluster) => sum + (cluster.scoreBonus || 0), 0);
+
+  let score = rawSignals.length ? Math.min(100, computeAggregateScore(rawSignals) + clusterBonus) : 0;
+
+  const signals = [...rawSignals].sort((a, b) => b.points - a.points);
+
+  signals.forEach((signal) => {
+    signal.severity = getSignalSeverity(signal);
+  });
+
+  score = Math.round(applyScoreConsistency(score, signals));
+
+  const band = getScoreBand(score);
+  const responses = buildResponses(signals);
+  const highlights = getHighlightRanges(signals);
+
+  const leverageInsights = clusters.map((cluster) => ({
+    id: cluster.id,
+    label: cluster.label,
+    function: cluster.function,
+    matchedIndicators: cluster.matchedIndicators || cluster.required || []
+  }));
+
+  return {
+    score,
+    level: band.label,
+    band,
+    bandSummary: band.summary,
+    signals,
+    signalCount: signals.length,
+    responses,
+    response: responses.pause,
+    highlights,
+    leverageInsights,
+    clusterBonus
+  };
+}
+
 export function analyzeMessage(text) {
   const normalized = text.trim();
   if (!normalized) {
@@ -230,7 +438,9 @@ export function analyzeMessage(text) {
       responses: buildResponses([]),
       response: RESPONSES.none,
       highlights: [],
-      segments: null
+      segments: null,
+      leverageInsights: [],
+      clusterBonus: 0
     };
   }
 
@@ -248,49 +458,4 @@ export function analyzeMessage(text) {
   return { ...analysis, segments: segmentAnalyses };
 }
 
-function analyzeSingleMessage(normalized) {
-  const signals = SIGNALS.flatMap((signal) => {
-    const offsets = findOffsets(normalized, signal.pattern);
-    if (!offsets.length) return [];
-
-    const matches = [...new Set(offsets.map((o) => o.text.toLowerCase()))];
-    const points = signal.weight + Math.min(8, (offsets.length - 1) * 4);
-    const severity = getSignalSeverity({ ...signal, points });
-    const responses = getSignalResponses(signal.id);
-
-    return [{
-      ...signal,
-      matches,
-      offsets,
-      points,
-      severity,
-      responses,
-      excerpt: excerptForOffsets(
-        normalized,
-        offsets.map((o) => ({ ...o, id: signal.id, label: signal.label }))
-      )
-    }];
-  });
-
-  const score = signals.length
-    ? Math.min(100, signals.reduce((total, signal) => total + signal.points, 0))
-    : 0;
-
-  const band = getScoreBand(score);
-  const responses = buildResponses(signals);
-  const highlights = getHighlightRanges(signals);
-
-  return {
-    score,
-    level: band.label,
-    band,
-    bandSummary: band.summary,
-    signals,
-    signalCount: signals.length,
-    responses,
-    response: responses.pause,
-    highlights
-  };
-}
-
-export { SIGNALS, RESPONSES };
+export { SIGNALS, RESPONSES, LEVERAGE_CLUSTERS };

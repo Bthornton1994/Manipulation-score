@@ -1,4 +1,4 @@
-const CACHE_NAME = 'clarity-v20';
+const CACHE_NAME = 'clarity-v21';
 const APP_SHELL = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const APP_SHELL = [
   './app.js',
   './scoring.js',
   './safety.js',
+  './history-storage.js',
   './ocr.js',
   './ocr-clean.js',
   './manifest.webmanifest',
@@ -31,6 +32,42 @@ const APP_SHELL = [
   './fonts/manrope-v20-xn7_YHE41ni1AdIRqAuZuw1Bx9mbZk4aE-_F.ttf'
 ];
 
+const NETWORK_FIRST_PATTERN =
+  /\/(index\.html|privacy\.html|terms\.html|limitations\.html|styles\.css|fonts\.css|app\.js|scoring\.js|safety\.js|history-storage\.js|service-worker\.js)$/;
+
+function isNetworkFirstRequest(url) {
+  if (url.origin !== self.location.origin) return false;
+  const path = url.pathname;
+  if (path.endsWith('/') || path === '') return true;
+  return NETWORK_FIRST_PATTERN.test(path);
+}
+
+async function networkFirst(request) {
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    throw new Error('network and cache miss');
+  }
+}
+
+async function cacheFirst(request) {
+  const cached = await caches.match(request);
+  if (cached) return cached;
+  const response = await fetch(request);
+  if (response.ok) {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.put(request, response.clone());
+  }
+  return response;
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
   self.skipWaiting();
@@ -50,16 +87,10 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
 
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request).then((response) => {
-        if (response.ok) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        }
-        return response;
-      });
-    })
-  );
+  if (isNetworkFirstRequest(url)) {
+    event.respondWith(networkFirst(event.request));
+    return;
+  }
+
+  event.respondWith(cacheFirst(event.request));
 });

@@ -37,7 +37,7 @@
       <p>Clarity may store two kinds of data locally in your browser:</p>
       <ul>
         <li><strong>App cache (service worker):</strong> public app files so the tool can work offline after your first visit. This cache does not contain your messages.</li>
-        <li><strong>Optional analysis history:</strong> if you turn on “Save recent analyses on this device,” Clarity stores up to eight recent analyses (full message text, screening result, and timestamp) in <code>localStorage</code> on this device only. History is <strong>off by default</strong>.</li>
+        <li><strong>Optional analysis history:</strong> if you turn on “Save recent analyses on this device,” Clarity stores up to eight recent analyses (full message text, screening result, and timestamp) in <code>localStorage</code> under <code>clarity-history-v2</code> on this device only. History is <strong>off by default</strong>. Legacy data from earlier releases without explicit opt-in is removed when you load the current version.</li>
       </ul>
       <p>You can delete individual saved analyses or use “Delete all history” to remove all stored message text and results. Disabling the save toggle stops new writes; delete controls remove what is already stored.</p>
       <p>Browser local storage may persist until you clear site data in your browser settings.</p>

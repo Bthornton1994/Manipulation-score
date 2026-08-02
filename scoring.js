@@ -126,7 +126,7 @@ const SIGNALS = [
   }
 ];
 
-export const METHODOLOGY_VERSION = '0.1-alpha';
+export const METHODOLOGY_VERSION = '0.2-alpha';
 export const MIN_MEANINGFUL_WORDS = 15;
 
 const EXCLUSION_CONTEXT_RULES = {
@@ -599,9 +599,9 @@ export function analyzeMessage(text) {
   const meaningfulWords = countMeaningfulWords(normalized);
   if (meaningfulWords < MIN_MEANINGFUL_WORDS) {
     return createAbstentionResult([
-      'Not enough text to assess language patterns reliably.',
-      `This message has about ${meaningfulWords} recognizable words; at least ${MIN_MEANINGFUL_WORDS} are needed for screening.`,
-      'Paste more of the message, or additional messages from the same conversation, for a pattern screening result.'
+      'Not enough text for pattern screening in this alpha.',
+      `This message has about ${meaningfulWords} recognizable words. This alpha screens messages containing at least ${MIN_MEANINGFUL_WORDS} recognizable words.`,
+      'Paste more of the message, or additional messages from the same conversation, to receive a screening result.'
     ]);
   }
 

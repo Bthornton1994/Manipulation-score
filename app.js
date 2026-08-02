@@ -314,7 +314,7 @@ function createScoreSection(analysis) {
   }
 
   const methodology = element('p', 'methodology-status');
-  const limitationsLink = element('a', '', 'Methodology status & limitations');
+  const limitationsLink = element('a', '', 'Limitations');
   limitationsLink.href = 'limitations.html';
   methodology.append('Alpha release · ', limitationsLink);
   children.push(methodology);

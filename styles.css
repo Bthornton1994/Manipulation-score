@@ -10,7 +10,7 @@
   .site-header{display:flex!important;align-items:center;justify-content:space-between;gap:8px;height:auto!important;min-height:64px;padding:12px max(16px,env(safe-area-inset-right)) 12px max(16px,env(safe-area-inset-left))!important;position:sticky;top:0;background:rgba(255,253,248,.98);backdrop-filter:blur(6px);z-index:200;box-sizing:border-box;width:100%;max-width:100vw;overflow:hidden}
   .brand{flex:1;min-width:0;max-width:calc(100% - 80px)}
   .brand-text{min-width:0}
-  .brand-name{font-size:clamp(18px,4.8vw,22px)}
+  .brand-name{font-size:clamp(14px,3.4vw,22px)}
   .brand-sub{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 }
 @media(min-width:769px){
@@ -29,6 +29,10 @@
 .image-attach-btn:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
 .image-attach-icon{display:block;flex-shrink:0}
 .image-attach-label{line-height:1}
+@media(max-width:380px){
+  .image-attach-label{display:none}
+  .image-attach-btn{min-width:44px;max-width:48px;padding:8px}
+}
 .input-action-row .analyze-button{flex:1 1 auto;min-width:0;min-height:44px;margin:0}
 .input-action-secondary{display:flex;flex-wrap:wrap;align-items:center;gap:12px;min-height:28px}
 .text-btn{background:none;border:none;padding:4px 2px;min-height:32px;font:600 11px Manrope;color:var(--muted);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
@@ -82,8 +86,8 @@
 .disclaimer a{color:var(--teal);font-weight:600;border-bottom:1px solid #b8cfc6}
 .footer-note{color:#9db8b2;font-size:12px;text-align:right}
 .brand-text{display:flex;flex-direction:column;line-height:1.15;gap:2px}
-.brand-name{font:700 22px Manrope;display:block}
-.brand-sub{font:600 8px Manrope;letter-spacing:.7px;color:var(--muted);display:block;line-height:1.2}
+.brand-name{font:700 clamp(15px,3.6vw,22px) Manrope;display:block;letter-spacing:-0.3px}
+.brand-sub{font:500 12px Manrope;color:var(--muted);display:block;line-height:1.2}
 .site-footer .brand-sub{color:#9db8b2}
 .score-section{margin-bottom:20px}
 .assessment-hero{padding:18px 20px;border-radius:10px;border:1px solid var(--line);margin-bottom:14px}

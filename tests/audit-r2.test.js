@@ -42,6 +42,11 @@ test('round 2: benign safety-training and fiction contexts do not alarm', () => 
   }
 });
 
+test('round 2: attributed news quote without writer threat does not alarm', () => {
+  const text = 'The news reported that the suspect said "I will kill you" in court yesterday.';
+  assert.equal(detectSafetyNotice(text), null);
+});
+
 test('round 2: extended benign fixtures from first audit still pass', () => {
   const fixtures = [
     'You always have choices. Nothing needs to be decided right now. Take all the time you need and ask anyone you trust.',

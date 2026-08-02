@@ -22,6 +22,6 @@ test('app suppresses pattern section for safety and abstention results', async (
   const app = await readFile('app.js', 'utf8');
   assert.match(app, /analysis\.abstained \|\| analysis\.safetyNotice/);
   assert.match(app, /sw-update-banner/);
-  assert.match(app, /controllerchange/);
+  assert.match(app, /hadControllerAtLoad/);
   assert.match(app, /migrateHistoryStorage/);
 });

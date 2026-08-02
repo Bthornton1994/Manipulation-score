@@ -126,7 +126,7 @@ const SIGNALS = [
   }
 ];
 
-export const METHODOLOGY_VERSION = '0.2-alpha';
+export const METHODOLOGY_VERSION = '0.2.1';
 export const MIN_MEANINGFUL_WORDS = 15;
 
 const EXCLUSION_CONTEXT_RULES = {

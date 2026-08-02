@@ -1,8 +1,8 @@
-# Clarity
+# Manipulation Score — Clarity
 
-A privacy-first communication analysis tool that helps people identify potentially manipulative language, understand the signals behind a score, and choose grounded responses.
+**Clarity** is the message analysis product from **Manipulation Score**—a privacy-first tool that helps people identify potentially manipulative language, understand the signals behind a score, and choose grounded responses.
 
-**Clarity** runs entirely in your browser. No accounts, no uploads, no analytics.
+Clarity runs entirely in your browser. No accounts, no uploads, no analytics.
 
 ## Features
 
@@ -75,7 +75,7 @@ GitHub provisions TLS for both `manipulationscore.com` and `www.manipulationscor
 
 ## Important
 
-Clarity is an educational aid—not a diagnosis, safety assessment, or substitute for professional advice. See [limitations.html](limitations.html).
+Clarity by Manipulation Score is an educational aid—not a diagnosis, safety assessment, or substitute for professional advice. See [limitations.html](limitations.html).
 
 ## Project structure
 

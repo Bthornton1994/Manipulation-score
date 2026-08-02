@@ -53,7 +53,8 @@ test('sitemap uses production domain', async () => {
 
 test('index hides desktop nav on mobile via stylesheet rules', async () => {
   const css = await readFile('styles.css', 'utf8');
-  assert.match(css, /\.site-header \.site-nav--desktop.*display:\s*none/);
+  assert.match(css, /\.header-desktop-only.*display:\s*none/);
+  assert.match(css, /@media\(max-width:768px\)/);
   assert.doesNotMatch(css, /\.site-header nav\{display:flex/);
 });
 
@@ -63,8 +64,9 @@ test('readme documents apex and www hostnames', async () => {
   assert.match(readme, /www\.manipulationscore\.com/);
 });
 
-test('logo uses Manipulation Score subtitle without uses prefix', async () => {
+test('logo shows clarity and MANIPULATION SCORE without uses', async () => {
   const html = await readFile('index.html', 'utf8');
-  assert.match(html, /Manipulation Score/);
-  assert.doesNotMatch(html, /uses Manipulation Score/i);
+  assert.match(html, /class="brand-name">clarity/);
+  assert.match(html, />MANIPULATION SCORE</);
+  assert.doesNotMatch(html, /uses/i);
 });

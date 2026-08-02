@@ -30,18 +30,23 @@
     <header class="site-header">
       <a class="brand" href="./" aria-label="Clarity home">
         <span class="brand-mark" aria-hidden="true">C</span>
-        <span class="brand-text"><span>clarity</span><small class="brand-sub">Manipulation Score</small></span>
+        <span class="brand-text">
+          <span class="brand-name">clarity</span>
+          <span class="brand-sub">MANIPULATION SCORE</span>
+        </span>
       </a>
       <button class="nav-toggle" id="nav-toggle" type="button" aria-expanded="false" aria-controls="mobile-menu" aria-label="Open menu">
         <span class="nav-toggle-text">Menu</span>
       </button>
-      <nav class="site-nav site-nav--desktop" aria-label="Main navigation">
-        <a href="#how-it-works">How it works</a>
-        <a href="#principles">Our approach</a>
-        <a href="#resources">Resources</a>
-        <a href="privacy.html">Privacy</a>
-      </nav>
-      <a class="button button-small button-outline header-cta" href="#analyzer">Try the analyzer</a>
+      <div class="header-desktop-only">
+        <nav class="site-nav" aria-label="Main navigation">
+          <a href="#how-it-works">How it works</a>
+          <a href="#principles">Our approach</a>
+          <a href="#resources">Resources</a>
+          <a href="privacy.html">Privacy</a>
+        </nav>
+        <a class="button button-small button-outline header-cta" href="#analyzer">Try the analyzer</a>
+      </div>
     </header>
 
     <div class="mobile-menu" id="mobile-menu" aria-hidden="true">
@@ -192,7 +197,7 @@
     </main>
 
     <footer class="site-footer">
-      <a class="brand" href="./"><span class="brand-mark">C</span><span class="brand-text"><span>clarity</span><small class="brand-sub">Manipulation Score</small></span></a>
+      <a class="brand" href="./"><span class="brand-mark">C</span><span class="brand-text"><span class="brand-name">clarity</span><span class="brand-sub">MANIPULATION SCORE</span></span></a>
       <p>Clarity helps you understand pressure patterns and choose your response.</p>
       <nav class="footer-nav" aria-label="Footer navigation">
         <a href="privacy.html">Privacy</a>

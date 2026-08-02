@@ -112,7 +112,7 @@ async function handleImageSelected() {
 
     if (!text || quality === 'empty') {
       setImageUploadStatus(
-        'We couldn’t read much text from this image. Try a clearer image or paste the message manually.',
+        'We couldn’t pull clear messages from this screenshot. Paste or type the messages you received, then analyze.',
         'warn'
       );
       return;
@@ -123,7 +123,7 @@ async function handleImageSelected() {
 
     if (quality === 'poor') {
       setImageUploadStatus(
-        'We found some text, but it may be incomplete or noisy. Edit the messages below or paste them manually, then analyze.',
+        'We found some text, but it needs cleanup. Edit the messages below or paste them manually, then analyze.',
         'warn'
       );
     } else {

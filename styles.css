@@ -114,6 +114,7 @@
 .intensity-legend-list strong{font-weight:600;color:var(--ink)}
 .image-upload-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .image-upload-btn,.image-remove-btn{font-size:12px;padding:11px 14px;gap:8px;flex:1;min-width:0}
+.image-remove-btn[hidden]{display:none!important}
 .image-upload-note{font-size:10px;color:var(--muted);margin:8px 0 0;line-height:1.45}
 .image-upload-status{font-size:11px;margin:8px 0 0;line-height:1.45;padding:8px 10px;border-radius:4px}
 .image-upload-status-info{background:#eaf4f1;color:#2d5f56}

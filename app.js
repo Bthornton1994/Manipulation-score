@@ -74,13 +74,13 @@ async function handleImageSelected() {
   if (!file) return;
 
   if (imageRemoveBtn) imageRemoveBtn.hidden = false;
-  setImageUploadStatus('Reading text from your screenshot on this device…', 'info');
+  setImageUploadStatus('Reading text from your image on this device…', 'info');
 
   try {
     const text = await extractTextFromImage(file);
     if (!text) {
       setImageUploadStatus(
-        'We couldn’t read much text from this image. Try a clearer screenshot or paste the message manually.',
+        'We couldn’t read much text from this image. Try a clearer image or paste the message manually.',
         'warn'
       );
       return;
@@ -482,6 +482,7 @@ if (imageUploadBtn && imageInput) {
 }
 
 if (imageRemoveBtn) {
+  imageRemoveBtn.hidden = true;
   imageRemoveBtn.addEventListener('click', () => {
     clearAttachedImage();
     message.focus();

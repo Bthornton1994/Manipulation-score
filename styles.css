@@ -198,7 +198,8 @@
 .history-score{font:700 14px Manrope;color:var(--coral)}
 .history-preview{font-size:11px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .history-meta{font-size:10px;color:var(--muted);font-weight:600}
-.results-panel{overflow:auto;max-height:min(78vh,720px)}
+.results-panel{overflow:auto;max-height:min(78vh,720px);scroll-margin-top:max(72px,calc(64px + env(safe-area-inset-top,0px)))}
+.assessment-hero{scroll-margin-top:max(72px,calc(64px + env(safe-area-inset-top,0px)))}
 .button,.analyze-button,.nav-toggle,.copy-chip{min-height:44px}
 .highlight-withdrawal{background:#f5ebe8}
 .mobile-menu{display:none}

@@ -113,7 +113,8 @@ const SIGNALS = [
     label: 'Conditional access',
     function: 'Offers or withholds connection based on your behavior—making attention feel like a reward you must earn or chase.',
     weight: 20,
-    pattern: /don'?t bother (?:reaching out|contacting|calling|texting|messaging)|if you can'?t make time|unless you(?: can)?|when you have time for me|don'?t expect me to reach out/gi,
+    pattern:
+      /don'?t bother (?:reaching out|contacting|calling|texting|messaging)|if you can'?t make time|unless you\s+(?:do|apologize|prove|agree|stop|care|love|commit|what i asked)|don'?t expect me to reach out|when you have time for me|(?:won'?t|will not)\s+(?:speak|talk|see|call|contact)\s+(?:to\s+)?you\s+unless|(?:do not|don't)\s+get\s+to\s+see\s+me\s+unless/gi,
     education: 'Conditional access ties warmth or contact to compliance. Your limits can be reframed as withholding care.'
   },
   {
@@ -126,7 +127,7 @@ const SIGNALS = [
   }
 ];
 
-export const METHODOLOGY_VERSION = '0.2.3';
+export const METHODOLOGY_VERSION = '0.2.4';
 export const MIN_MEANINGFUL_WORDS = 15;
 
 const EXCLUSION_CONTEXT_RULES = {
@@ -156,6 +157,15 @@ const EXCLUSION_CONTEXT_RULES = {
     /registration\s+closes/i,
     /if\s+that\s+timeline\s+does\s+not\s+work/i,
     /if\s+you\s+are\s+not\s+ready/i
+  ],
+  conditional_access: [
+    /unless\s+you\s+(?:invite|ask|give|want)/i,
+    /will\s+not\s+(?:visit|call|share|come)/i,
+    /respect\s+your\s+(?:decision|privacy|boundaries|space)/i,
+    /give\s+me\s+permission/i,
+    /change\s+your\s+mind/i,
+    /met\s+there/i,
+    /unless\s+you\s+give\s+me\s+permission/i
   ]
 };
 

@@ -1,6 +1,6 @@
 /**
  * Safety classification independent of manipulation-pattern scoring.
- * Evaluates harm candidates per clause with candidate-specific negation.
+ * Direct violence is immediate; stalking requires behavior plus menace or severe intrusion.
  */
 
 export const SAFETY_NOTICE = {
@@ -11,7 +11,7 @@ export const SAFETY_NOTICE = {
   resourcesAnchor: '#resources'
 };
 
-const CANDIDATE_RULES = [
+const IMMEDIATE_RULES = [
   {
     id: 'direct_violence',
     pattern:
@@ -65,64 +65,6 @@ const CANDIDATE_RULES = [
     pattern: /(?:suicide|kill myself).{0,40}(?:your fault|because of you)/gi
   },
   {
-    id: 'stalking',
-    pattern: /\bknow\s+where\s+you\s+live\b/gi
-  },
-  {
-    id: 'stalking',
-    pattern: /(?:come|going)\s+(?:to\s+)?find\s+you/gi
-  },
-  {
-    id: 'stalking',
-    pattern: /(?:come|going)\s+to\s+your\s+(?:house|home|apartment|place)/gi
-  },
-  {
-    id: 'stalking',
-    pattern: /\bfind\s+you\s+(?:tonight|today|this\s+night)/gi
-  },
-  {
-    id: 'stalking',
-    pattern: /(?:show up|come)\s+(?:at|to)\s+your\b[^.!?]{0,30}(?:tonight|today)/gi
-  },
-  {
-    id: 'stalking',
-    pattern: /\bfollow(?:ing)?\s+you\s+home\b/gi
-  },
-  {
-    id: 'stalking',
-    pattern: /\bwatch(?:ing)?\s+you\s+through\s+the\s+window\b/gi
-  },
-  {
-    id: 'stalking',
-    pattern: /\b(?:waiting|be)\s+outside\s+your\s+(?:work|office|job|home|house)\b/gi
-  },
-  {
-    id: 'stalking',
-    pattern: /\bwill\s+be\s+(?:outside|waiting)\b[^.!?]{0,40}\b(?:office|work|home|house)\b/gi
-  },
-  {
-    id: 'stalking',
-    pattern: /\boutside\s+your\s+office\s+when\s+you\s+leave\b/gi
-  },
-  {
-    id: 'stalking',
-    pattern: /\byou\s+cannot\s+hide\s+from\s+me\b/gi
-  },
-  {
-    id: 'stalking',
-    pattern: /\bi\s+am\s+watching\s+you\b/gi
-  },
-  {
-    id: 'stalking',
-    pattern:
-      /\bknow\s+where\s+you\s+work\b[^.!?]{0,120}\b(?:waiting|watching|following|cannot\s+hide|outside)\b/gi
-  },
-  {
-    id: 'stalking',
-    pattern:
-      /\bknow\s+where\s+you\s+work\b[^.!?]{0,40}\b(?:and|,)+\s*(?:i\s+)?(?:am\s+)?(?:watching|waiting|following)\b/gi
-  },
-  {
     id: 'weapon_threat',
     pattern: /(?:gun|knife|weapon|pistol|rifle|machete).{0,35}(?:you|threaten|pointed)/gi
   },
@@ -152,6 +94,63 @@ const CANDIDATE_RULES = [
   }
 ];
 
+const STALKING_BEHAVIORS = [
+  { severe: true, pattern: /\bwatch(?:ing)?\s+you\s+through\s+the\s+window\b/gi },
+  { severe: true, pattern: /\byou\s+cannot\s+hide\s+from\s+me\b/gi },
+  { pattern: /\bknow\s+where\s+you\s+(?:live|work)\b/gi },
+  {
+    pattern:
+      /\b(?:i\s+am\s+)?(?:come|coming|going)\s+to\s+your\s+(?:house|home|apartment|place|office)\b/gi
+  },
+  { pattern: /\b(?:come|going)\s+to\s+your\s+(?:house|home|apartment|place)\b/gi },
+  { pattern: /\bfollow(?:ing)?\s+you\s+home\b/gi },
+  { pattern: /\b(?:waiting|be)\s+outside\s+your\s+(?:work|office|job|home|house)\b/gi },
+  {
+    pattern: /\bwill\s+be\s+(?:outside|waiting)\b[^.!?]{0,40}\b(?:office|work|home|house)\b/gi
+  },
+  { pattern: /\boutside\s+your\s+office\s+when\s+you\s+leave\b/gi },
+  { pattern: /\bi\s+am\s+watching\s+you\b/gi },
+  { pattern: /(?:come|going)\s+(?:to\s+)?find\s+you\b/gi },
+  { pattern: /\bfind\s+you\s+(?:tonight|today|this\s+night)\b/gi },
+  { pattern: /(?:show up|come)\s+(?:at|to)\s+your\b[^.!?]{0,30}(?:tonight|today)\b/gi }
+];
+
+const MENACE_PATTERNS = [
+  /whether\s+you\s+want\s+(?:me\s+)?(?:to\s+or\s+not|there\s+or\s+not)/i,
+  /you\s+cannot\s+stop\s+me/i,
+  /you\s+can't\s+stop\s+me/i,
+  /you\s+cannot\s+hide(?:\s+from\s+me)?/i,
+  /without\s+your\s+permission/i,
+  /invited\s+or\s+not/i,
+  /even\s+though\s+you\s+told\s+me\s+to\s+stop/i,
+  /after\s+you\s+said\s+no/i,
+  /\byou\s+said\s+no\b/i,
+  /\btold\s+me\s+to\s+stop\b/i
+];
+
+const BENIGN_CONSENT_PATTERNS = [
+  /you\s+invited\s+me/i,
+  /unless\s+you\s+invite\s+me/i,
+  /would\s+you\s+like\s+me\s+to/i,
+  /\bif\s+you\s+want\b/i,
+  /package\s+you\s+requested/i,
+  /you\s+sent\s+me\s+your\s+address/i,
+  /keep\s+it\s+private/i,
+  /respect\s+your\s+(?:privacy|boundaries|decision|space)/i,
+  /\bunless\s+you\s+(?:ask|give|invite)\b/i,
+  /because\s+we\s+met\s+there/i,
+  /to\s+make\s+sure\s+you\s+arrive\s+safely/i,
+  /help\s+you\s+move/i,
+  /drop\s+off\s+the\s+package/i,
+  /leave\s+it\s+outside/i,
+  /\bwill\s+not\s+(?:come|visit|call|share)\b/i,
+  /\bnot\s+coming\s+to\s+your\b/i,
+  /for\s+the\s+dinner\s+you\s+invited/i,
+  /dinner\s+you\s+invited/i,
+  /another\s+day\s+be\s+better/i,
+  /for\s+the\s+invitation/i
+];
+
 const CLAUSE_SPLIT_RE = /\s*;\s*|\s+\bbut\s+|\s+\bhowever\s+|\s+\byet\s+/gi;
 
 const THIRD_PARTY_ATTRIBUTION =
@@ -161,13 +160,13 @@ const REPORTED_QUOTE_ATTRIBUTION =
   /(?:article|report|news|story|headline)\s+(?:said|reported|quoted|described)\b/i;
 
 const INSTRUCTIONAL_ATTRIBUTION =
-  /(?:instructor|trainer|teacher|facilitator|coach)\s+(?:used|quoted|said|showed|gave)\b/i;
+  /(?:instructor|trainer|teacher|facilitator|coach)\s+(?:used|quoted|said|showed|gave|described)\b/i;
 
 const TRAINING_SEGMENT =
   /(?:safety|workplace|de-?escalation|crisis\s+line)\s+training|training\s+example|fictional\s+(?:scene|dialogue|example)|in\s+a\s+(?:movie|book|script|novel)/i;
 
 const TRAINING_EXAMPLE_PHRASE =
-  /as\s+an\s+example|example\s+of\s+threatening\s+language|training\s+scenario|fictional\s+training/i;
+  /as\s+an\s+example|example\s+of\s+threatening\s+language|stalking\s+behavior|training\s+scenario|fictional\s+training/i;
 
 const MEDICAL_CONTEXT = /\b(?:doctor|treatment|medication|procedure|therapy)\b/i;
 
@@ -203,9 +202,6 @@ function splitSentences(text) {
   return segments;
 }
 
-/**
- * @returns {{ text: string, start: number, end: number }[]}
- */
 function splitClauses(segmentText) {
   const clauses = [];
   let lastEnd = 0;
@@ -235,16 +231,17 @@ function splitClauses(segmentText) {
   return clauses;
 }
 
-function findCandidates(clauseText) {
+function findRuleMatches(text, rules) {
   const matches = [];
 
-  for (const rule of CANDIDATE_RULES) {
+  for (const rule of rules) {
     const flags = rule.pattern.flags.includes('g') ? rule.pattern.flags : `${rule.pattern.flags}g`;
     const re = new RegExp(rule.pattern.source, flags);
     let match;
-    while ((match = re.exec(clauseText)) !== null) {
+    while ((match = re.exec(text)) !== null) {
       matches.push({
-        id: rule.id,
+        id: rule.id || 'stalking',
+        severe: rule.severe || false,
         start: match.index,
         end: match.index + match[0].length,
         text: match[0]
@@ -254,6 +251,10 @@ function findCandidates(clauseText) {
   }
 
   return matches.sort((a, b) => a.start - b.start || a.end - b.end);
+}
+
+function findStalkingBehaviors(text) {
+  return findRuleMatches(text, STALKING_BEHAVIORS);
 }
 
 function extractHarmVerb(matchText) {
@@ -330,25 +331,10 @@ function isTrainingOnlyClause(clauseText) {
   return !firstPersonThreat;
 }
 
-function isConsensualStalkingContext(clauseText, matchStart, matchId) {
-  if (matchId !== 'stalking') return false;
-
-  const local = clauseText.slice(
-    Math.max(0, matchStart - 40),
-    Math.min(clauseText.length, matchStart + 100)
-  );
-
-  if (/\bif\s+you\s+want\b/i.test(local)) return true;
-  if (/\bto\s+make\s+sure\s+you\s+arrive\s+safely\b/i.test(clauseText)) return true;
-
-  if (
-    /\bknow\s+where\s+you\s+work\b/i.test(clauseText) &&
-    /\bbecause\s+we\s+met\s+there\b/i.test(clauseText) &&
-    !/\b(?:waiting|watching|following|hide|outside|cannot)\b/i.test(clauseText)
-  ) {
-    return true;
-  }
-
+function isAttributedClause(clauseText, matchStart) {
+  if (isThirdPartyQuote(clauseText, matchStart)) return true;
+  if (isInstructionalQuote(clauseText, matchStart)) return true;
+  if (isTrainingOnlyClause(clauseText)) return true;
   return false;
 }
 
@@ -360,14 +346,113 @@ function isMedicalReassurance(clauseText, matchStart, matchText) {
   );
 }
 
-function isExcludedCandidate(clauseText, match) {
+function hasMenace(text) {
+  return MENACE_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function hasBenignConsent(text) {
+  return BENIGN_CONSENT_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function isExcludedImmediateCandidate(clauseText, match) {
   if (isNegatedForCandidate(clauseText, match.start, match.text)) return true;
-  if (isConsensualStalkingContext(clauseText, match.start, match.id)) return true;
-  if (isThirdPartyQuote(clauseText, match.start)) return true;
-  if (isInstructionalQuote(clauseText, match.start)) return true;
-  if (isTrainingOnlyClause(clauseText)) return true;
+  if (isAttributedClause(clauseText, match.start)) return true;
   if (isMedicalReassurance(clauseText, match.start, match.text)) return true;
   return false;
+}
+
+function getExpandedContext(sentences, index) {
+  const parts = [];
+  if (sentences[index - 1]) parts.push(sentences[index - 1].text);
+  parts.push(sentences[index].text);
+  if (sentences[index + 1]) parts.push(sentences[index + 1].text);
+  return parts.join(' ');
+}
+
+function makeStalkingResult(normalized, globalStart, globalEnd) {
+  return {
+    ...SAFETY_NOTICE,
+    category: 'stalking',
+    evidenceSpan: {
+      start: globalStart,
+      end: globalEnd,
+      text: normalized.slice(globalStart, globalEnd)
+    }
+  };
+}
+
+function detectContextualStalking(sentences, normalized) {
+  for (let i = 0; i < sentences.length; i++) {
+    const sentence = sentences[i];
+    const expanded = getExpandedContext(sentences, i);
+    const menace = hasMenace(expanded);
+    const behaviors = findStalkingBehaviors(sentence.text);
+    const expandedBehaviors = findStalkingBehaviors(expanded);
+    const benignInSentence = hasBenignConsent(sentence.text);
+
+    for (const behavior of behaviors) {
+      if (isAttributedClause(sentence.text, behavior.start)) continue;
+
+      if (behavior.severe) {
+        return makeStalkingResult(
+          normalized,
+          sentence.start + behavior.start,
+          sentence.start + behavior.end
+        );
+      }
+    }
+
+    if (behaviors.length === 0) continue;
+
+    if (benignInSentence && !menace) continue;
+
+    if (menace) {
+      const behavior = behaviors[0];
+      return makeStalkingResult(
+        normalized,
+        sentence.start + behavior.start,
+        sentence.start + behavior.end
+      );
+    }
+
+    const intrusive = expandedBehaviors.filter(
+      (b) => !/know\s+where\s+you\s+(?:live|work)/i.test(b.text)
+    );
+    if (intrusive.length >= 2) {
+      const behavior = intrusive[0];
+      const inSentence = sentence.text.includes(behavior.text);
+      const offset = inSentence ? behavior.start : 0;
+      const end = inSentence ? behavior.end : Math.min(sentence.text.length, behavior.text.length);
+      return makeStalkingResult(normalized, sentence.start + offset, sentence.start + end);
+    }
+
+    if (
+      /know\s+where\s+you\s+work/i.test(expanded) &&
+      /(?:watching|following|waiting|outside|cannot\s+hide)/i.test(expanded)
+    ) {
+      const behavior = behaviors[0];
+      return makeStalkingResult(
+        normalized,
+        sentence.start + behavior.start,
+        sentence.start + behavior.end
+      );
+    }
+
+    if (
+      /know\s+where\s+you\s+live/i.test(expanded) &&
+      /(?:watching|find\s+you|come\s+find)/i.test(expanded) &&
+      menace
+    ) {
+      const behavior = behaviors[0];
+      return makeStalkingResult(
+        normalized,
+        sentence.start + behavior.start,
+        sentence.start + behavior.end
+      );
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -383,10 +468,10 @@ export function detectSafetyNotice(text) {
     const clauses = splitClauses(sentence.text);
 
     for (const clause of clauses) {
-      const candidates = findCandidates(clause.text);
+      const candidates = findRuleMatches(clause.text, IMMEDIATE_RULES);
 
       for (const candidate of candidates) {
-        if (isExcludedCandidate(clause.text, candidate)) continue;
+        if (isExcludedImmediateCandidate(clause.text, candidate)) continue;
 
         const globalStart = sentence.start + clause.start + candidate.start;
         const globalEnd = sentence.start + clause.start + candidate.end;
@@ -403,6 +488,9 @@ export function detectSafetyNotice(text) {
       }
     }
   }
+
+  const stalking = detectContextualStalking(sentences, normalized);
+  if (stalking) return stalking;
 
   return null;
 }

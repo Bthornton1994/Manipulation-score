@@ -114,7 +114,7 @@
         </div>
         <div class="analyzer-grid">
           <form class="input-panel" id="analysis-form">
-            <label for="message">Message or short thread</label>
+            <label for="message">Message</label>
             <textarea id="message" maxlength="2500" placeholder="Paste one message, or separate multiple messages with a blank line…" required></textarea>
             <div class="input-meta">
               <span>Stored on this device only when you analyze</span>
@@ -130,10 +130,13 @@
               <button class="button button-secondary" type="button" id="clear-message" hidden>Clear</button>
               <button class="button analyze-button" type="submit">Analyze message <span>→</span></button>
             </div>
-            <div class="history-panel" id="history-panel">
-              <h4>Recent on this device</h4>
+            <details class="history-panel" id="history-panel">
+              <summary class="history-toggle">
+                <span class="history-toggle-label">Recent on this device</span>
+                <span class="history-chevron" aria-hidden="true"></span>
+              </summary>
               <div id="history-list" class="history-list"></div>
-            </div>
+            </details>
           </form>
           <div class="results-panel" id="results" aria-live="polite" tabindex="-1">
             <div class="empty-state">

@@ -1,5 +1,5 @@
 import { analyzeMessage, SIGNALS } from './scoring.js';
-import { extractTextFromImage, releaseOcrWorker, isSupportedImageFile, describeImageFile } from './ocr.js';
+import { extractTextFromImage, releaseOcrWorker, isSupportedImageFile } from './ocr.js';
 
 const form = document.querySelector('#analysis-form');
 const message = document.querySelector('#message');
@@ -20,6 +20,7 @@ const STORAGE_KEY = 'clarity-history-v1';
 const MAX_HISTORY = 8;
 
 let attachedImageFile = null;
+let imageProcessing = false;
 
 const EXAMPLES = [
   {
@@ -70,10 +71,19 @@ function clearAttachedImage() {
   if (imageInput) imageInput.value = '';
   updateImageRemoveVisibility();
   setImageUploadStatus('');
+  if (imageUploadBtn) imageUploadBtn.disabled = false;
 }
 
 function updateImageRemoveVisibility() {
   if (imageRemoveBtn) imageRemoveBtn.hidden = !attachedImageFile;
+}
+
+function setImageProcessing(processing) {
+  imageProcessing = processing;
+  if (imageUploadBtn) {
+    imageUploadBtn.disabled = processing;
+    imageUploadBtn.setAttribute('aria-busy', processing ? 'true' : 'false');
+  }
 }
 
 async function handleImageSelected() {
@@ -86,18 +96,20 @@ async function handleImageSelected() {
   if (!isSupportedImageFile(file)) {
     clearAttachedImage();
     setImageUploadStatus(
-      'This file type is not supported. Use JPEG, PNG, WebP, or HEIC from your photo library.',
+      'Couldn’t read this image. Try a different format or paste the text instead.',
       'warn'
     );
     return;
   }
 
-  attachedImageFile = file;
-  updateImageRemoveVisibility();
-  setImageUploadStatus('Reading text from your image on this device…', 'info');
+  setImageProcessing(true);
+  setImageUploadStatus('Reading image…', 'info');
 
   try {
     const text = await extractTextFromImage(file);
+    attachedImageFile = file;
+    updateImageRemoveVisibility();
+
     if (!text) {
       setImageUploadStatus(
         'We couldn’t read much text from this image. Try a clearer image or paste the message manually.',
@@ -117,7 +129,7 @@ async function handleImageSelected() {
   } catch (error) {
     if (error?.code === 'UNSUPPORTED_IMAGE') {
       setImageUploadStatus(
-        'This file type is not supported. Use JPEG, PNG, WebP, or HEIC from your photo library.',
+        'Couldn’t read this image. Try a different format or paste the text instead.',
         'warn'
       );
     } else if (error?.code === 'HEIC_CONVERT_FAILED') {
@@ -127,11 +139,13 @@ async function handleImageSelected() {
       );
     } else {
       setImageUploadStatus(
-        `Couldn’t read this image (${describeImageFile(file)}). Supported: JPEG, PNG, WebP, HEIC—or paste the text.`,
+        'Couldn’t read this image. Try a different format or paste the text instead.',
         'warn'
       );
     }
     clearAttachedImage();
+  } finally {
+    setImageProcessing(false);
   }
 }
 
@@ -508,11 +522,21 @@ if (clearButton) {
 }
 
 if (imageUploadBtn && imageInput) {
-  imageUploadBtn.addEventListener('click', () => imageInput.click());
-  imageInput.addEventListener('change', () => {
+  const onImageInputChange = () => {
+    if (imageProcessing) return;
     if (!imageInput.files?.[0]) clearAttachedImage();
     else handleImageSelected();
+  };
+
+  imageUploadBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    if (imageProcessing) return;
+    imageInput.value = '';
+    imageInput.click();
   });
+
+  imageInput.addEventListener('change', onImageInputChange);
+  imageInput.addEventListener('input', onImageInputChange);
 }
 
 if (imageRemoveBtn) {

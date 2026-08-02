@@ -115,12 +115,18 @@ export async function prepareImageForOcr(file) {
 }
 
 async function createOcrWorker() {
-  const { createWorker } = await import('./vendor/tesseract/tesseract.esm.min.js');
+  const tesseractModule = await import('./vendor/tesseract/tesseract.esm.min.js');
+  const { createWorker } = tesseractModule.default;
+  if (typeof createWorker !== 'function') {
+    throw new Error('OCR library failed to load');
+  }
   return createWorker('eng', 1, {
     workerPath: new URL('worker.min.js', TESSERACT_BASE).href,
     corePath: new URL('tesseract-core.wasm.js', TESSERACT_BASE).href,
     langPath: new URL('lang/', TESSERACT_BASE).href,
-    cacheMethod: 'none'
+    gzip: true,
+    cacheMethod: 'none',
+    workerBlobURL: false
   });
 }
 

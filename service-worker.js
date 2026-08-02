@@ -1,4 +1,4 @@
-const CACHE_NAME = 'clarity-v15';
+const CACHE_NAME = 'clarity-v16';
 const APP_SHELL = [
   './',
   './index.html',
@@ -14,6 +14,12 @@ const APP_SHELL = [
   './icon.svg',
   './robots.txt',
   './sitemap.xml',
+  './vendor/tesseract/tesseract.esm.min.js',
+  './vendor/tesseract/worker.min.js',
+  './vendor/tesseract/tesseract-core.wasm.js',
+  './vendor/tesseract/tesseract-core.wasm',
+  './vendor/tesseract/lang/eng.traineddata.gz',
+  './vendor/heic2any/heic2any.min.js',
   './fonts/dmsans-v17-rP2tp2ywxg089UriI5-g4vlH9VoD8CmcqZG40F9JadbnoEwAopxhTg.ttf',
   './fonts/dmsans-v17-rP2tp2ywxg089UriI5-g4vlH9VoD8CmcqZG40F9JadbnoEwAkJxhTg.ttf',
   './fonts/dmsans-v17-rP2tp2ywxg089UriI5-g4vlH9VoD8CmcqZG40F9JadbnoEwAfJthTg.ttf',

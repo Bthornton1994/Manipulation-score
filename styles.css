@@ -26,7 +26,9 @@
 .input-action-row{display:flex;align-items:stretch;gap:8px}
 .image-attach-btn{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:52px;max-width:64px;min-height:44px;padding:6px 8px;background:#eef4f2;border:1px solid var(--line);border-radius:5px;color:var(--ink);font:600 10px Manrope;cursor:pointer;transition:background .15s}
 .image-attach-btn:hover{background:#e4efec}
+.image-attach-btn:disabled{opacity:.55;cursor:not-allowed}
 .image-attach-btn:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+.file-input-offscreen{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .image-attach-icon{display:block;flex-shrink:0}
 .image-attach-label{line-height:1}
 @media(max-width:380px){

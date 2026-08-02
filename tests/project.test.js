@@ -75,11 +75,18 @@ test('index supports client-side image upload', async () => {
   const html = await readFile('index.html', 'utf8');
   assert.match(html, /id="image-upload-btn"/);
   assert.match(html, /class="image-attach-btn"/);
+  assert.match(html, /class="file-input-offscreen"/);
   assert.match(html, /Analyze message/);
   assert.match(html, /Images are read on your device only/);
   assert.match(html, /accept="[^"]*image\/\*[^"]*"/);
   assert.match(html, /\.heic/);
   assert.doesNotMatch(html, /screenshot/i);
+});
+
+test('index CSP allows on-device OCR', async () => {
+  const html = await readFile('index.html', 'utf8');
+  assert.match(html, /wasm-unsafe-eval/);
+  assert.match(html, /worker-src[^;]*blob:/);
 });
 
 test('ocr module and vendor assets exist locally', async () => {

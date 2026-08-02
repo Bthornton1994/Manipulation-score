@@ -244,8 +244,8 @@ export function getScoreBand(score) {
 
 export function getSignalSeverity(signal) {
   const extra = signal.points - signal.weight;
-  if (extra >= 6 || signal.points >= 28) return { label: 'Clear', level: 'strong' };
-  if (extra >= 3 || signal.points >= 20) return { label: 'Noticeable', level: 'moderate' };
+  if (extra >= 6 || signal.points >= 28) return { label: 'Strong', level: 'strong' };
+  if (extra >= 3 || signal.points >= 20) return { label: 'Clear', level: 'moderate' };
   return { label: 'Mild', level: 'mild' };
 }
 

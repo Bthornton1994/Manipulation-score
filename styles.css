@@ -104,6 +104,21 @@
 .score-bands strong{font:600 12px Manrope;color:var(--ink)}
 .score-note{font-size:10px;color:var(--muted);margin:12px 0 0}
 .results-heading{font:600 14px Manrope;margin:0 0 12px}
+.patterns-section-head{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:8px 12px;margin-bottom:12px}
+.patterns-section-head .results-heading{margin:0}
+.intensity-legend{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:6px 10px;background:#fcfcf9;max-width:100%}
+.intensity-legend summary{font:600 11px Manrope;cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px}
+.intensity-legend summary::-webkit-details-marker{display:none}
+.intensity-legend-list{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:4px}
+.intensity-legend-list li{font-size:11px;line-height:1.45;color:#4d6964}
+.intensity-legend-list strong{font-weight:600;color:var(--ink)}
+.image-upload-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.image-upload-btn,.image-remove-btn{font-size:12px;padding:11px 14px;gap:8px;flex:1;min-width:0}
+.image-upload-note{font-size:10px;color:var(--muted);margin:8px 0 0;line-height:1.45}
+.image-upload-status{font-size:11px;margin:8px 0 0;line-height:1.45;padding:8px 10px;border-radius:4px}
+.image-upload-status-info{background:#eaf4f1;color:#2d5f56}
+.image-upload-status-ok{background:#eaf4f1;color:#2d5f56}
+.image-upload-status-warn{background:#fdecd4;color:#8a5b14}
 .patterns-section,.thread-section{margin-top:8px}
 .signal-cards{display:grid;gap:14px}
 .signal-card{padding:16px;border:1px solid var(--line);border-radius:8px;background:#fcfcf9}

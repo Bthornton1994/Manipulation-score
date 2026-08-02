@@ -1,4 +1,5 @@
 import { analyzeMessage, SIGNALS } from './scoring.js';
+import { extractTextFromImage, releaseOcrWorker } from './ocr.js';
 
 const form = document.querySelector('#analysis-form');
 const message = document.querySelector('#message');
@@ -10,6 +11,10 @@ const navToggle = document.querySelector('#nav-toggle');
 const navClose = document.querySelector('#nav-close');
 const mobileMenu = document.querySelector('#mobile-menu');
 const historyList = document.querySelector('#history-list');
+const imageInput = document.querySelector('#message-image');
+const imageUploadBtn = document.querySelector('#image-upload-btn');
+const imageRemoveBtn = document.querySelector('#image-remove-btn');
+const imageUploadStatus = document.querySelector('#image-upload-status');
 
 const STORAGE_KEY = 'clarity-history-v1';
 const MAX_HISTORY = 8;
@@ -43,6 +48,75 @@ const element = (tag, className, text) => {
 function updateInputState() {
   count.textContent = `${message.value.length.toLocaleString()} / 2,500`;
   if (clearButton) clearButton.hidden = !message.value;
+}
+
+function setImageUploadStatus(text, tone = 'info') {
+  if (!imageUploadStatus) return;
+  if (!text) {
+    imageUploadStatus.hidden = true;
+    imageUploadStatus.textContent = '';
+    imageUploadStatus.className = 'image-upload-status';
+    return;
+  }
+  imageUploadStatus.hidden = false;
+  imageUploadStatus.textContent = text;
+  imageUploadStatus.className = `image-upload-status image-upload-status-${tone}`;
+}
+
+function clearAttachedImage() {
+  if (imageInput) imageInput.value = '';
+  if (imageRemoveBtn) imageRemoveBtn.hidden = true;
+  setImageUploadStatus('');
+}
+
+async function handleImageSelected() {
+  const file = imageInput?.files?.[0];
+  if (!file) return;
+
+  if (imageRemoveBtn) imageRemoveBtn.hidden = false;
+  setImageUploadStatus('Reading text from your screenshot on this device…', 'info');
+
+  try {
+    const text = await extractTextFromImage(file);
+    if (!text) {
+      setImageUploadStatus(
+        'We couldn’t read much text from this image. Try a clearer screenshot or paste the message manually.',
+        'warn'
+      );
+      return;
+    }
+
+    message.value = text.slice(0, 2500);
+    updateInputState();
+    const qualityNote =
+      text.length < 12
+        ? 'Very little text was detected—you may want to correct it before analyzing.'
+        : 'Text extracted on your device. Review and edit before analyzing.';
+    setImageUploadStatus(qualityNote, text.length < 12 ? 'warn' : 'ok');
+    message.focus();
+  } catch {
+    setImageUploadStatus(
+      'Couldn’t read this image. Try JPG or PNG, or paste the message text instead.',
+      'warn'
+    );
+  }
+}
+
+function createIntensityLegend() {
+  const details = element('details', 'intensity-legend');
+  details.append(element('summary', '', 'What the tags mean'));
+  const list = element('ul', 'intensity-legend-list');
+  [
+    ['Mild', 'Present but limited in force'],
+    ['Clear', 'Distinct and easy to recognize'],
+    ['Strong', 'High intensity or central to the pressure']
+  ].forEach(([tag, description]) => {
+    const li = element('li', '');
+    li.append(element('strong', '', tag), document.createTextNode(` — ${description}`));
+    list.append(li);
+  });
+  details.append(list);
+  return details;
 }
 
 function createCopyButton(text, label = 'Copy') {
@@ -217,7 +291,10 @@ function createLeverageInsightsSection(insights) {
 
 function createPatternsSection(analysis) {
   const section = element('section', 'patterns-section');
-  section.append(element('h3', 'results-heading', `Language functions · ${analysis.signalCount}`));
+  const headingRow = element('div', 'patterns-section-head');
+  headingRow.append(element('h3', 'results-heading', `Language functions · ${analysis.signalCount}`));
+  headingRow.append(createIntensityLegend());
+  section.append(headingRow);
 
   const leverageSection = createLeverageInsightsSection(analysis.leverageInsights);
   if (leverageSection) section.append(leverageSection);
@@ -390,8 +467,23 @@ if (clearButton) {
   clearButton.addEventListener('click', () => {
     form.reset();
     if (exampleSelect) exampleSelect.value = '';
+    clearAttachedImage();
     updateInputState();
     renderEmptyState();
+    message.focus();
+  });
+}
+
+if (imageUploadBtn && imageInput) {
+  imageUploadBtn.addEventListener('click', () => imageInput.click());
+  imageInput.addEventListener('change', () => {
+    handleImageSelected();
+  });
+}
+
+if (imageRemoveBtn) {
+  imageRemoveBtn.addEventListener('click', () => {
+    clearAttachedImage();
     message.focus();
   });
 }
@@ -460,3 +552,7 @@ renderHistory();
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./service-worker.js').catch(() => {});
 }
+
+window.addEventListener('pagehide', () => {
+  releaseOcrWorker().catch(() => {});
+});

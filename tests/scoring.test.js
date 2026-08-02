@@ -5,6 +5,7 @@ import {
   buildResponses,
   getHighlightRanges,
   getScoreBand,
+  getSignalSeverity,
   splitMessages,
   SIGNALS
 } from '../scoring.js';
@@ -132,4 +133,10 @@ test('highlight ranges cover matched phrases', () => {
 test('bands include assessment headlines', () => {
   const result = analyzeMessage(URGENCY_EXAMPLE);
   assert.match(result.bandHeadline, /Moderate pressure/);
+});
+
+test('intensity tags use Mild Clear and Strong labels', () => {
+  assert.equal(getSignalSeverity({ weight: 18, points: 19 }).label, 'Mild');
+  assert.equal(getSignalSeverity({ weight: 18, points: 22 }).label, 'Clear');
+  assert.equal(getSignalSeverity({ weight: 18, points: 30 }).label, 'Strong');
 });

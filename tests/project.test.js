@@ -76,9 +76,9 @@ test('index supports client-side image upload', async () => {
   assert.match(html, /id="image-upload-btn"/);
   assert.match(html, />Attach image</);
   assert.match(html, /Images are read on your device only/);
-  assert.match(html, /id="message-image"/);
-  assert.match(html, /worker-src/);
-  assert.match(html, /blob:/);
+  assert.match(html, /accept="[^"]*image\/\*[^"]*"/);
+  assert.match(html, /\.heic/);
+  assert.doesNotMatch(html, /screenshot/i);
 });
 
 test('ocr module and vendor assets exist locally', async () => {
@@ -87,4 +87,5 @@ test('ocr module and vendor assets exist locally', async () => {
   await access('vendor/tesseract/worker.min.js');
   await access('vendor/tesseract/tesseract-core.wasm.js');
   await access('vendor/tesseract/lang/eng.traineddata.gz');
+  await access('vendor/heic2any/heic2any.min.js');
 });

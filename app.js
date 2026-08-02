@@ -1,5 +1,5 @@
 import { analyzeMessage, SIGNALS } from './scoring.js';
-import { extractTextFromImage, releaseOcrWorker } from './ocr.js';
+import { extractTextFromImage, releaseOcrWorker, isSupportedImageFile, describeImageFile } from './ocr.js';
 
 const form = document.querySelector('#analysis-form');
 const message = document.querySelector('#message');
@@ -18,6 +18,8 @@ const imageUploadStatus = document.querySelector('#image-upload-status');
 
 const STORAGE_KEY = 'clarity-history-v1';
 const MAX_HISTORY = 8;
+
+let attachedImageFile = null;
 
 const EXAMPLES = [
   {
@@ -64,16 +66,34 @@ function setImageUploadStatus(text, tone = 'info') {
 }
 
 function clearAttachedImage() {
+  attachedImageFile = null;
   if (imageInput) imageInput.value = '';
-  if (imageRemoveBtn) imageRemoveBtn.hidden = true;
+  updateImageRemoveVisibility();
   setImageUploadStatus('');
+}
+
+function updateImageRemoveVisibility() {
+  if (imageRemoveBtn) imageRemoveBtn.hidden = !attachedImageFile;
 }
 
 async function handleImageSelected() {
   const file = imageInput?.files?.[0];
-  if (!file) return;
+  if (!file) {
+    clearAttachedImage();
+    return;
+  }
 
-  if (imageRemoveBtn) imageRemoveBtn.hidden = false;
+  if (!isSupportedImageFile(file)) {
+    clearAttachedImage();
+    setImageUploadStatus(
+      'This file type is not supported. Use JPEG, PNG, WebP, or HEIC from your photo library.',
+      'warn'
+    );
+    return;
+  }
+
+  attachedImageFile = file;
+  updateImageRemoveVisibility();
   setImageUploadStatus('Reading text from your image on this device…', 'info');
 
   try {
@@ -94,11 +114,24 @@ async function handleImageSelected() {
         : 'Text extracted on your device. Review and edit before analyzing.';
     setImageUploadStatus(qualityNote, text.length < 12 ? 'warn' : 'ok');
     message.focus();
-  } catch {
-    setImageUploadStatus(
-      'Couldn’t read this image. Try JPG or PNG, or paste the message text instead.',
-      'warn'
-    );
+  } catch (error) {
+    if (error?.code === 'UNSUPPORTED_IMAGE') {
+      setImageUploadStatus(
+        'This file type is not supported. Use JPEG, PNG, WebP, or HEIC from your photo library.',
+        'warn'
+      );
+    } else if (error?.code === 'HEIC_CONVERT_FAILED') {
+      setImageUploadStatus(
+        'Couldn’t open this HEIC image here. Try saving as JPEG in your photos app, or paste the text.',
+        'warn'
+      );
+    } else {
+      setImageUploadStatus(
+        `Couldn’t read this image (${describeImageFile(file)}). Supported: JPEG, PNG, WebP, HEIC—or paste the text.`,
+        'warn'
+      );
+    }
+    clearAttachedImage();
   }
 }
 
@@ -477,7 +510,8 @@ if (clearButton) {
 if (imageUploadBtn && imageInput) {
   imageUploadBtn.addEventListener('click', () => imageInput.click());
   imageInput.addEventListener('change', () => {
-    handleImageSelected();
+    if (!imageInput.files?.[0]) clearAttachedImage();
+    else handleImageSelected();
   });
 }
 
@@ -488,6 +522,8 @@ if (imageRemoveBtn) {
     message.focus();
   });
 }
+
+updateImageRemoveVisibility();
 
 let menuScrollY = 0;
 

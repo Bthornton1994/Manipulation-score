@@ -1,4 +1,4 @@
-const CACHE_NAME = 'clarity-v10';
+const CACHE_NAME = 'clarity-v11';
 const APP_SHELL = [
   './',
   './index.html',

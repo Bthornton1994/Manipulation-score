@@ -115,8 +115,8 @@ export async function prepareImageForOcr(file) {
 }
 
 async function createOcrWorker() {
-  const { createWorker } = await import('./vendor/tesseract/tesseract.esm.min.js');
-  return createWorker('eng', 1, {
+  const { default: Tesseract } = await import('./vendor/tesseract/tesseract.esm.min.js');
+  return Tesseract.createWorker('eng', 1, {
     workerPath: new URL('worker.min.js', TESSERACT_BASE).href,
     corePath: new URL('tesseract-core.wasm.js', TESSERACT_BASE).href,
     langPath: new URL('lang/', TESSERACT_BASE).href,

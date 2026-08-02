@@ -1,5 +1,13 @@
 import { analyzeMessage, SIGNALS } from './scoring.js';
 import { extractTextFromImage, releaseOcrWorker, isSupportedImageFile } from './ocr.js';
+import {
+  migrateHistoryStorage,
+  isHistoryOptIn as readHistoryOptIn,
+  STORAGE_KEY,
+  OPT_IN_KEY
+} from './history-storage.js';
+
+migrateHistoryStorage(localStorage);
 
 const form = document.querySelector('#analysis-form');
 const message = document.querySelector('#message');
@@ -18,8 +26,6 @@ const imageUploadStatus = document.querySelector('#image-upload-status');
 const historyOptIn = document.querySelector('#history-opt-in');
 const historyDeleteAll = document.querySelector('#history-delete-all');
 
-const STORAGE_KEY = 'clarity-history-v1';
-const OPT_IN_KEY = 'clarity-history-opt-in-v1';
 const MAX_HISTORY = 8;
 
 let attachedImageFile = null;
@@ -302,7 +308,7 @@ function createScoreSection(analysis) {
       element(
         'p',
         'abstention-note',
-        'No numeric score is shown when there is not enough text for reliable pattern screening.'
+        'No numeric score is shown when there is not enough text for screening in this alpha.'
       )
     );
   }
@@ -467,17 +473,24 @@ function scrollToAnalysisResults() {
 }
 
 function renderAnalysis(analysis, sourceText) {
-  const children = [
-    createScoreSection(analysis),
-    createPatternsSection(analysis),
-    createPatternGuide()
-  ];
+  const special = analysis.abstained || analysis.safetyNotice;
+  const children = special
+    ? [createScoreSection(analysis)]
+    : [createScoreSection(analysis), createPatternsSection(analysis), createPatternGuide()];
 
-  if (analysis.segments?.length) {
+  if (!special && analysis.segments?.length) {
     children.splice(1, 0, createThreadSection(analysis.segments));
   }
 
   results.replaceChildren(...children);
+  results.setAttribute(
+    'aria-label',
+    special
+      ? analysis.safetyNotice
+        ? 'Safety notice'
+        : 'Insufficient evidence for screening'
+      : 'Analysis results'
+  );
   results.focus({ preventScroll: true });
   saveHistory(sourceText, analysis);
   renderHistory();
@@ -508,11 +521,7 @@ function dedupeHistory(items) {
 }
 
 function isHistoryOptIn() {
-  try {
-    return localStorage.getItem(OPT_IN_KEY) === 'true';
-  } catch {
-    return false;
-  }
+  return readHistoryOptIn(localStorage);
 }
 
 function setHistoryOptIn(enabled) {
@@ -776,8 +785,38 @@ if (historyOptIn) historyOptIn.checked = isHistoryOptIn();
 updateHistoryControls();
 renderHistory();
 
+function showUpdateBanner() {
+  if (document.getElementById('sw-update-banner')) return;
+
+  const banner = element('div', 'sw-update-banner');
+  banner.id = 'sw-update-banner';
+  banner.setAttribute('role', 'status');
+  const refresh = element('button', 'sw-update-refresh', 'Refresh now');
+  refresh.type = 'button';
+  refresh.addEventListener('click', () => window.location.reload());
+  banner.append(
+    element('p', 'sw-update-text', 'A safer version is available.'),
+    refresh
+  );
+  document.body.prepend(banner);
+}
+
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./service-worker.js').catch(() => {});
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    showUpdateBanner();
+  });
+
+  navigator.serviceWorker.register('./service-worker.js').then((registration) => {
+    registration.addEventListener('updatefound', () => {
+      const newWorker = registration.installing;
+      if (!newWorker) return;
+      newWorker.addEventListener('statechange', () => {
+        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          showUpdateBanner();
+        }
+      });
+    });
+  }).catch(() => {});
 }
 
 window.addEventListener('pagehide', () => {

@@ -75,10 +75,22 @@ test('logo shows Manipulation Score as brand and Clarity as product', async () =
 
 test('history is opt-in and guarded before localStorage writes', async () => {
   const app = await readFile('app.js', 'utf8');
-  assert.match(app, /OPT_IN_KEY/);
+  assert.match(app, /history-storage\.js/);
   assert.match(app, /if \(!isHistoryOptIn\(\)\) return/);
   assert.match(app, /history-opt-in/);
   assert.match(app, /history-delete-all/);
+});
+
+test('history uses v2 storage key', async () => {
+  const storage = await readFile('history-storage.js', 'utf8');
+  assert.match(storage, /clarity-history-v2/);
+  assert.match(storage, /clarity-history-v1/);
+  assert.match(storage, /migrateHistoryStorage/);
+});
+
+test('index labels hero example as experimental', async () => {
+  const html = await readFile('index.html', 'utf8');
+  assert.match(html, /Example, experimental/);
 });
 
 test('index discloses history off by default', async () => {

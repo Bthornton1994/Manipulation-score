@@ -15,8 +15,11 @@ const imageInput = document.querySelector('#message-image');
 const imageUploadBtn = document.querySelector('#image-upload-btn');
 const imageRemoveBtn = document.querySelector('#image-remove-btn');
 const imageUploadStatus = document.querySelector('#image-upload-status');
+const historyOptIn = document.querySelector('#history-opt-in');
+const historyDeleteAll = document.querySelector('#history-delete-all');
 
 const STORAGE_KEY = 'clarity-history-v1';
+const OPT_IN_KEY = 'clarity-history-opt-in-v1';
 const MAX_HISTORY = 8;
 
 let attachedImageFile = null;
@@ -212,68 +215,105 @@ function appendHighlightedExcerpt(container, excerptData, signalId) {
 
 function createScoreSection(analysis) {
   const section = element('section', 'score-section');
-  const tone = analysis.band?.id || 'low';
+  const isSuppressed = analysis.scoreSuppressed || analysis.abstained;
+  const tone = analysis.safetyNotice ? 'safety' : analysis.band?.id || (analysis.abstained ? 'abstain' : 'low');
   const headline = analysis.bandHeadline || analysis.band?.headline || analysis.level;
 
   const hero = element('div', `assessment-hero assessment-${tone}`);
+  const eyebrow = analysis.safetyNotice
+    ? 'Safety notice'
+    : analysis.abstained
+      ? 'Insufficient evidence'
+      : 'Experimental pattern screening';
   hero.append(
-    element('p', 'assessment-eyebrow', 'Overall assessment'),
+    element('p', 'assessment-eyebrow', eyebrow),
     element('h2', 'assessment-headline', headline),
     element('p', 'assessment-summary', analysis.bandSummary || 'Paste a message to see how language patterns may be creating pressure.')
   );
 
-  const meter = element('div', 'assessment-meter');
-  const meterTrack = element('div', 'assessment-meter-track');
-  const meterFill = element('div', `assessment-meter-fill assessment-meter-fill-${tone}`);
-  meterFill.style.width = `${Math.min(100, Math.max(0, analysis.score))}%`;
-  meterTrack.append(meterFill);
-  meter.append(meterTrack);
+  if (analysis.safetyNotice) {
+    const safetyBox = element('div', 'safety-notice-box');
+    const resourcesLink = element('a', 'safety-resources-link', 'View crisis resources');
+    resourcesLink.href = analysis.safetyNotice.resourcesAnchor || '#resources';
+    safetyBox.append(
+      element('p', 'safety-notice-lead', 'Clarity cannot determine whether you are in danger.'),
+      resourcesLink
+    );
+    hero.append(safetyBox);
+  }
 
-  const meterLabels = element('div', 'assessment-meter-labels');
-  meterLabels.append(
-    element('span', '', 'Low'),
-    element('span', '', 'Moderate'),
-    element('span', '', 'High')
-  );
-  meter.append(meterLabels);
+  const children = [hero];
 
-  const context = element('div', 'assessment-context');
-  context.append(
-    meter,
-    element(
-      'p',
-      'assessment-index',
-      `Pressure index ${analysis.score}/100 — a reflection aid, not proof of intent or diagnosis.`
-    )
-  );
+  if (!isSuppressed) {
+    const meter = element('div', 'assessment-meter');
+    const meterTrack = element('div', 'assessment-meter-track');
+    const meterFill = element('div', `assessment-meter-fill assessment-meter-fill-${tone}`);
+    meterFill.style.width = `${Math.min(100, Math.max(0, analysis.score))}%`;
+    meterTrack.append(meterFill);
+    meter.append(meterTrack);
 
-  const scale = element('details', 'score-scale-details');
-  const scaleSummary = element('summary', '', 'What this rating means');
-  scale.append(scaleSummary);
+    const meterLabels = element('div', 'assessment-meter-labels');
+    meterLabels.append(
+      element('span', '', 'Low'),
+      element('span', '', 'Moderate'),
+      element('span', '', 'High')
+    );
+    meter.append(meterLabels);
 
-  const scaleBody = element('div', 'score-scale');
-  scaleBody.append(element('p', 'score-scale-title', 'Rating bands'));
-  const bands = element('ul', 'score-bands');
-  [
-    { label: 'Low', range: '0–30', note: 'Mild or ambiguous patterns only' },
-    { label: 'Moderate', range: '31–60', note: 'Clear pressure language present' },
-    { label: 'High', range: '61–100', note: 'Multiple clear pressure functions' }
-  ].forEach((item) => {
-    const li = element('li', item.label.toLowerCase() === analysis.level?.toLowerCase() ? 'active' : '');
-    li.append(element('strong', '', `${item.label} (${item.range})`), element('span', '', item.note));
-    bands.append(li);
-  });
-  scaleBody.append(bands);
-  scaleBody.append(
-    element(
-      'p',
-      'score-note',
-      'The index supports reflection—it does not measure intent, character, or whether you should stay in a relationship.'
-    )
-  );
-  scale.append(scaleBody);
+    const context = element('div', 'assessment-context');
+    const versionNote = analysis.methodologyVersion
+      ? ` · screening v${analysis.methodologyVersion}`
+      : '';
+    context.append(
+      meter,
+      element(
+        'p',
+        'assessment-index',
+        `Experimental pattern screening ${analysis.score}/100${versionNote} — not proof of intent, character, or safety.`
+      )
+    );
+    children.push(context);
 
-  section.append(hero, context, scale);
+    const scale = element('details', 'score-scale-details');
+    scale.append(element('summary', '', 'What this screening means'));
+
+    const scaleBody = element('div', 'score-scale');
+    scaleBody.append(element('p', 'score-scale-title', 'Screening bands (experimental)'));
+    const bands = element('ul', 'score-bands');
+    [
+      { label: 'Low', range: '0–30', note: 'Mild or ambiguous patterns only' },
+      { label: 'Moderate', range: '31–60', note: 'Clear pressure language present' },
+      { label: 'High', range: '61–100', note: 'Multiple clear pressure functions' }
+    ].forEach((item) => {
+      const li = element('li', item.label.toLowerCase() === analysis.level?.toLowerCase() ? 'active' : '');
+      li.append(element('strong', '', `${item.label} (${item.range})`), element('span', '', item.note));
+      bands.append(li);
+    });
+    scaleBody.append(bands);
+    scaleBody.append(
+      element(
+        'p',
+        'score-note',
+        'This screening supports reflection—it does not measure intent, character, or whether you should stay in a relationship. See limitations for methodology status.'
+      )
+    );
+  } else if (analysis.abstained) {
+    children.push(
+      element(
+        'p',
+        'abstention-note',
+        'No numeric score is shown when there is not enough text for reliable pattern screening.'
+      )
+    );
+  }
+
+  const methodology = element('p', 'methodology-status');
+  const limitationsLink = element('a', '', 'Methodology status & limitations');
+  limitationsLink.href = 'limitations.html';
+  methodology.append('Alpha release · ', limitationsLink);
+  children.push(methodology);
+
+  section.append(...children);
   return section;
 }
 
@@ -329,7 +369,7 @@ function createLeverageInsightsSection(insights) {
     element(
       'p',
       'leverage-insights-note',
-      'These readings focus on what the language is designed to do—not labels for intent or diagnosis.'
+      'These readings describe how the language may function—not labels for intent or diagnosis.'
     )
   );
 
@@ -384,7 +424,13 @@ function createThreadSection(segmentAnalyses) {
     card.append(
       element('header', '', `Message ${index}`),
       element('p', 'thread-preview', text.length > 100 ? `${text.slice(0, 100)}…` : text),
-      element('p', 'thread-score', `Score ${analysis.score} · ${analysis.level}`)
+      element(
+        'p',
+        'thread-score',
+        analysis.scoreSuppressed || analysis.abstained
+          ? analysis.bandHeadline || 'Not screened'
+          : `Screening ${analysis.score} · ${analysis.level}`
+      )
     );
     if (analysis.signals.length) {
       const tags = element('div', 'thread-tags');
@@ -461,7 +507,27 @@ function dedupeHistory(items) {
   });
 }
 
+function isHistoryOptIn() {
+  try {
+    return localStorage.getItem(OPT_IN_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function setHistoryOptIn(enabled) {
+  try {
+    if (enabled) localStorage.setItem(OPT_IN_KEY, 'true');
+    else localStorage.removeItem(OPT_IN_KEY);
+  } catch {
+    /* localStorage unavailable */
+  }
+  updateHistoryControls();
+}
+
 function saveHistory(text, analysis) {
+  if (!isHistoryOptIn()) return;
+
   try {
     const trimmed = text.trim();
     const key = normalizeHistoryKey(trimmed);
@@ -475,8 +541,8 @@ function saveHistory(text, analysis) {
       id: Date.now(),
       text: trimmed.slice(0, 2500),
       preview: trimmed.slice(0, 100),
-      score: analysis.score,
-      level: analysis.level,
+      score: analysis.scoreSuppressed || analysis.abstained ? null : analysis.score,
+      level: analysis.level || (analysis.abstained ? 'Abstained' : analysis.safetyNotice ? 'Safety' : null),
       timestamp: Date.now()
     });
     localStorage.setItem(STORAGE_KEY, JSON.stringify(withoutDuplicate.slice(0, MAX_HISTORY)));
@@ -493,22 +559,66 @@ function loadHistory() {
   }
 }
 
+function deleteHistoryItem(id) {
+  try {
+    const items = loadHistory().filter((item) => item.id !== id);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  } catch {
+    /* localStorage unavailable */
+  }
+  renderHistory();
+}
+
+function deleteAllHistory() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* localStorage unavailable */
+  }
+  renderHistory();
+}
+
+function updateHistoryControls() {
+  const optedIn = isHistoryOptIn();
+  if (historyOptIn) historyOptIn.checked = optedIn;
+  if (historyDeleteAll) {
+    const hasItems = loadHistory().length > 0;
+    historyDeleteAll.hidden = !optedIn || !hasItems;
+  }
+}
+
 function renderHistory() {
   if (!historyList) return;
+  updateHistoryControls();
+
   const items = loadHistory();
   historyList.replaceChildren();
+
+  if (!isHistoryOptIn()) {
+    historyList.append(
+      element(
+        'p',
+        'history-empty',
+        'Recent analyses are not saved unless you enable “Save recent analyses on this device” below.'
+      )
+    );
+    return;
+  }
+
   if (!items.length) {
-    historyList.append(element('p', 'history-empty', 'Recent analyses appear here—stored only on this device.'));
+    historyList.append(element('p', 'history-empty', 'No saved analyses yet—stored only on this device until you delete them.'));
     return;
   }
 
   items.forEach((item) => {
+    const row = element('div', 'history-item-row');
     const button = element('button', 'history-item', '');
     button.type = 'button';
+    const scoreLabel = item.score == null ? '—' : String(item.score);
     button.append(
-      element('span', 'history-score', `${item.score}`),
+      element('span', 'history-score', scoreLabel),
       element('span', 'history-preview', item.preview),
-      element('span', 'history-meta', item.level)
+      element('span', 'history-meta', item.level || '')
     );
     button.addEventListener('click', () => {
       message.value = item.text || item.preview;
@@ -516,7 +626,17 @@ function renderHistory() {
       renderAnalysis(analyzeMessage(message.value), message.value);
       message.focus();
     });
-    historyList.append(button);
+
+    const deleteBtn = element('button', 'history-delete-item', 'Delete');
+    deleteBtn.type = 'button';
+    deleteBtn.setAttribute('aria-label', 'Delete this saved analysis');
+    deleteBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      deleteHistoryItem(item.id);
+    });
+
+    row.append(button, deleteBtn);
+    historyList.append(row);
   });
 }
 
@@ -637,8 +757,23 @@ form.addEventListener('submit', (event) => {
   renderAnalysis(analyzeMessage(message.value), message.value);
 });
 
+if (historyOptIn) {
+  historyOptIn.addEventListener('change', () => {
+    setHistoryOptIn(historyOptIn.checked);
+    renderHistory();
+  });
+}
+
+if (historyDeleteAll) {
+  historyDeleteAll.addEventListener('click', () => {
+    deleteAllHistory();
+  });
+}
+
 populateExamples();
 updateInputState();
+if (historyOptIn) historyOptIn.checked = isHistoryOptIn();
+updateHistoryControls();
 renderHistory();
 
 if ('serviceWorker' in navigator) {

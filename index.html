@@ -68,7 +68,7 @@
     <main id="main">
       <section class="hero" id="top">
         <div class="hero-copy">
-          <p class="eyebrow"><span></span> Private reflection tool</p>
+          <p class="eyebrow"><span></span> Private reflection tool · <span class="alpha-badge">Alpha</span></p>
           <h1 class="hero-title">Understand the pressure.<span class="hero-title-break"> </span>Choose your <em>response.</em></h1>
           <p class="hero-lede">A private space to read difficult messages—spot language patterns, keep your agency, and find grounded words when you're unsure.</p>
           <div class="hero-actions">
@@ -103,7 +103,7 @@
       </section>
 
       <section class="trust-strip" aria-label="Product values">
-        <span>Built with care, not judgment</span><i></i><span>No accounts</span><i></i><span>No message storage</span><i></i><span>Always free to try</span>
+        <span>Built with care, not judgment</span><i></i><span>No accounts</span><i></i><span>History off by default</span><i></i><span>Always free to try</span>
       </section>
 
       <section class="analyzer-section" id="analyzer">
@@ -147,7 +147,7 @@
             <p class="image-upload-note" id="image-upload-note">Images are read on your device only—the image is not stored or uploaded. You’ll review extracted messages before analyzing.</p>
             <p class="image-upload-status" id="image-upload-status" hidden></p>
             <div class="input-meta">
-              <span>Text stored on this device only when you analyze</span>
+              <span>Analysis runs on your device; history is optional</span>
               <span id="character-count">0 / 2,500</span>
             </div>
             <div class="example-row">
@@ -161,6 +161,13 @@
                 <span class="history-toggle-label">Recent on this device</span>
                 <span class="history-chevron" aria-hidden="true"></span>
               </summary>
+              <div class="history-controls">
+                <label class="history-opt-in-label" for="history-opt-in">
+                  <input type="checkbox" id="history-opt-in" />
+                  Save recent analyses on this device
+                </label>
+                <button class="text-btn history-delete-all" type="button" id="history-delete-all" hidden>Delete all history</button>
+              </div>
               <div id="history-list" class="history-list"></div>
             </details>
           </form>
@@ -192,7 +199,7 @@
         <h2>Agency,<br /><em>not answers.</em></h2>
         <div class="principle-cards">
           <article><span>◌</span><h3>Patterns, not verdicts</h3><p>Language is complicated. We surface possible signals while leaving interpretation with you.</p></article>
-          <article><span>⌁</span><h3>Privacy is the product</h3><p>Analysis happens on your device. There is no account, upload, or message archive.</p></article>
+          <article><span>⌁</span><h3>Privacy is the product</h3><p>Analysis happens on your device. Optional local history stays on this device until you delete it—there is no account or cloud archive.</p></article>
           <article><span>◇</span><h3>Built for reflection</h3><p>The goal isn't to win an argument. It's to create enough space to decide what feels right.</p></article>
         </div>
       </section>
@@ -210,11 +217,11 @@
           </article>
           <article>
             <h3>Crisis support (U.S.)</h3>
-            <p>Call or text <strong>988</strong> for the Suicide &amp; Crisis Lifeline—free, confidential, 24/7.</p>
+            <p>Call or text <a href="tel:988"><strong>988</strong></a> for the Suicide &amp; Crisis Lifeline—free, confidential, 24/7. Learn more at <a href="https://988lifeline.org/get-help/">988lifeline.org</a>.</p>
           </article>
           <article>
             <h3>Domestic violence support (U.S.)</h3>
-            <p>National Domestic Violence Hotline: <strong>1-800-799-7233</strong> or visit <span class="resource-url">thehotline.org</span>.</p>
+            <p>National Domestic Violence Hotline: <a href="tel:18007997233"><strong>1-800-799-7233</strong></a> or visit <a href="https://www.thehotline.org/get-help/">thehotline.org</a>.</p>
           </article>
           <article>
             <h3>Outside the U.S.</h3>
@@ -234,7 +241,7 @@
         <a href="limitations.html">Limitations</a>
         <a href="#resources">Resources</a>
       </nav>
-      <p class="footer-note">If you feel unsafe or in immediate danger, contact local emergency services or a trusted support resource.</p>
+      <p class="footer-note">Alpha release (screening v0.1-alpha). If you feel unsafe or in immediate danger, contact local emergency services or a trusted support resource.</p>
     </footer>
     <script type="module" src="app.js"></script>
   </body>

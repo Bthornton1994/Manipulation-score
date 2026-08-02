@@ -9,6 +9,7 @@ const APP_SHELL = [
   './fonts.css',
   './app.js',
   './scoring.js',
+  './safety.js',
   './ocr.js',
   './ocr-clean.js',
   './manifest.webmanifest',

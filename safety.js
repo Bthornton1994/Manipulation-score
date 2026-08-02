@@ -85,6 +85,44 @@ const CANDIDATE_RULES = [
     pattern: /(?:show up|come)\s+(?:at|to)\s+your\b[^.!?]{0,30}(?:tonight|today)/gi
   },
   {
+    id: 'stalking',
+    pattern: /\bfollow(?:ing)?\s+you\s+home\b/gi
+  },
+  {
+    id: 'stalking',
+    pattern: /\bwatch(?:ing)?\s+you\s+through\s+the\s+window\b/gi
+  },
+  {
+    id: 'stalking',
+    pattern: /\b(?:waiting|be)\s+outside\s+your\s+(?:work|office|job|home|house)\b/gi
+  },
+  {
+    id: 'stalking',
+    pattern: /\bwill\s+be\s+(?:outside|waiting)\b[^.!?]{0,40}\b(?:office|work|home|house)\b/gi
+  },
+  {
+    id: 'stalking',
+    pattern: /\boutside\s+your\s+office\s+when\s+you\s+leave\b/gi
+  },
+  {
+    id: 'stalking',
+    pattern: /\byou\s+cannot\s+hide\s+from\s+me\b/gi
+  },
+  {
+    id: 'stalking',
+    pattern: /\bi\s+am\s+watching\s+you\b/gi
+  },
+  {
+    id: 'stalking',
+    pattern:
+      /\bknow\s+where\s+you\s+work\b[^.!?]{0,120}\b(?:waiting|watching|following|cannot\s+hide|outside)\b/gi
+  },
+  {
+    id: 'stalking',
+    pattern:
+      /\bknow\s+where\s+you\s+work\b[^.!?]{0,40}\b(?:and|,)+\s*(?:i\s+)?(?:am\s+)?(?:watching|waiting|following)\b/gi
+  },
+  {
     id: 'weapon_threat',
     pattern: /(?:gun|knife|weapon|pistol|rifle|machete).{0,35}(?:you|threaten|pointed)/gi
   },
@@ -292,6 +330,28 @@ function isTrainingOnlyClause(clauseText) {
   return !firstPersonThreat;
 }
 
+function isConsensualStalkingContext(clauseText, matchStart, matchId) {
+  if (matchId !== 'stalking') return false;
+
+  const local = clauseText.slice(
+    Math.max(0, matchStart - 40),
+    Math.min(clauseText.length, matchStart + 100)
+  );
+
+  if (/\bif\s+you\s+want\b/i.test(local)) return true;
+  if (/\bto\s+make\s+sure\s+you\s+arrive\s+safely\b/i.test(clauseText)) return true;
+
+  if (
+    /\bknow\s+where\s+you\s+work\b/i.test(clauseText) &&
+    /\bbecause\s+we\s+met\s+there\b/i.test(clauseText) &&
+    !/\b(?:waiting|watching|following|hide|outside|cannot)\b/i.test(clauseText)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function isMedicalReassurance(clauseText, matchStart, matchText) {
   const before = clauseText.slice(Math.max(0, matchStart - 80), matchStart);
   if (!MEDICAL_CONTEXT.test(before)) return false;
@@ -302,6 +362,7 @@ function isMedicalReassurance(clauseText, matchStart, matchText) {
 
 function isExcludedCandidate(clauseText, match) {
   if (isNegatedForCandidate(clauseText, match.start, match.text)) return true;
+  if (isConsensualStalkingContext(clauseText, match.start, match.id)) return true;
   if (isThirdPartyQuote(clauseText, match.start)) return true;
   if (isInstructionalQuote(clauseText, match.start)) return true;
   if (isTrainingOnlyClause(clauseText)) return true;

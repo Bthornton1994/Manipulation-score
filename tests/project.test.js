@@ -76,7 +76,8 @@ test('index supports client-side image upload', async () => {
   assert.match(html, /id="image-upload-btn"/);
   assert.match(html, />Attach image</);
   assert.match(html, /Images are read on your device only/);
-  assert.match(html, /accept="image\/\*"/);
+  assert.match(html, /accept="[^"]*image\/\*[^"]*"/);
+  assert.match(html, /\.heic/);
   assert.doesNotMatch(html, /screenshot/i);
 });
 

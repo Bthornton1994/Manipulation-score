@@ -1,4 +1,4 @@
-const CACHE_NAME = 'clarity-v16';
+const CACHE_NAME = 'clarity-v17';
 const APP_SHELL = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const APP_SHELL = [
   './app.js',
   './scoring.js',
   './ocr.js',
+  './ocr-clean.js',
   './manifest.webmanifest',
   './icon.svg',
   './robots.txt',

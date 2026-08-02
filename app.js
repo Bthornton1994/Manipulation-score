@@ -397,6 +397,29 @@ function createThreadSection(segmentAnalyses) {
   return section;
 }
 
+function shouldScrollToResults() {
+  const inputPanel = form || document.querySelector('.input-panel');
+  if (!results || !inputPanel) return false;
+
+  const resultsTop = results.getBoundingClientRect().top;
+  const inputTop = inputPanel.getBoundingClientRect().top;
+  return resultsTop > inputTop + 48;
+}
+
+function scrollToAnalysisResults() {
+  if (!shouldScrollToResults()) return;
+
+  const target = results.querySelector('.assessment-hero') || results;
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const behavior = prefersReducedMotion ? 'auto' : 'smooth';
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      target.scrollIntoView({ behavior, block: 'start' });
+    });
+  });
+}
+
 function renderAnalysis(analysis, sourceText) {
   const children = [
     createScoreSection(analysis),
@@ -412,6 +435,7 @@ function renderAnalysis(analysis, sourceText) {
   results.focus({ preventScroll: true });
   saveHistory(sourceText, analysis);
   renderHistory();
+  scrollToAnalysisResults();
 }
 
 function renderEmptyState() {

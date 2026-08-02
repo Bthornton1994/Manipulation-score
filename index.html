@@ -10,17 +10,17 @@
     <meta name="description" content="Clarity helps you spot pressure, guilt, and control patterns in difficult messages—privately, on your device." />
     <meta name="theme-color" content="#103c37" />
     <link rel="canonical" href="https://manipulationscore.com/" />
-    <meta property="og:title" content="Clarity — Read between the lines" />
+    <meta property="og:title" content="Clarity — Understand difficult messages" />
     <meta property="og:description" content="Private, on-device language pattern analysis for difficult messages." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://manipulationscore.com/" />
     <meta property="og:image" content="https://manipulationscore.com/icon.svg" />
     <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="Clarity — Read between the lines" />
+    <meta name="twitter:title" content="Clarity — Understand difficult messages" />
     <meta name="twitter:description" content="Private, on-device language pattern analysis for difficult messages." />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <title>Clarity — Manipulation Score</title>
+    <title>Clarity — Understand difficult messages</title>
     <link rel="stylesheet" href="fonts.css" />
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -30,10 +30,12 @@
     <header class="site-header">
       <a class="brand" href="./" aria-label="Clarity home">
         <span class="brand-mark" aria-hidden="true">C</span>
-        <span class="brand-text"><span>clarity</span><small>Manipulation Score</small></span>
+        <span class="brand-text"><span>clarity</span><small class="brand-sub">uses Manipulation Score</small></span>
       </a>
-      <button class="nav-toggle" id="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav">Menu</button>
-      <nav class="site-nav" id="site-nav" aria-label="Main navigation">
+      <button class="nav-toggle" id="nav-toggle" type="button" aria-expanded="false" aria-controls="mobile-menu" aria-label="Open menu">
+        <span class="nav-toggle-text">Menu</span>
+      </button>
+      <nav class="site-nav site-nav--desktop" aria-label="Main navigation">
         <a href="#how-it-works">How it works</a>
         <a href="#principles">Our approach</a>
         <a href="#resources">Resources</a>
@@ -42,12 +44,28 @@
       <a class="button button-small button-outline header-cta" href="#analyzer">Try the analyzer</a>
     </header>
 
+    <div class="mobile-menu" id="mobile-menu" aria-hidden="true">
+      <div class="mobile-menu-panel" role="dialog" aria-modal="true" aria-label="Site menu">
+        <div class="mobile-menu-bar">
+          <span class="mobile-menu-title">Clarity</span>
+          <button class="mobile-menu-close" id="nav-close" type="button" aria-label="Close menu">×</button>
+        </div>
+        <nav class="mobile-menu-nav" aria-label="Main navigation">
+          <a href="#how-it-works">How it works</a>
+          <a href="#principles">Our approach</a>
+          <a href="#resources">Resources</a>
+          <a href="privacy.html">Privacy</a>
+          <a class="button mobile-menu-cta" href="#analyzer">Try the analyzer</a>
+        </nav>
+      </div>
+    </div>
+
     <main id="main">
       <section class="hero" id="top">
         <div class="hero-copy">
-          <p class="eyebrow"><span></span> Clarity · Manipulation Score</p>
-          <h1>Understand the pressure.<br />Choose your <em>response.</em></h1>
-          <p class="hero-lede">A private space to read difficult messages with clarity—spot language patterns, keep your agency, and find grounded words when you're unsure.</p>
+          <p class="eyebrow"><span></span> Private reflection tool</p>
+          <h1 class="hero-title">Understand the pressure.<span class="hero-title-break"> </span>Choose your <em>response.</em></h1>
+          <p class="hero-lede">A private space to read difficult messages—spot language patterns, keep your agency, and find grounded words when you're unsure.</p>
           <div class="hero-actions">
             <a class="button" href="#analyzer">Analyze a message <span>→</span></a>
             <a class="text-link" href="#how-it-works">See how it works <span>↘</span></a>
@@ -174,8 +192,8 @@
     </main>
 
     <footer class="site-footer">
-      <a class="brand" href="./"><span class="brand-mark">C</span><span class="brand-text"><span>clarity</span><small>Manipulation Score</small></span></a>
-      <p>Understand pressure patterns. Choose your response.</p>
+      <a class="brand" href="./"><span class="brand-mark">C</span><span class="brand-text"><span>clarity</span><small class="brand-sub">uses Manipulation Score</small></span></a>
+      <p>Clarity helps you understand pressure patterns and choose your response.</p>
       <nav class="footer-nav" aria-label="Footer navigation">
         <a href="privacy.html">Privacy</a>
         <a href="terms.html">Terms</a>

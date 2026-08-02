@@ -7,6 +7,8 @@ const results = document.querySelector('#results');
 const exampleSelect = document.querySelector('#example-select');
 const clearButton = document.querySelector('#clear-message');
 const navToggle = document.querySelector('#nav-toggle');
+const navClose = document.querySelector('#nav-close');
+const mobileMenu = document.querySelector('#mobile-menu');
 const historyList = document.querySelector('#history-list');
 
 const STORAGE_KEY = 'clarity-history-v1';
@@ -322,14 +324,57 @@ if (clearButton) {
   });
 }
 
+let menuScrollY = 0;
+
+function openMobileMenu() {
+  if (!mobileMenu) return;
+  menuScrollY = window.scrollY;
+  document.body.style.top = `-${menuScrollY}px`;
+  mobileMenu.classList.add('is-open');
+  mobileMenu.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('menu-open');
+  if (navToggle) {
+    navToggle.setAttribute('aria-expanded', 'true');
+    navToggle.setAttribute('aria-label', 'Close menu');
+  }
+}
+
+function closeMobileMenu() {
+  if (!mobileMenu) return;
+  mobileMenu.classList.remove('is-open');
+  mobileMenu.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('menu-open');
+  document.body.style.top = '';
+  window.scrollTo(0, menuScrollY);
+  if (navToggle) {
+    navToggle.setAttribute('aria-expanded', 'false');
+    navToggle.setAttribute('aria-label', 'Open menu');
+  }
+}
+
 if (navToggle) {
   navToggle.addEventListener('click', () => {
-    const nav = document.querySelector('.site-nav');
-    const expanded = navToggle.getAttribute('aria-expanded') === 'true';
-    navToggle.setAttribute('aria-expanded', String(!expanded));
-    nav.classList.toggle('open', !expanded);
+    if (mobileMenu?.classList.contains('is-open')) closeMobileMenu();
+    else openMobileMenu();
   });
 }
+
+if (navClose) {
+  navClose.addEventListener('click', closeMobileMenu);
+}
+
+if (mobileMenu) {
+  mobileMenu.querySelectorAll('a').forEach((link) => {
+    link.addEventListener('click', closeMobileMenu);
+  });
+}
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && mobileMenu?.classList.contains('is-open')) {
+    closeMobileMenu();
+    navToggle?.focus();
+  }
+});
 
 form.addEventListener('submit', (event) => {
   event.preventDefault();

@@ -1,3 +1,5 @@
+import { cleanScreenshotText } from './ocr-clean.js';
+
 const TESSERACT_BASE = new URL('./vendor/tesseract/', import.meta.url);
 const HEIC2ANY_URL = new URL('./vendor/heic2any/heic2any.min.js', import.meta.url).href;
 
@@ -140,6 +142,7 @@ async function getWorker() {
 /**
  * Extract text from an image entirely on-device via Tesseract.js.
  * The image is not uploaded or stored by Clarity.
+ * @returns {Promise<{ text: string, quality: 'good' | 'fair' | 'poor' | 'empty' }>}
  */
 export async function extractTextFromImage(file) {
   while (workerBusy) {
@@ -151,7 +154,8 @@ export async function extractTextFromImage(file) {
     const prepared = await prepareImageForOcr(file);
     const worker = await getWorker();
     const { data } = await worker.recognize(prepared);
-    return (data.text || '').trim();
+    const raw = (data.text || '').trim();
+    return cleanScreenshotText(raw);
   } finally {
     workerBusy = false;
   }

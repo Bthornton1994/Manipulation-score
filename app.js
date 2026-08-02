@@ -106,11 +106,11 @@ async function handleImageSelected() {
   setImageUploadStatus('Reading image…', 'info');
 
   try {
-    const text = await extractTextFromImage(file);
+    const { text, quality } = await extractTextFromImage(file);
     attachedImageFile = file;
     updateImageRemoveVisibility();
 
-    if (!text) {
+    if (!text || quality === 'empty') {
       setImageUploadStatus(
         'We couldn’t read much text from this image. Try a clearer image or paste the message manually.',
         'warn'
@@ -120,11 +120,18 @@ async function handleImageSelected() {
 
     message.value = text.slice(0, 2500);
     updateInputState();
-    const qualityNote =
-      text.length < 12
-        ? 'Very little text was detected—you may want to correct it before analyzing.'
-        : 'Text extracted on your device. Review and edit before analyzing.';
-    setImageUploadStatus(qualityNote, text.length < 12 ? 'warn' : 'ok');
+
+    if (quality === 'poor') {
+      setImageUploadStatus(
+        'We found some text, but it may be incomplete or noisy. Edit the messages below or paste them manually, then analyze.',
+        'warn'
+      );
+    } else {
+      setImageUploadStatus(
+        'We’ve pulled text from your screenshot. Clean up anything that isn’t part of the message, then analyze.',
+        'ok'
+      );
+    }
     message.focus();
   } catch (error) {
     if (error?.code === 'UNSUPPORTED_IMAGE') {

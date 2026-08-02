@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self';"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; img-src 'self' blob: data:; connect-src 'self'; worker-src 'self'; base-uri 'self'; form-action 'self';"
     />
     <meta name="description" content="Clarity helps you spot pressure, guilt, and control patterns in difficult messages—privately, on your device." />
     <meta name="theme-color" content="#103c37" />
@@ -115,9 +115,21 @@
         <div class="analyzer-grid">
           <form class="input-panel" id="analysis-form">
             <label for="message">Message</label>
-            <textarea id="message" maxlength="2500" placeholder="Paste one message, or separate multiple messages with a blank line…" required></textarea>
+            <textarea id="message" maxlength="2500" placeholder="Paste a message, or attach a screenshot below…" required></textarea>
+            <div class="image-upload-row">
+              <input
+                type="file"
+                id="message-image"
+                accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif"
+                hidden
+              />
+              <button class="button button-secondary image-upload-btn" type="button" id="image-upload-btn">Attach screenshot</button>
+              <button class="button button-secondary image-remove-btn" type="button" id="image-remove-btn" hidden>Remove image</button>
+            </div>
+            <p class="image-upload-note" id="image-upload-note">Screenshots are read on your device only—the image is not stored or uploaded.</p>
+            <p class="image-upload-status" id="image-upload-status" hidden></p>
             <div class="input-meta">
-              <span>Stored on this device only when you analyze</span>
+              <span>Text stored on this device only when you analyze</span>
               <span id="character-count">0 / 2,500</span>
             </div>
             <div class="example-row">

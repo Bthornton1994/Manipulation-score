@@ -70,3 +70,19 @@ test('logo shows clarity and MANIPULATION SCORE without uses', async () => {
   assert.match(html, />MANIPULATION SCORE</);
   assert.doesNotMatch(html, /uses/i);
 });
+
+test('index supports client-side screenshot upload', async () => {
+  const html = await readFile('index.html', 'utf8');
+  assert.match(html, /id="image-upload-btn"/);
+  assert.match(html, /id="message-image"/);
+  assert.match(html, /worker-src/);
+  assert.match(html, /blob:/);
+});
+
+test('ocr module and vendor assets exist locally', async () => {
+  await access('ocr.js');
+  await access('vendor/tesseract/tesseract.esm.min.js');
+  await access('vendor/tesseract/worker.min.js');
+  await access('vendor/tesseract/tesseract-core.wasm.js');
+  await access('vendor/tesseract/lang/eng.traineddata.gz');
+});

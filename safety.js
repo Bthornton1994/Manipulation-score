@@ -125,7 +125,11 @@ const MENACE_PATTERNS = [
   /even\s+though\s+you\s+told\s+me\s+to\s+stop/i,
   /after\s+you\s+said\s+no/i,
   /\byou\s+said\s+no\b/i,
-  /\btold\s+me\s+to\s+stop\b/i
+  /\btold\s+me\s+to\s+stop\b/i,
+  /\btold\s+me\s+to\s+leave\b/i,
+  /\basked\s+me\s+to\s+leave\b/i,
+  /\btold\s+me\s+to\s+go\s+away\b/i,
+  /\basked\s+me\s+to\s+stop\s+waiting\b/i
 ];
 
 const BENIGN_CONSENT_PATTERNS = [
@@ -166,7 +170,7 @@ const TRAINING_SEGMENT =
   /(?:safety|workplace|de-?escalation|crisis\s+line)\s+training|training\s+example|fictional\s+(?:scene|dialogue|example)|in\s+a\s+(?:movie|book|script|novel)/i;
 
 const TRAINING_EXAMPLE_PHRASE =
-  /as\s+an\s+example|example\s+of\s+(?:threatening|stalking)\s+language|stalking\s+behavior|training\s+scenario|fictional\s+training/i;
+  /as\s+an\s+example|example\s+of\s+(?:threatening|stalking)\s+language|stalking\s+behavior|training\s+scenario|fictional\s+training|to\s+demonstrate\s+(?:threatening|stalking)\s+language|used\s+to\s+demonstrate|demonstrate\s+(?:threatening|stalking)\s+language/i;
 
 const MEDICAL_CONTEXT = /\b(?:doctor|treatment|medication|procedure|therapy)\b/i;
 
@@ -402,8 +406,12 @@ function isDirectFirstPersonStalking(sentenceText, behavior) {
   const clause = clauseForBehavior(sentenceText, behavior.start);
   const localStart = behavior.start - clause.start;
   const prefix = clause.text.slice(0, localStart);
-  return /\b(?:i\s+really\s+will|i\s+will|i'?ll|i\s+am\s+going\s+to|i'?m\s+going\s+to)\b/i.test(
-    prefix + behavior.text
+  const localContext = prefix + behavior.text;
+  return (
+    /\b(?:i\s+really\s+will|i\s+will|i'?ll|i\s+am\s+going\s+to|i'?m\s+going\s+to)\b/i.test(
+      localContext
+    ) ||
+    /\b(?:i\s+am|i'?m)\s+(?:actually|still|currently)\s+(?:waiting|following)/i.test(localContext)
   );
 }
 

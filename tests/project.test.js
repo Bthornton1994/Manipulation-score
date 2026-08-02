@@ -74,7 +74,8 @@ test('logo shows clarity and MANIPULATION SCORE without uses', async () => {
 test('index supports client-side image upload', async () => {
   const html = await readFile('index.html', 'utf8');
   assert.match(html, /id="image-upload-btn"/);
-  assert.match(html, />Attach image</);
+  assert.match(html, /class="image-attach-btn"/);
+  assert.match(html, /Analyze message/);
   assert.match(html, /Images are read on your device only/);
   assert.match(html, /accept="[^"]*image\/\*[^"]*"/);
   assert.match(html, /\.heic/);

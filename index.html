@@ -123,10 +123,26 @@
                 accept="image/*,.heic,.heif,.jpg,.jpeg,.png,.webp"
                 hidden
               />
-              <button class="button button-tertiary" type="button" id="clear-message" hidden>Clear</button>
-              <button class="button button-secondary button-compact image-upload-btn" type="button" id="image-upload-btn">Attach image</button>
-              <button class="button button-tertiary button-compact image-remove-btn" type="button" id="image-remove-btn" hidden>Remove image</button>
-              <button class="button analyze-button" type="submit">Analyze message <span>→</span></button>
+              <div class="input-action-row">
+                <button
+                  class="image-attach-btn"
+                  type="button"
+                  id="image-upload-btn"
+                  aria-label="Attach image"
+                >
+                  <svg class="image-attach-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.75" />
+                    <circle cx="9" cy="10" r="2" stroke="currentColor" stroke-width="1.75" />
+                    <path d="M3 16l5.5-5.5a2 2 0 0 1 2.8 0L21 16" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+                  </svg>
+                  <span class="image-attach-label">Image</span>
+                </button>
+                <button class="button analyze-button" type="submit">Analyze message <span>→</span></button>
+              </div>
+              <div class="input-action-secondary">
+                <button class="text-btn clear-btn" type="button" id="clear-message" hidden>Clear</button>
+                <button class="text-btn image-remove-btn" type="button" id="image-remove-btn" hidden>Remove image</button>
+              </div>
             </div>
             <p class="image-upload-note" id="image-upload-note">Images are read on your device only—the image is not stored or uploaded.</p>
             <p class="image-upload-status" id="image-upload-status" hidden></p>

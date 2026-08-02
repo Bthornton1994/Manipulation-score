@@ -166,7 +166,7 @@ const TRAINING_SEGMENT =
   /(?:safety|workplace|de-?escalation|crisis\s+line)\s+training|training\s+example|fictional\s+(?:scene|dialogue|example)|in\s+a\s+(?:movie|book|script|novel)/i;
 
 const TRAINING_EXAMPLE_PHRASE =
-  /as\s+an\s+example|example\s+of\s+threatening\s+language|stalking\s+behavior|training\s+scenario|fictional\s+training/i;
+  /as\s+an\s+example|example\s+of\s+(?:threatening|stalking)\s+language|stalking\s+behavior|training\s+scenario|fictional\s+training/i;
 
 const MEDICAL_CONTEXT = /\b(?:doctor|treatment|medication|procedure|therapy)\b/i;
 
@@ -381,18 +381,70 @@ function makeStalkingResult(normalized, globalStart, globalEnd) {
   };
 }
 
+function clauseForBehavior(sentenceText, behaviorStart) {
+  const clauses = splitClauses(sentenceText);
+  const clause =
+    clauses.find((entry) => behaviorStart >= entry.start && behaviorStart < entry.end) ||
+    clauses[0];
+  if (!clause) return { text: sentenceText, start: 0 };
+  return clause;
+}
+
+function filterEligibleBehaviors(sentenceText, behaviors) {
+  return behaviors.filter((behavior) => {
+    const clause = clauseForBehavior(sentenceText, behavior.start);
+    const localStart = behavior.start - clause.start;
+    return !isAttributedClause(clause.text, localStart);
+  });
+}
+
+function isDirectFirstPersonStalking(sentenceText, behavior) {
+  const clause = clauseForBehavior(sentenceText, behavior.start);
+  const localStart = behavior.start - clause.start;
+  const prefix = clause.text.slice(0, localStart);
+  return /\b(?:i\s+really\s+will|i\s+will|i'?ll|i\s+am\s+going\s+to|i'?m\s+going\s+to)\b/i.test(
+    prefix + behavior.text
+  );
+}
+
+function collectExpandedEligibleBehaviors(sentences, centerIndex) {
+  const eligible = [];
+
+  for (let offset = -1; offset <= 1; offset += 1) {
+    const idx = centerIndex + offset;
+    if (idx < 0 || idx >= sentences.length) continue;
+
+    const sentence = sentences[idx];
+    const behaviors = findStalkingBehaviors(sentence.text);
+    const eligibleInSentence = filterEligibleBehaviors(sentence.text, behaviors);
+
+    for (const behavior of eligibleInSentence) {
+      eligible.push({
+        ...behavior,
+        sentenceIndex: idx,
+        globalStart: sentence.start + behavior.start,
+        globalEnd: sentence.start + behavior.end,
+        sentenceText: sentence.text
+      });
+    }
+  }
+
+  return eligible;
+}
+
 function detectContextualStalking(sentences, normalized) {
   for (let i = 0; i < sentences.length; i++) {
     const sentence = sentences[i];
     const expanded = getExpandedContext(sentences, i);
     const menace = hasMenace(expanded);
-    const behaviors = findStalkingBehaviors(sentence.text);
-    const expandedBehaviors = findStalkingBehaviors(expanded);
+    const eligibleBehaviors = filterEligibleBehaviors(
+      sentence.text,
+      findStalkingBehaviors(sentence.text)
+    );
+    const eligibleExpanded = collectExpandedEligibleBehaviors(sentences, i);
     const benignInSentence = hasBenignConsent(sentence.text);
 
-    for (const behavior of behaviors) {
-      if (isAttributedClause(sentence.text, behavior.start)) continue;
-
+    for (const behavior of eligibleBehaviors) {
       if (behavior.severe) {
         return makeStalkingResult(
           normalized,
@@ -402,12 +454,17 @@ function detectContextualStalking(sentences, normalized) {
       }
     }
 
-    if (behaviors.length === 0) continue;
+    if (eligibleBehaviors.length === 0) continue;
 
     if (benignInSentence && !menace) continue;
 
-    if (menace) {
-      const behavior = behaviors[0];
+    if (
+      !benignInSentence &&
+      eligibleBehaviors.some((behavior) => isDirectFirstPersonStalking(sentence.text, behavior))
+    ) {
+      const behavior = eligibleBehaviors.find((entry) =>
+        isDirectFirstPersonStalking(sentence.text, entry)
+      );
       return makeStalkingResult(
         normalized,
         sentence.start + behavior.start,
@@ -415,22 +472,30 @@ function detectContextualStalking(sentences, normalized) {
       );
     }
 
-    const intrusive = expandedBehaviors.filter(
-      (b) => !/know\s+where\s+you\s+(?:live|work)/i.test(b.text)
+    if (menace) {
+      const behavior = eligibleBehaviors[0];
+      return makeStalkingResult(
+        normalized,
+        sentence.start + behavior.start,
+        sentence.start + behavior.end
+      );
+    }
+
+    const intrusive = eligibleExpanded.filter(
+      (behavior) => !/know\s+where\s+you\s+(?:live|work)/i.test(behavior.text)
     );
     if (intrusive.length >= 2) {
       const behavior = intrusive[0];
-      const inSentence = sentence.text.includes(behavior.text);
-      const offset = inSentence ? behavior.start : 0;
-      const end = inSentence ? behavior.end : Math.min(sentence.text.length, behavior.text.length);
-      return makeStalkingResult(normalized, sentence.start + offset, sentence.start + end);
+      return makeStalkingResult(normalized, behavior.globalStart, behavior.globalEnd);
     }
 
+    const eligibleExpandedText = eligibleExpanded.map((b) => b.sentenceText).join(' ');
+
     if (
-      /know\s+where\s+you\s+work/i.test(expanded) &&
-      /(?:watching|following|waiting|outside|cannot\s+hide)/i.test(expanded)
+      /know\s+where\s+you\s+work/i.test(eligibleExpandedText) &&
+      /(?:watching|following|waiting|outside|cannot\s+hide)/i.test(eligibleExpandedText)
     ) {
-      const behavior = behaviors[0];
+      const behavior = eligibleBehaviors[0];
       return makeStalkingResult(
         normalized,
         sentence.start + behavior.start,
@@ -439,11 +504,11 @@ function detectContextualStalking(sentences, normalized) {
     }
 
     if (
-      /know\s+where\s+you\s+live/i.test(expanded) &&
-      /(?:watching|find\s+you|come\s+find)/i.test(expanded) &&
+      /know\s+where\s+you\s+live/i.test(eligibleExpandedText) &&
+      /(?:watching|find\s+you|come\s+find)/i.test(eligibleExpandedText) &&
       menace
     ) {
-      const behavior = behaviors[0];
+      const behavior = eligibleBehaviors[0];
       return makeStalkingResult(
         normalized,
         sentence.start + behavior.start,

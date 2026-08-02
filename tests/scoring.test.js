@@ -16,15 +16,25 @@ const LEVERAGE_EXAMPLE =
 const URGENCY_EXAMPLE =
   'I need an answer immediately. This is your last chance before it is too late to fix this.';
 
-test('returns an empty result for whitespace', () => {
+const EVIDENCE_PAD =
+  ' I am sharing this message for context and would like your perspective when you have time to read it fully.';
+
+function withEvidence(text) {
+  return `${text}${EVIDENCE_PAD}`;
+}
+
+test('returns abstention for whitespace-only input', () => {
   const result = analyzeMessage('   ');
-  assert.equal(result.score, 0);
+  assert.equal(result.abstained, true);
+  assert.equal(result.score, null);
   assert.equal(result.level, 'No message');
   assert.deepEqual(result.signals, []);
 });
 
 test('detects multiple pressure patterns', () => {
-  const result = analyzeMessage("If you really cared, you'd answer right now or else you'll regret it.");
+  const result = analyzeMessage(
+    withEvidence("If you really cared, you'd answer right now or else you'll regret it.")
+  );
   assert.equal(result.level, 'High');
   assert.deepEqual(
     [...result.signals.map(({ id }) => id)].sort(),
@@ -35,7 +45,9 @@ test('detects multiple pressure patterns', () => {
 });
 
 test('keeps neutral language in the low band', () => {
-  const result = analyzeMessage('Could we talk tomorrow when we both have time?');
+  const result = analyzeMessage(
+    withEvidence('Could we talk tomorrow when we both have time?')
+  );
   assert.equal(result.score, 0);
   assert.equal(result.level, 'Low');
   assert.equal(result.signals.length, 0);
@@ -48,21 +60,21 @@ test('maps score bands to low moderate high thresholds', () => {
 });
 
 test('deduplicates repeated matched phrases in signal metadata', () => {
-  const result = analyzeMessage('You always do this. Always, always.');
+  const result = analyzeMessage(withEvidence('You always do this. Always, always.'));
   assert.deepEqual(result.signals[0].matches, ['always']);
   assert.equal(result.signals[0].offsets.length, 3);
   assert.equal(result.level, 'Low');
 });
 
 test('buildResponses returns pause, boundary, and clarify styles', () => {
-  const result = analyzeMessage("If you really cared you'd answer right now.");
+  const result = analyzeMessage(withEvidence("If you really cared you'd answer right now."));
   assert.ok(result.responses.pause.includes('time'));
   assert.ok(result.responses.boundary.length > 10);
   assert.ok(result.responses.clarify.length > 10);
 });
 
 test('each signal includes severity and per-pattern responses', () => {
-  const result = analyzeMessage("If you really cared, answer right now.");
+  const result = analyzeMessage(withEvidence('If you really cared, answer right now.'));
   assert.ok(result.signals[0].severity.label);
   assert.ok(result.signals[0].responses.pause);
   assert.ok(result.signals[0].responses.boundary);
@@ -72,7 +84,11 @@ test('each signal includes severity and per-pattern responses', () => {
 test('splits multi-message threads on blank lines', () => {
   const parts = splitMessages('First message.\n\nSecond message.');
   assert.equal(parts.length, 2);
-  const result = analyzeMessage('First message.\n\nSecond message.');
+  const longFirst =
+    'First message with enough words to screen patterns when analyzed alone on its own merit today.';
+  const longSecond =
+    'Second message with enough words to screen patterns when analyzed alone on its own merit today.';
+  const result = analyzeMessage(`${longFirst}\n\n${longSecond}`);
   assert.equal(result.segments?.length, 2);
 });
 
@@ -85,14 +101,16 @@ test('scores classic withdrawal leverage appropriately', () => {
 });
 
 test('single clear guilt framing lands in mid-moderate', () => {
-  const result = analyzeMessage("If you really cared about me, you'd answer.");
+  const result = analyzeMessage(withEvidence("If you really cared about me, you'd answer."));
   assert.equal(result.level, 'Moderate');
   assert.ok(result.score >= 46);
   assert.ok(result.score <= 60);
 });
 
 test('single clear isolation lands in mid-moderate', () => {
-  const result = analyzeMessage("Don't tell anyone—I'm the only one who understands you.");
+  const result = analyzeMessage(
+    withEvidence("Don't tell anyone—I'm the only one who understands you.")
+  );
   assert.equal(result.level, 'Moderate');
   assert.ok(result.score >= 46);
 });

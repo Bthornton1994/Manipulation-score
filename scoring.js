@@ -1,3 +1,5 @@
+import { detectSafetyNotice } from './safety.js';
+
 export const SCORE_BANDS = [
   {
     id: 'low',
@@ -55,7 +57,7 @@ const SIGNALS = [
     label: 'Isolation pressure',
     function: 'Discourages outside perspective—positioning support networks as threats to the relationship or secrecy as required.',
     weight: 22,
-    pattern: /they(?:'re| are) against you|only one who understands|don(?:'t|’t) tell (?:them|anyone)|your friends don(?:'t|’t) care|just between us/gi,
+    pattern: /(?:do\s+not|don(?:'t|’t))\s+tell (?:them|anyone)|they(?:'re| are) against you|only one who understands|your friends don(?:'t|’t) care|just between us/gi,
     education: 'Isolation language discourages checking with others. Outside perspective is often healthy—not a threat.'
   },
   {
@@ -123,6 +125,37 @@ const SIGNALS = [
     education: 'Responsibility shifting converts your boundaries into evidence of neglect. Their feelings are valid—but not always your assignment to fix.'
   }
 ];
+
+export const METHODOLOGY_VERSION = '0.1-alpha';
+export const MIN_MEANINGFUL_WORDS = 15;
+
+const EXCLUSION_CONTEXT_RULES = {
+  urgency: [
+    /no\s+pressure/i,
+    /nothing\s+needs\s+to\s+be\s+decided/i,
+    /not\s+decided\s+right\s+now/i,
+    /no\s+rush/i,
+    /no\s+urgency/i,
+    /understand\s+that\s+you\s+need\s+time/i,
+    /no\s+pressure\s+to\s+answer/i
+  ],
+  absolutes: [
+    /have\s+choices/i,
+    /(?:everyone|nobody)\s+is\s+(?:invited|welcome)/i,
+    /nobody\s+is\s+required/i,
+    /not\s+required\s+to\s+participate/i,
+    /no\s+pressure/i,
+    /nothing\s+needs\s+to\s+be\s+decided/i
+  ],
+  obligation: [
+    /legal\s+deadline/i,
+    /by\s+(?:the\s+)?law/i,
+    /tax\s+form/i,
+    /registration\s+closes/i,
+    /if\s+that\s+timeline\s+does\s+not\s+work/i,
+    /if\s+you\s+are\s+not\s+ready/i
+  ]
+};
 
 const SIGNAL_FAMILIES = {
   withdrawal: ['resigned_withdrawal', 'implied_rejection', 'conditional_access', 'responsibility_shift'],
@@ -223,6 +256,77 @@ const RESPONSES = {
 };
 
 const SEVERITY_RANK = { mild: 0, moderate: 1, strong: 2 };
+
+export function countMeaningfulWords(text) {
+  return (text.match(/\b[a-zA-Z]{2,}\b/g) || []).length;
+}
+
+function getMatchContext(text, start, end, padding = 56) {
+  const ctxStart = Math.max(0, start - padding);
+  const ctxEnd = Math.min(text.length, end + padding);
+  return text.slice(ctxStart, ctxEnd);
+}
+
+function isOffsetExcluded(signalId, text, offset) {
+  const context = getMatchContext(text, offset.start, offset.end);
+  const rules = EXCLUSION_CONTEXT_RULES[signalId];
+  if (rules?.some((rule) => rule.test(context))) return true;
+
+  if (signalId === 'urgency' && /(?:^|\s)no\s+[^.!?]{0,30}right\s+now/i.test(context)) return true;
+  if (signalId === 'absolutes' && /(?:care|understand|choices|invited|welcome|required\s+to\s+participate)/i.test(context)) {
+    if (/always\s+have\s+choices|everyone\s+is\s+invited|nobody\s+is\s+required/i.test(context)) return true;
+  }
+
+  return false;
+}
+
+function createAbstentionResult(reasons) {
+  return {
+    abstained: true,
+    abstentionReasons: reasons,
+    scoreSuppressed: true,
+    score: null,
+    level: null,
+    band: null,
+    bandHeadline: 'Not enough text to assess',
+    bandSummary: reasons.join(' '),
+    signals: [],
+    signalCount: 0,
+    responses: buildResponses([]),
+    response: RESPONSES.none,
+    highlights: [],
+    segments: null,
+    leverageInsights: [],
+    clusterBonus: 0,
+    methodologyVersion: METHODOLOGY_VERSION,
+    experimentalScreening: true
+  };
+}
+
+function createSafetyResult(safetyNotice, normalized) {
+  return {
+    abstained: false,
+    scoreSuppressed: true,
+    safetyNotice,
+    abstentionReasons: [],
+    score: null,
+    level: null,
+    band: null,
+    bandHeadline: safetyNotice.headline,
+    bandSummary: safetyNotice.summary,
+    signals: [],
+    signalCount: 0,
+    responses: buildResponses([]),
+    response: RESPONSES.none,
+    highlights: [],
+    segments: null,
+    leverageInsights: [],
+    clusterBonus: 0,
+    methodologyVersion: METHODOLOGY_VERSION,
+    experimentalScreening: true,
+    sourceText: normalized
+  };
+}
 
 function findOffsets(text, pattern) {
   const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
@@ -409,7 +513,9 @@ function scoreOffsets(weight, offsets, signalId) {
 
 function analyzeSingleMessage(normalized) {
   const rawSignals = SIGNALS.flatMap((signal) => {
-    const offsets = findOffsets(normalized, signal.pattern);
+    const offsets = findOffsets(normalized, signal.pattern).filter(
+      (offset) => !isOffsetExcluded(signal.id, normalized, offset)
+    );
     if (!offsets.length) return [];
 
     const matches = [...new Set(offsets.map((o) => o.text.toLowerCase()))];
@@ -472,23 +578,31 @@ function analyzeSingleMessage(normalized) {
   };
 }
 
+function buildEmptyResult() {
+  return createAbstentionResult([
+    'No message to analyze.',
+    'Paste or type the message you want to screen.'
+  ]);
+}
+
 export function analyzeMessage(text) {
   const normalized = text.trim();
   if (!normalized) {
-    return {
-      score: 0,
-      level: 'No message',
-      band: null,
-      bandSummary: '',
-      signals: [],
-      signalCount: 0,
-      responses: buildResponses([]),
-      response: RESPONSES.none,
-      highlights: [],
-      segments: null,
-      leverageInsights: [],
-      clusterBonus: 0
-    };
+    return { ...buildEmptyResult(), level: 'No message' };
+  }
+
+  const safetyNotice = detectSafetyNotice(normalized);
+  if (safetyNotice) {
+    return createSafetyResult(safetyNotice, normalized);
+  }
+
+  const meaningfulWords = countMeaningfulWords(normalized);
+  if (meaningfulWords < MIN_MEANINGFUL_WORDS) {
+    return createAbstentionResult([
+      'Not enough text to assess language patterns reliably.',
+      `This message has about ${meaningfulWords} recognizable words; at least ${MIN_MEANINGFUL_WORDS} are needed for screening.`,
+      'Paste more of the message, or additional messages from the same conversation, for a pattern screening result.'
+    ]);
   }
 
   const segments = splitMessages(normalized);
@@ -497,12 +611,47 @@ export function analyzeMessage(text) {
       ? segments.map((segment, index) => ({
           index: index + 1,
           text: segment,
-          analysis: analyzeSingleMessage(segment)
+          analysis: analyzeSegment(segment)
         }))
       : null;
 
   const analysis = analyzeSingleMessage(normalized);
-  return { ...analysis, segments: segmentAnalyses };
+  return {
+    ...analysis,
+    abstained: false,
+    scoreSuppressed: false,
+    safetyNotice: null,
+    abstentionReasons: [],
+    methodologyVersion: METHODOLOGY_VERSION,
+    experimentalScreening: true,
+    segments: segmentAnalyses
+  };
+}
+
+function analyzeSegment(segment) {
+  const trimmed = segment.trim();
+  if (!trimmed) return buildEmptyResult();
+
+  const safetyNotice = detectSafetyNotice(trimmed);
+  if (safetyNotice) return createSafetyResult(safetyNotice, trimmed);
+
+  const meaningfulWords = countMeaningfulWords(trimmed);
+  if (meaningfulWords < MIN_MEANINGFUL_WORDS) {
+    return createAbstentionResult([
+      'Not enough text in this message for screening.',
+      `About ${meaningfulWords} recognizable words; need at least ${MIN_MEANINGFUL_WORDS}.`
+    ]);
+  }
+
+  return {
+    ...analyzeSingleMessage(trimmed),
+    abstained: false,
+    scoreSuppressed: false,
+    safetyNotice: null,
+    abstentionReasons: [],
+    methodologyVersion: METHODOLOGY_VERSION,
+    experimentalScreening: true
+  };
 }
 
 export { SIGNALS, RESPONSES, LEVERAGE_CLUSTERS };

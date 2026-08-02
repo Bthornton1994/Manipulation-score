@@ -17,9 +17,11 @@ test('service worker app shell contains existing local assets', async () => {
 
 test('index has no third-party runtime dependencies', async () => {
   const html = await readFile('index.html', 'utf8');
+  const allowedHosts =
+    /^(manipulationscore\.com|www\.manipulationscore\.com|988lifeline\.org|www\.988lifeline\.org|www\.thehotline\.org)$/;
   const externalHosts = [...html.matchAll(/https?:\/\/([^/"'\s]+)/g)].map(([, host]) => host);
   for (const host of externalHosts) {
-    assert.match(host, /^(manipulationscore\.com|www\.manipulationscore\.com)$/);
+    assert.match(host, allowedHosts);
   }
   assert.doesNotMatch(html, /fonts\.googleapis\.com|fonts\.gstatic\.com/);
   assert.match(html, /Content-Security-Policy/);
@@ -69,6 +71,21 @@ test('logo shows Manipulation Score as brand and Clarity as product', async () =
   assert.match(html, /class="brand-name">Manipulation Score</);
   assert.match(html, /class="brand-sub">Clarity</);
   assert.doesNotMatch(html, /uses/i);
+});
+
+test('history is opt-in and guarded before localStorage writes', async () => {
+  const app = await readFile('app.js', 'utf8');
+  assert.match(app, /OPT_IN_KEY/);
+  assert.match(app, /if \(!isHistoryOptIn\(\)\) return/);
+  assert.match(app, /history-opt-in/);
+  assert.match(app, /history-delete-all/);
+});
+
+test('index discloses history off by default', async () => {
+  const html = await readFile('index.html', 'utf8');
+  assert.match(html, /History off by default|history-opt-in/);
+  assert.match(html, /Delete all history/);
+  assert.doesNotMatch(html, /No message storage/);
 });
 
 test('index supports client-side image upload', async () => {

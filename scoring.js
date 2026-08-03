@@ -127,7 +127,7 @@ const SIGNALS = [
   }
 ];
 
-export const METHODOLOGY_VERSION = '0.3.0';
+export const METHODOLOGY_VERSION = '0.3.1';
 export const MIN_MEANINGFUL_WORDS = 15;
 
 const EXCLUSION_CONTEXT_RULES = {
@@ -344,6 +344,16 @@ export function countMeaningfulWords(text) {
   return (text.match(/\b[a-zA-Z]{2,}\b/g) || []).length;
 }
 
+export function normalizeAnalysisText(text) {
+  return (text || '')
+    .replace(/[\u2018\u2019\u02BC\u0060\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u2033\u2036]/g, '"')
+    .replace(/\u00A0/g, ' ')
+    .replace(/[ \t\f\v]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function getMatchContext(text, start, end, padding = 56) {
   const ctxStart = Math.max(0, start - padding);
   const ctxEnd = Math.min(text.length, end + padding);
@@ -500,16 +510,18 @@ export function excerptForOffsets(text, offsets, padding = 36) {
   if (!offsets.length) return { excerpt: text, ranges: [] };
   const start = Math.max(0, offsets[0].start - padding);
   const end = Math.min(text.length, offsets[offsets.length - 1].end + padding);
-  const excerpt = text.slice(start, end);
+  const slice = text.slice(start, end);
+  const prefix = start > 0 ? '…' : '';
+  const prefixLen = prefix.length;
   const ranges = offsets.map((offset) => ({
-    start: offset.start - start,
-    end: offset.end - start,
+    start: offset.start - start + prefixLen,
+    end: offset.end - start + prefixLen,
     text: offset.text,
     id: offset.id,
     label: offset.label
   }));
   return {
-    excerpt: start > 0 ? `…${excerpt}` : excerpt,
+    excerpt: prefix + slice,
     ranges,
     truncatedEnd: end < text.length
   };
@@ -723,8 +735,57 @@ function buildEmptyResult() {
   ]);
 }
 
+function buildThreadResult(normalized, segmentAnalyses) {
+  const safetyNotice = detectSafetyNotice(normalized);
+  if (safetyNotice) {
+    return {
+      ...createSafetyResult(safetyNotice, normalized),
+      segments: segmentAnalyses
+    };
+  }
+
+  const safetySegment = segmentAnalyses.find((entry) => entry.analysis.safetyNotice);
+  if (safetySegment) {
+    return {
+      ...safetySegment.analysis,
+      segments: segmentAnalyses
+    };
+  }
+
+  const scoredSegments = segmentAnalyses.filter(
+    (entry) => !entry.analysis.abstained && !entry.analysis.scoreSuppressed
+  );
+
+  if (!scoredSegments.length) {
+    return {
+      ...createAbstentionResult([
+        'Not enough text in the individual messages for thread screening.',
+        `Each message in this thread has fewer than ${MIN_MEANINGFUL_WORDS} recognizable words needed for screening.`,
+        'Paste more text per message, or analyze messages individually.'
+      ]),
+      segments: segmentAnalyses
+    };
+  }
+
+  const primary = scoredSegments.reduce((best, entry) =>
+    entry.analysis.score > best.analysis.score ? entry : best
+  );
+
+  return {
+    ...primary.analysis,
+    abstained: false,
+    scoreSuppressed: false,
+    safetyNotice: null,
+    abstentionReasons: [],
+    methodologyVersion: METHODOLOGY_VERSION,
+    experimentalScreening: true,
+    segments: segmentAnalyses,
+    threadSummary: 'Overall reflects the highest-scoring eligible message in this thread.'
+  };
+}
+
 export function analyzeMessage(text) {
-  const normalized = text.trim();
+  const normalized = normalizeAnalysisText(text);
   if (!normalized) {
     return { ...buildEmptyResult(), level: 'No message' };
   }
@@ -737,21 +798,21 @@ export function analyzeMessage(text) {
   const meaningfulWords = countMeaningfulWords(normalized);
   if (meaningfulWords < MIN_MEANINGFUL_WORDS) {
     return createAbstentionResult([
-      'Not enough text for pattern screening in this alpha.',
-      `This message has about ${meaningfulWords} recognizable words. This alpha screens messages containing at least ${MIN_MEANINGFUL_WORDS} recognizable words.`,
+      'Not enough text for pattern screening in this Controlled Beta.',
+      `This message has about ${meaningfulWords} recognizable words. Screening requires at least ${MIN_MEANINGFUL_WORDS} recognizable words.`,
       'Paste more of the message, or additional messages from the same conversation, to receive a screening result.'
     ]);
   }
 
   const segments = splitMessages(normalized);
-  const segmentAnalyses =
-    segments.length > 1
-      ? segments.map((segment, index) => ({
-          index: index + 1,
-          text: segment,
-          analysis: analyzeSegment(segment)
-        }))
-      : null;
+  if (segments.length > 1) {
+    const segmentAnalyses = segments.map((segment, index) => ({
+      index: index + 1,
+      text: segment,
+      analysis: analyzeSegment(segment)
+    }));
+    return buildThreadResult(normalized, segmentAnalyses);
+  }
 
   const analysis = analyzeSingleMessage(normalized);
   return {
@@ -762,7 +823,7 @@ export function analyzeMessage(text) {
     abstentionReasons: [],
     methodologyVersion: METHODOLOGY_VERSION,
     experimentalScreening: true,
-    segments: segmentAnalyses
+    segments: null
   };
 }
 

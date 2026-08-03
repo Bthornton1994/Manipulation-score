@@ -15,11 +15,11 @@ const IMMEDIATE_RULES = [
   {
     id: 'direct_violence',
     pattern:
-      /(?:i'?m|i am|im)\s+going\s+to\s+(?:kill|hurt|harm|shoot|stab|murder)\s+you/gi
+      /\b(?:i'?m|i am|im)\s+going\s+to\s+(?:kill|hurt|harm|shoot|stab|murder)\s+you\b/gi
   },
   {
     id: 'direct_violence',
-    pattern: /(?:i will|i'?ll|iwll)\s+(?:kill|hurt|harm|shoot|stab|murder)\s+you/gi
+    pattern: /\b(?:i will|i'll)\s+(?:kill|hurt|harm|shoot|stab|murder)\s+you\b/gi
   },
   {
     id: 'direct_violence',
@@ -66,11 +66,11 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'weapon_threat',
-    pattern: /(?:gun|knife|weapon|pistol|rifle|machete).{0,35}(?:you|threaten|pointed)/gi
+    pattern: /(?:gun|knife|weapon|pistol|rifle|machete).{0,35}(?:\byou\b|threaten|pointed)/gi
   },
   {
     id: 'weapon_threat',
-    pattern: /(?:shoot|stab)\s+you/gi
+    pattern: /\b(?:shoot|stab)\s+you\b/gi
   },
   {
     id: 'weapon_threat',
@@ -207,7 +207,8 @@ const BENIGN_CONSENT_PATTERNS = [
 ];
 
 const BENIGN_SAFETY_CONTEXT = [
-  /shoot\s+you\s+the\s+updated\s+spreadsheet/i,
+  /(?:i will\s+)?shoot\s+you\s+the\s+updated\s+spreadsheet/i,
+  /(?:i will\s+)?shoot\s+you\s+the\s+\w+/i,
   /point\s+(?:the\s+)?knife\s+away/i,
   /mario\s+kart/i,
   /in\s+the\s+movie/i,
@@ -220,10 +221,10 @@ const BENIGN_SAFETY_CONTEXT = [
   /could\s+harm\s+your\s+skin/i
 ];
 
-const CLAUSE_SPLIT_RE = /\s*;\s*|\s+\bbut\s+|\s+\bhowever\s+|\s+\byet\s+/gi;
+const CLAUSE_SPLIT_RE = /\s*;\s*|\s*,\s+and\s+|\s+\bbut\s+|\s+\bhowever\s+|\s+\byet\s+/gi;
 
 const THIRD_PARTY_ATTRIBUTION =
-  /(?:character|villain|actor|suspect|defendant|attacker|witness|police|they|he|she|someone)\s+said\b/i;
+  /(?:character|villain|actor|suspect|defendant|attacker|witness|police|they|he|she|someone|instructor|trainer|teacher|facilitator|coach)\s+said\b/i;
 
 const REPORTED_QUOTE_ATTRIBUTION =
   /(?:article|report|news|story|headline)\s+(?:said|reported|quoted|described)\b/i;
@@ -359,10 +360,15 @@ function isNegatedForCandidate(clauseText, matchStart, matchText) {
   return false;
 }
 
-function isThirdPartyQuote(clauseText, matchStart) {
+function isThirdPartyQuote(clauseText, matchStart, matchText) {
+  if (isFirstPersonThreatMatch(clauseText, matchStart, matchText)) return false;
+
   const before = clauseText.slice(0, matchStart);
   const recent = before.slice(-120);
-  if (THIRD_PARTY_ATTRIBUTION.test(recent)) return true;
+  const attributionMatch = recent.match(
+    /(?:character|villain|actor|suspect|defendant|attacker|witness|police|they|he|she|someone|instructor|trainer|teacher|facilitator|coach)\s+said\b([\s\S]*)$/i
+  );
+  if (attributionMatch && /["']/.test(attributionMatch[1])) return true;
   if (REPORTED_QUOTE_ATTRIBUTION.test(recent) && /["']/.test(recent)) return true;
   return false;
 }
@@ -400,8 +406,8 @@ function isTrainingOnlyClause(clauseText) {
   return !firstPersonThreat;
 }
 
-function isAttributedClause(clauseText, matchStart) {
-  if (isThirdPartyQuote(clauseText, matchStart)) return true;
+function isAttributedClause(clauseText, matchStart, matchText = '') {
+  if (isThirdPartyQuote(clauseText, matchStart, matchText)) return true;
   if (isInstructionalQuote(clauseText, matchStart)) return true;
   if (isTrainingOnlyClause(clauseText)) return true;
   return false;
@@ -423,12 +429,70 @@ function hasBenignConsent(text) {
   return BENIGN_CONSENT_PATTERNS.some((pattern) => pattern.test(text));
 }
 
-function isBenignSafetyContext(clauseText) {
-  return BENIGN_SAFETY_CONTEXT.some((pattern) => pattern.test(clauseText));
+function isNegatedBenignPhrase(clauseText, phraseStart) {
+  const window = clauseText.slice(Math.max(0, phraseStart - 50), phraseStart);
+  return (
+    /\b(?:not|no|never)\s+(?:a\s+)?$/i.test(window.slice(-22)) ||
+    /\b(?:is\s+not|are\s+not|this\s+is\s+not|we're\s+not|we\s+are\s+not)\s+(?:a\s+)?$/i.test(
+      window.slice(-35)
+    )
+  );
+}
+
+function isFirstPersonThreatMatch(clauseText, matchStart, matchText) {
+  const local = clauseText.slice(matchStart, matchStart + matchText.length);
+  if (/\b(?:i\s+will|i'll|i'?ll)\b/i.test(local)) return true;
+  if (/\b(?:i'?m|i am)\s+going\s+to\b/i.test(local)) return true;
+  const window = clauseText.slice(Math.max(0, matchStart - 8), matchStart + matchText.length);
+  return /\b(?:i\s+will|i'll|i'?ll|i'?m|i am)\s+(?:going\s+to\s+)?(?:kill|hurt|harm|shoot|stab|murder)\b/i.test(
+    window
+  );
+}
+
+function isBenignSafetyContextForMatch(clauseText, match) {
+  if (/point\s+(?:the\s+)?knife\s+away/i.test(clauseText)) return true;
+
+  if (
+    /during\s+rehearsal/i.test(clauseText) &&
+    /\bactor\s+said\b/i.test(clauseText) &&
+    /\bon\s+cue\b/i.test(clauseText)
+  ) {
+    return true;
+  }
+
+  if (
+    /\bin\s+the\s+movie\b/i.test(clauseText) &&
+    /\b(?:villain|character)\s+said\b/i.test(clauseText) &&
+    isFirstPersonThreatMatch(clauseText, match.start, match.text)
+  ) {
+    return true;
+  }
+
+  for (const pattern of BENIGN_SAFETY_CONTEXT) {
+    const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
+    const re = new RegExp(pattern.source, flags);
+    let phraseMatch;
+    while ((phraseMatch = re.exec(clauseText)) !== null) {
+      if (isNegatedBenignPhrase(clauseText, phraseMatch.index)) continue;
+
+      const phraseStart = phraseMatch.index;
+      const phraseEnd = phraseMatch.index + phraseMatch[0].length;
+
+      if (match.start >= phraseStart && match.end <= phraseEnd) return true;
+      if (
+        phraseStart === match.start &&
+        phraseEnd > match.end &&
+        /(?:shoot|stab)\s+you\s+the\b/i.test(phraseMatch[0])
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function isExcludedImmediateCandidate(clauseText, match) {
-  if (isBenignSafetyContext(clauseText)) return true;
+  if (isBenignSafetyContextForMatch(clauseText, match)) return true;
   if (isNegatedForCandidate(clauseText, match.start, match.text)) return true;
   if (isAttributedClause(clauseText, match.start)) return true;
   if (isMedicalReassurance(clauseText, match.start, match.text)) return true;
@@ -468,7 +532,7 @@ function filterEligibleBehaviors(sentenceText, behaviors) {
   return behaviors.filter((behavior) => {
     const clause = clauseForBehavior(sentenceText, behavior.start);
     const localStart = behavior.start - clause.start;
-    return !isAttributedClause(clause.text, localStart);
+    return !isAttributedClause(clause.text, localStart, behavior.text);
   });
 }
 

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'self';" />
+    <meta name="description" content="How Clarity screens language patterns, constructs experimental scores, applies abstention and safety notices, and what validation has been completed." />
+    <link rel="canonical" href="https://manipulationscore.com/methodology.html" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <title>Methodology — Clarity | Manipulation Score</title>
+    <link rel="stylesheet" href="fonts.css" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="legal-page">
+    <header class="site-header site-header-static">
+      <a class="brand" href="./"><span class="brand-mark">M</span><span class="brand-text"><span class="brand-name">Manipulation Score</span><span class="brand-sub">Clarity</span></span></a>
+      <a class="text-link" href="./">← Back to Clarity</a>
+    </header>
+    <main class="legal-content">
+      <h1>Methodology</h1>
+      <p class="legal-updated">Last updated: August 3, 2026</p>
+
+      <h2>What Clarity measures</h2>
+      <p>Clarity screens observable <strong>language functions</strong> in a pasted message—patterns that may compress informed, voluntary choice. Examples include guilt leverage, forced urgency, isolation framing, conditional access, and similar pressure functions described in the taxonomy below.</p>
+      <p>Clarity does <strong>not</strong> measure intent, personality, diagnosis, truth, relationship safety, or whether a person is “manipulative.” It highlights language that <em>may</em> narrow reflection space. Context, history, and tone always matter more than any score.</p>
+
+      <h2>Language-function taxonomy (screening v0.2.7)</h2>
+      <p>Twelve pattern families are evaluated in the current alpha:</p>
+      <ul>
+        <li><strong>Guilt leverage</strong> — care or loyalty used as currency for compliance.</li>
+        <li><strong>Forced urgency</strong> — compressed decision windows.</li>
+        <li><strong>Conditional threat</strong> — cooperation linked to penalties.</li>
+        <li><strong>Isolation</strong> — secrecy or discouraging outside input.</li>
+        <li><strong>Dismissal</strong> — feelings or concerns minimized.</li>
+        <li><strong>Misleading absolutes</strong> — rigid always/never framing.</li>
+        <li><strong>Assigned obligation</strong> — duties imposed without mutual agreement.</li>
+        <li><strong>Minimization</strong> — impact of concerns downplayed.</li>
+        <li><strong>Resigned withdrawal</strong> — cooperation withdrawn to create pressure.</li>
+        <li><strong>Implied rejection</strong> — connection threatened indirectly.</li>
+        <li><strong>Conditional access</strong> — affection, contact, or access withheld for compliance.</li>
+        <li><strong>Responsibility shift</strong> — blame placed on the recipient for the sender’s state.</li>
+      </ul>
+      <p>When multiple functions appear together, a small cluster bonus may raise the overall screening score. Response prompts are generated per detected function.</p>
+
+      <h2>How the experimental score is constructed</h2>
+      <p>Each detected function contributes weighted points based on severity tags (mild, clear, strong). The overall score maps to three bands:</p>
+      <ul>
+        <li><strong>Low (0–30):</strong> few or mild patterns.</li>
+        <li><strong>Moderate (31–60):</strong> clear functions that may narrow reflection space.</li>
+        <li><strong>High (61–100):</strong> multiple strong pressure functions together.</li>
+      </ul>
+      <p>Scores are <strong>screening outputs</strong>, not probability estimates or clinical measures. They summarize matched language in the pasted text only.</p>
+
+      <h2>Minimum input and abstention</h2>
+      <p>If a message has fewer than <strong>15 recognizable words</strong>, Clarity abstains: no numeric score is shown and the interface explains that more text is needed. Safety notices may still appear on shorter messages when explicit harm or coercion language is present.</p>
+
+      <h2>Safety notices (separate from scoring)</h2>
+      <p>Safety classification runs before pattern scoring. When language about violence, weapons, confinement, self-harm coercion, or contextual stalking is detected, Clarity shows a <strong>safety notice</strong> instead of a manipulation score. This is not a safety assessment and cannot determine whether you are in danger.</p>
+      <p>Stalking-related language uses a two-stage model: intrusive behaviors paired with menace, severe intrusion, or multiple eligible behaviors. Explicit future threats and continuous present-tense stalking with refusal phrases are handled separately.</p>
+
+      <h2>Context handling</h2>
+      <p>Attribution and context rules are applied locally to quotations and clauses:</p>
+      <ul>
+        <li><strong>Training, fiction, and news quotations</strong> — attributed violence or stalking language in examples is excluded from safety escalation.</li>
+        <li><strong>Mixed messages</strong> — a real first-person threat in a separate sentence or clause after an attributed quote still triggers a safety notice.</li>
+        <li><strong>Negation</strong> — local negation (e.g. “would never hurt you”) can exclude a matched phrase unless a later clause contains a real threat.</li>
+        <li><strong>Consent and invitations</strong> — benign consent phrases (invitations, requested deliveries, permission boundaries) reduce false positives on location language.</li>
+        <li><strong>Refusal violations</strong> — phrases such as “told me to stop,” “asked me to leave,” or “told me to go away” pair with stalking behaviors to trigger notices.</li>
+      </ul>
+
+      <h2>Current version and evaluation status</h2>
+      <p><strong>Screening version:</strong> v0.2.7 (methodology and safety logic deployed with this site build).</p>
+      <p><strong>Regression testing:</strong> 58 targeted regression fixtures covering attribution, location and consent controls, violence, scoring, abstention, and conditional-access patterns currently pass in automated tests. This is a <strong>regression count</strong>, not a representative validation study. Sensitivity, specificity, fairness, and real-world performance on natural messages have not been established.</p>
+      <p>No representative accuracy percentage should be inferred from this count.</p>
+
+      <h2>Known limitations and failure modes</h2>
+      <ul>
+        <li>Fixed pattern lists miss many forms of pressure and may flag benign language.</li>
+        <li>Screenshot OCR can introduce noise that affects word counts and matches.</li>
+        <li>Irony, sarcasm, cultural context, and relationship history are not modeled.</li>
+        <li>Safety rules prioritize catching explicit harm language; false negatives remain possible.</li>
+        <li>Scores apply to pasted text only—not threads, images without text, or non-verbal conduct.</li>
+      </ul>
+
+      <h2>Corrections and feedback</h2>
+      <p>If you believe output is incorrect or harmful, see <a href="contact.html">Contact and Corrections</a>. Do not submit private message content when reporting issues.</p>
+    </main>
+    <footer class="site-footer legal-footer">
+      <nav class="footer-nav" aria-label="Footer navigation">
+        <a href="./">Home</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="terms.html">Terms</a>
+        <a href="limitations.html">Limitations</a>
+        <a href="methodology.html">Methodology</a>
+        <a href="contact.html">Contact</a>
+        <a href="acceptable-use.html">Acceptable Use</a>
+        <a href="accessibility.html">Accessibility</a>
+        <a href="changelog.html">Changelog</a>
+      </nav>
+    </footer>
+  </body>
+</html>

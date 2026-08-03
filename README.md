@@ -11,7 +11,7 @@ Clarity runs entirely in your browser. No accounts, no uploads, no analytics.
 - Three response styles: pause, boundary, and clarify
 - Installable PWA with offline support after first visit
 - Self-hosted fonts — no third-party requests at runtime
-- Legal pages: privacy, terms, and limitations
+- Legal pages: privacy, terms, limitations, methodology, contact, acceptable use, accessibility, and changelog
 
 ## Run locally
 

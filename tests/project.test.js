@@ -28,11 +28,26 @@ test('index has no third-party runtime dependencies', async () => {
 });
 
 test('legal pages exist and link back to home', async () => {
-  for (const page of ['privacy.html', 'terms.html', 'limitations.html']) {
+  const selfHostedOnly = [
+    'terms.html',
+    'limitations.html',
+    'methodology.html',
+    'acceptable-use.html',
+    'accessibility.html',
+    'changelog.html'
+  ];
+  for (const page of selfHostedOnly) {
     const html = await readFile(page, 'utf8');
     assert.match(html, /href="\.\/"/);
-    assert.doesNotMatch(html, /https?:\/\//);
+    const externalHosts = [...html.matchAll(/https?:\/\/([^/"'\s]+)/g)].map(([, host]) => host);
+    for (const host of externalHosts) {
+      assert.equal(host, 'manipulationscore.com', `${page} links to unexpected host ${host}`);
+    }
   }
+
+  const contact = await readFile('contact.html', 'utf8');
+  assert.match(contact, /href="\.\/"/);
+  assert.match(contact, /github\.com\/Bthornton1994\/Manipulation-score\/issues/);
 });
 
 test('fonts are self-hosted', async () => {
@@ -51,6 +66,9 @@ test('sitemap uses production domain', async () => {
   const sitemap = await readFile('sitemap.xml', 'utf8');
   assert.match(sitemap, /https:\/\/manipulationscore\.com\//);
   assert.doesNotMatch(sitemap, /github\.io/);
+  assert.match(sitemap, /methodology\.html/);
+  assert.match(sitemap, /contact\.html/);
+  assert.match(sitemap, /acceptable-use\.html/);
 });
 
 test('index hides desktop nav on mobile via stylesheet rules', async () => {

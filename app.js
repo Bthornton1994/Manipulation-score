@@ -1,4 +1,4 @@
-import { analyzeMessage, SIGNALS } from './scoring.js';
+import { analyzeMessage, SIGNALS, PILOT_SUPPRESS_NUMERIC_SCORE } from './scoring.js';
 import { extractTextFromImage, releaseOcrWorker, isSupportedImageFile } from './ocr.js';
 import {
   migrateHistoryStorage,
@@ -27,9 +27,11 @@ const historyOptIn = document.querySelector('#history-opt-in');
 const historyDeleteAll = document.querySelector('#history-delete-all');
 
 const MAX_HISTORY = 8;
+const BETA_OCR_ENABLED = false;
 
 let attachedImageFile = null;
 let imageProcessing = false;
+let hasDisplayedAnalysis = false;
 
 const EXAMPLES = [
   {
@@ -57,9 +59,25 @@ const element = (tag, className, text) => {
   return node;
 };
 
+function invalidateResults() {
+  if (!hasDisplayedAnalysis) return;
+  hasDisplayedAnalysis = false;
+  renderEmptyState();
+}
+
+function setMessageValue(value, { invalidate = true } = {}) {
+  message.value = value;
+  updateInputState();
+  if (invalidate) invalidateResults();
+}
+
 function updateInputState() {
   count.textContent = `${message.value.length.toLocaleString()} / 2,500`;
   if (clearButton) clearButton.hidden = !message.value;
+}
+
+function isHistoryEnabledInThisTab() {
+  return Boolean(historyOptIn?.checked);
 }
 
 function setImageUploadStatus(text, tone = 'info') {
@@ -96,6 +114,8 @@ function setImageProcessing(processing) {
 }
 
 async function handleImageSelected() {
+  if (!BETA_OCR_ENABLED) return;
+
   const file = imageInput?.files?.[0];
   if (!file) {
     clearAttachedImage();
@@ -128,6 +148,8 @@ async function handleImageSelected() {
     }
 
     message.value = text.slice(0, 2500);
+    updateInputState();
+    invalidateResults();
     updateInputState();
 
     if (quality === 'poor') {
@@ -251,34 +273,47 @@ function createScoreSection(analysis) {
   const children = [hero];
 
   if (!isSuppressed) {
-    const meter = element('div', 'assessment-meter');
-    const meterTrack = element('div', 'assessment-meter-track');
-    const meterFill = element('div', `assessment-meter-fill assessment-meter-fill-${tone}`);
-    meterFill.style.width = `${Math.min(100, Math.max(0, analysis.score))}%`;
-    meterTrack.append(meterFill);
-    meter.append(meterTrack);
-
-    const meterLabels = element('div', 'assessment-meter-labels');
-    meterLabels.append(
-      element('span', '', 'Low'),
-      element('span', '', 'Moderate'),
-      element('span', '', 'High')
-    );
-    meter.append(meterLabels);
-
-    const context = element('div', 'assessment-context');
     const versionNote = analysis.methodologyVersion
       ? ` · screening v${analysis.methodologyVersion}`
       : '';
-    context.append(
-      meter,
-      element(
-        'p',
-        'assessment-index',
-        `Experimental pattern screening ${analysis.score}/100${versionNote} — not proof of intent, character, or safety.`
-      )
-    );
-    children.push(context);
+
+    if (PILOT_SUPPRESS_NUMERIC_SCORE) {
+      const pilotContext = element('div', 'assessment-context');
+      pilotContext.append(
+        element(
+          'p',
+          'assessment-index',
+          `Experimental pattern band: ${analysis.level}${versionNote} — evidence-linked findings, not proof of intent, character, or safety.`
+        )
+      );
+      children.push(pilotContext);
+    } else {
+      const meter = element('div', 'assessment-meter');
+      const meterTrack = element('div', 'assessment-meter-track');
+      const meterFill = element('div', `assessment-meter-fill assessment-meter-fill-${tone}`);
+      meterFill.style.width = `${Math.min(100, Math.max(0, analysis.score))}%`;
+      meterTrack.append(meterFill);
+      meter.append(meterTrack);
+
+      const meterLabels = element('div', 'assessment-meter-labels');
+      meterLabels.append(
+        element('span', '', 'Low'),
+        element('span', '', 'Moderate'),
+        element('span', '', 'High')
+      );
+      meter.append(meterLabels);
+
+      const context = element('div', 'assessment-context');
+      context.append(
+        meter,
+        element(
+          'p',
+          'assessment-index',
+          `Experimental pattern screening ${analysis.score}/100${versionNote} — not proof of intent, character, or safety.`
+        )
+      );
+      children.push(context);
+    }
 
     const scale = element('details', 'score-scale-details');
     scale.append(element('summary', '', 'What this screening means'));
@@ -303,6 +338,8 @@ function createScoreSection(analysis) {
         'This screening supports reflection—it does not measure intent, character, or whether you should stay in a relationship. See limitations for methodology status.'
       )
     );
+    scale.append(scaleBody);
+    children.push(scale);
   } else if (analysis.abstained) {
     children.push(
       element(
@@ -421,7 +458,11 @@ function createThreadSection(segmentAnalyses) {
   const section = element('section', 'thread-section');
   section.append(
     element('h3', 'results-heading', `Thread · ${segmentAnalyses.length} messages`),
-    element('p', 'thread-note', 'Each message below was analyzed separately. Blank lines separate messages in your paste.')
+    element(
+      'p',
+      'thread-note',
+      'Each message below was analyzed separately. Blank lines separate messages. The overall band reflects the highest-scoring eligible message in this thread.'
+    )
   );
 
   const list = element('div', 'thread-cards');
@@ -435,7 +476,9 @@ function createThreadSection(segmentAnalyses) {
         'thread-score',
         analysis.scoreSuppressed || analysis.abstained
           ? analysis.bandHeadline || 'Not screened'
-          : `Screening ${analysis.score} · ${analysis.level}`
+          : PILOT_SUPPRESS_NUMERIC_SCORE
+            ? `Pattern band: ${analysis.level}`
+            : `Screening ${analysis.score} · ${analysis.level}`
       )
     );
     if (analysis.signals.length) {
@@ -483,6 +526,7 @@ function renderAnalysis(analysis, sourceText) {
   }
 
   results.replaceChildren(...children);
+  hasDisplayedAnalysis = true;
   results.setAttribute(
     'aria-label',
     special
@@ -535,7 +579,7 @@ function setHistoryOptIn(enabled) {
 }
 
 function saveHistory(text, analysis) {
-  if (!isHistoryOptIn()) return;
+  if (!isHistoryEnabledInThisTab()) return;
 
   try {
     const trimmed = text.trim();
@@ -630,8 +674,7 @@ function renderHistory() {
       element('span', 'history-meta', item.level || '')
     );
     button.addEventListener('click', () => {
-      message.value = item.text || item.preview;
-      updateInputState();
+      setMessageValue(item.text || item.preview, { invalidate: false });
       renderAnalysis(analyzeMessage(message.value), message.value);
       message.focus();
     });
@@ -658,14 +701,16 @@ function populateExamples() {
   });
 }
 
-message.addEventListener('input', updateInputState);
+message.addEventListener('input', () => {
+  updateInputState();
+  invalidateResults();
+});
 
 if (exampleSelect) {
   exampleSelect.addEventListener('change', () => {
     const example = EXAMPLES[Number(exampleSelect.value)];
     if (!example) return;
-    message.value = example.text;
-    updateInputState();
+    setMessageValue(example.text);
     message.focus();
   });
 }
@@ -673,17 +718,37 @@ if (exampleSelect) {
 if (clearButton) {
   clearButton.addEventListener('click', () => {
     const historyWasOptedIn = isHistoryOptIn();
-    message.value = '';
+    setMessageValue('', { invalidate: true });
     if (exampleSelect) exampleSelect.value = '';
     clearAttachedImage();
     if (historyOptIn) historyOptIn.checked = historyWasOptedIn;
-    updateInputState();
-    renderEmptyState();
     message.focus();
   });
 }
 
+function syncHistoryFromStorage() {
+  const optedIn = isHistoryOptIn();
+  if (historyOptIn) historyOptIn.checked = optedIn;
+  renderHistory();
+}
+
+window.addEventListener('storage', (event) => {
+  if (event.key === OPT_IN_KEY || event.key === STORAGE_KEY) {
+    syncHistoryFromStorage();
+  }
+});
+
 if (imageUploadBtn && imageInput) {
+  if (!BETA_OCR_ENABLED) {
+    if (imageUploadBtn) imageUploadBtn.hidden = true;
+    if (imageInput) imageInput.disabled = true;
+    if (imageRemoveBtn) imageRemoveBtn.hidden = true;
+    const imageNote = document.querySelector('#image-upload-note');
+    if (imageNote) {
+      imageNote.textContent =
+        'Image upload is temporarily disabled during this Beta candidate. Paste English text only.';
+    }
+  } else {
   const onImageInputChange = () => {
     if (imageProcessing) return;
     if (!imageInput.files?.[0]) clearAttachedImage();
@@ -699,6 +764,7 @@ if (imageUploadBtn && imageInput) {
 
   imageInput.addEventListener('change', onImageInputChange);
   imageInput.addEventListener('input', onImageInputChange);
+  }
 }
 
 if (imageRemoveBtn) {

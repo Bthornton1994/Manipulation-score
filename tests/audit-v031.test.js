@@ -10,7 +10,7 @@ import {
 } from '../scoring.js';
 
 test('v0.3.1 methodology version', () => {
-  assert.equal(METHODOLOGY_VERSION, '0.3.1');
+  assert.equal(METHODOLOGY_VERSION, '0.3.2');
 });
 
 test('clear handler does not reset history opt-in via form.reset', async () => {

@@ -3,6 +3,8 @@
  * Direct violence is immediate; stalking requires behavior plus menace or severe intrusion.
  */
 
+import { normalizeAnalysisText, normalizeForMatching, splitMessageBlocks } from './text-normalize.js';
+
 export const SAFETY_NOTICE = {
   id: 'conditional_harm_language',
   headline: 'Safety notice — not a safety assessment',
@@ -244,10 +246,7 @@ const NEGATION_WORD =
   '(?:never|not|no|cannot|can\'t|won\'t|would\\s+never|do\\s+not|don\'t|does\\s+not|doesn\'t|should\\s+not|shouldn\'t|wouldn\'t)';
 
 function normalizeForSafety(text) {
-  return (text || '')
-    .replace(/[\u2018\u2019\u02BC\u0060]/g, "'")
-    .replace(/\s+/g, ' ')
-    .trim();
+  return normalizeForMatching(text);
 }
 
 function splitSentences(text) {
@@ -687,11 +686,8 @@ function detectContextualStalking(sentences, normalized) {
   return null;
 }
 
-/**
- * @returns {typeof SAFETY_NOTICE & { category?: string, evidenceSpan?: { start: number, end: number, text: string } } | null}
- */
-export function detectSafetyNotice(text) {
-  const normalized = normalizeForSafety(text);
+function detectSafetyInBlock(blockText, blockOffset, fullNormalized) {
+  const normalized = normalizeForMatching(blockText);
   if (!normalized) return null;
 
   const sentences = splitSentences(normalized);
@@ -705,8 +701,10 @@ export function detectSafetyNotice(text) {
       for (const candidate of candidates) {
         if (isExcludedImmediateCandidate(clause.text, candidate)) continue;
 
-        const globalStart = sentence.start + clause.start + candidate.start;
-        const globalEnd = sentence.start + clause.start + candidate.end;
+        const localStart = sentence.start + clause.start + candidate.start;
+        const localEnd = sentence.start + clause.start + candidate.end;
+        const globalStart = blockOffset + localStart;
+        const globalEnd = blockOffset + localEnd;
 
         return {
           ...SAFETY_NOTICE,
@@ -714,7 +712,7 @@ export function detectSafetyNotice(text) {
           evidenceSpan: {
             start: globalStart,
             end: globalEnd,
-            text: normalized.slice(globalStart, globalEnd)
+            text: fullNormalized.slice(globalStart, globalEnd)
           }
         };
       }
@@ -722,7 +720,36 @@ export function detectSafetyNotice(text) {
   }
 
   const stalking = detectContextualStalking(sentences, normalized);
-  if (stalking) return stalking;
+  if (!stalking) return null;
+
+  if (stalking.evidenceSpan) {
+    const localStart = stalking.evidenceSpan.start;
+    const localEnd = stalking.evidenceSpan.end;
+    return {
+      ...stalking,
+      evidenceSpan: {
+        start: blockOffset + localStart,
+        end: blockOffset + localEnd,
+        text: fullNormalized.slice(blockOffset + localStart, blockOffset + localEnd)
+      }
+    };
+  }
+
+  return stalking;
+}
+
+/**
+ * @returns {typeof SAFETY_NOTICE & { category?: string, evidenceSpan?: { start: number, end: number, text: string } } | null}
+ */
+export function detectSafetyNotice(text) {
+  const normalized = normalizeAnalysisText(text);
+  if (!normalized) return null;
+
+  const blocks = splitMessageBlocks(normalized);
+  for (const block of blocks) {
+    const notice = detectSafetyInBlock(block.text, block.start, normalized);
+    if (notice) return notice;
+  }
 
   return null;
 }

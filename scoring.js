@@ -1,4 +1,8 @@
 import { detectSafetyNotice } from './safety.js';
+import {
+  normalizeAnalysisText,
+  isLikelyUnsupportedLanguage
+} from './text-normalize.js';
 
 export const SCORE_BANDS = [
   {
@@ -33,7 +37,7 @@ const SIGNALS = [
     label: 'Guilt leverage',
     function: 'Uses care, loyalty, or past effort as currency—making a boundary or delay feel like proof you do not care enough.',
     weight: 20,
-    pattern: /if you (?:really )?(?:cared|loved|loved me)|after all i(?:'ve| have) done|you owe me|selfish|ungrateful|how could you/gi,
+    pattern: /if you (?:really )?(?:cared|loved|loved me)|after all i(?:'ve| have) done|you owe me|\bungrateful\b|\bselfish\b|how could you/gi,
     education: 'Guilt framing ties affection or loyalty to a specific action. A normal boundary can be reframed as betrayal.'
   },
   {
@@ -127,7 +131,9 @@ const SIGNALS = [
   }
 ];
 
-export const METHODOLOGY_VERSION = '0.3.1';
+export const METHODOLOGY_VERSION = '0.3.2';
+export const PILOT_SUPPRESS_NUMERIC_SCORE = true;
+export { normalizeAnalysisText } from './text-normalize.js';
 export const MIN_MEANINGFUL_WORDS = 15;
 
 const EXCLUSION_CONTEXT_RULES = {
@@ -344,15 +350,8 @@ export function countMeaningfulWords(text) {
   return (text.match(/\b[a-zA-Z]{2,}\b/g) || []).length;
 }
 
-export function normalizeAnalysisText(text) {
-  return (text || '')
-    .replace(/[\u2018\u2019\u02BC\u0060\u201B]/g, "'")
-    .replace(/[\u201C\u201D\u201E\u2033\u2036]/g, '"')
-    .replace(/\u00A0/g, ' ')
-    .replace(/[ \t\f\v]+/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
+const SCORING_NEGATION =
+  /\b(?:never|not|no|cannot|can't|won't|would never|do not|don't|does not|doesn't|should not|shouldn't|wouldn't|am not|is not|are not|isn't|aren't|wasn't|weren't)\b/i;
 
 function getMatchContext(text, start, end, padding = 56) {
   const ctxStart = Math.max(0, start - padding);
@@ -362,6 +361,18 @@ function getMatchContext(text, start, end, padding = 56) {
 
 function isOffsetExcluded(signalId, text, offset) {
   const context = getMatchContext(text, offset.start, offset.end);
+  const immediateBefore = text.slice(Math.max(0, offset.start - 18), offset.start);
+  if (SCORING_NEGATION.test(immediateBefore)) return true;
+
+  const guiltWindow = text.slice(Math.max(0, offset.start - 45), offset.end);
+  if (
+    signalId === 'guilt' &&
+    /\b(?:ungrateful|selfish)\b/i.test(offset.text) &&
+    /\b(?:not|never)\s+(?:calling|saying)\s+you\b/i.test(guiltWindow)
+  ) {
+    return true;
+  }
+
   const rules = EXCLUSION_CONTEXT_RULES[signalId];
   if (rules?.some((rule) => rule.test(context))) return true;
 
@@ -736,14 +747,6 @@ function buildEmptyResult() {
 }
 
 function buildThreadResult(normalized, segmentAnalyses) {
-  const safetyNotice = detectSafetyNotice(normalized);
-  if (safetyNotice) {
-    return {
-      ...createSafetyResult(safetyNotice, normalized),
-      segments: segmentAnalyses
-    };
-  }
-
   const safetySegment = segmentAnalyses.find((entry) => entry.analysis.safetyNotice);
   if (safetySegment) {
     return {
@@ -790,6 +793,24 @@ export function analyzeMessage(text) {
     return { ...buildEmptyResult(), level: 'No message' };
   }
 
+  if (isLikelyUnsupportedLanguage(normalized)) {
+    return createAbstentionResult([
+      'English-only screening in this Controlled Beta.',
+      'This message appears to use a language or script Clarity does not screen yet.',
+      'Clarity currently screens English text only. Paste an English translation or summary to screen patterns.'
+    ]);
+  }
+
+  const segments = splitMessages(normalized);
+  if (segments.length > 1) {
+    const segmentAnalyses = segments.map((segment, index) => ({
+      index: index + 1,
+      text: segment,
+      analysis: analyzeSegment(segment)
+    }));
+    return buildThreadResult(normalized, segmentAnalyses);
+  }
+
   const safetyNotice = detectSafetyNotice(normalized);
   if (safetyNotice) {
     return createSafetyResult(safetyNotice, normalized);
@@ -802,16 +823,6 @@ export function analyzeMessage(text) {
       `This message has about ${meaningfulWords} recognizable words. Screening requires at least ${MIN_MEANINGFUL_WORDS} recognizable words.`,
       'Paste more of the message, or additional messages from the same conversation, to receive a screening result.'
     ]);
-  }
-
-  const segments = splitMessages(normalized);
-  if (segments.length > 1) {
-    const segmentAnalyses = segments.map((segment, index) => ({
-      index: index + 1,
-      text: segment,
-      analysis: analyzeSegment(segment)
-    }));
-    return buildThreadResult(normalized, segmentAnalyses);
   }
 
   const analysis = analyzeSingleMessage(normalized);

@@ -4,10 +4,9 @@ import { readFile } from 'node:fs/promises';
 
 test('history-off analysis does not write raw text to localStorage', async () => {
   const app = await readFile('app.js', 'utf8');
-  assert.match(app, /if \(!isHistoryOptIn\(\)\) return/);
-  assert.match(app, /saveHistory/);
+  assert.match(app, /isHistoryEnabledInThisTab/);
   const saveBlock = app.slice(app.indexOf('function saveHistory'), app.indexOf('function loadHistory'));
-  assert.match(saveBlock, /if \(!isHistoryOptIn\(\)\) return/);
+  assert.match(saveBlock, /isHistoryEnabledInThisTab\(\)/);
 });
 
 test('app does not transmit messages or images over the network for analysis', async () => {

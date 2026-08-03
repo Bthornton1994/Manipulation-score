@@ -744,6 +744,16 @@ if (navToggle) {
   });
 }
 
+const skipLink = document.querySelector('.skip-link');
+const mainContent = document.querySelector('#main');
+if (skipLink && mainContent) {
+  skipLink.addEventListener('click', (event) => {
+    event.preventDefault();
+    mainContent.focus({ preventScroll: false });
+    mainContent.scrollIntoView();
+  });
+}
+
 if (navClose) {
   navClose.addEventListener('click', closeMobileMenu);
 }

@@ -136,6 +136,12 @@ test('index CSP allows on-device OCR', async () => {
   assert.match(html, /worker-src[^;]*blob:/);
 });
 
+test('app moves focus to main when skip link is activated', async () => {
+  const app = await readFile('app.js', 'utf8');
+  assert.match(app, /skip-link/);
+  assert.match(app, /mainContent\.focus/);
+});
+
 test('ocr module and vendor assets exist locally', async () => {
   await access('ocr.js');
   await access('vendor/tesseract/tesseract.esm.min.js');

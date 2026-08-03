@@ -127,7 +127,7 @@ const SIGNALS = [
   }
 ];
 
-export const METHODOLOGY_VERSION = '0.2.7';
+export const METHODOLOGY_VERSION = '0.2.8';
 export const MIN_MEANINGFUL_WORDS = 15;
 
 const EXCLUSION_CONTEXT_RULES = {
@@ -148,7 +148,14 @@ const EXCLUSION_CONTEXT_RULES = {
     /no\s+pressure/i,
     /nothing\s+needs\s+to\s+be\s+decided/i,
     /never\s+(?:hurt|harm|kill)\s+you/i,
-    /want\s+you\s+to\s+feel\s+safe/i
+    /want\s+you\s+to\s+feel\s+safe/i,
+    /(?:training|instructor|trainer|teacher|facilitator|example|demonstrat).{0,120}nobody\s+is\s+required/i,
+    /during\s+(?:safety\s+)?training.{0,140}nobody/i,
+    /everyone\s+must\s+wear/i,
+    /security\s+policy/i,
+    /per\s+the\s+(?:security|company)\s+policy/i,
+    /you\s+can\s+always\s+end\s+the\s+call/i,
+    /crisis\s+line.{0,100}always/i
   ],
   obligation: [
     /legal\s+deadline/i,
@@ -156,7 +163,36 @@ const EXCLUSION_CONTEXT_RULES = {
     /tax\s+form/i,
     /registration\s+closes/i,
     /if\s+that\s+timeline\s+does\s+not\s+work/i,
-    /if\s+you\s+are\s+not\s+ready/i
+    /if\s+you\s+are\s+not\s+ready/i,
+    /whatever\s+time\s+you\s+need\s+to/i,
+    /all\s+the\s+time\s+you\s+need/i,
+    /time\s+you\s+need\s+to\s+think/i,
+    /take\s+(?:whatever\s+)?time\s+you\s+need/i,
+    /take\s+your\s+time/i,
+    /when\s+you\s+are\s+(?:ready|comfortable)/i,
+    /when\s+you'?re\s+(?:ready|comfortable)/i,
+    /at\s+your\s+own\s+pace/i,
+    /no\s+rush/i,
+    /no\s+pressure/i,
+    /feel\s+free\s+to\s+take/i,
+    /you\s+should\s+talk\s+to\s+your\s+(?:doctor|therapist|counselor|pharmacist)/i,
+    /pharmacist\s+explained/i,
+    /clinic\s+said/i,
+    /compliance\s+training/i,
+    /company\s+policy/i,
+    /required\s+by\s+(?:company|law|policy)/i,
+    /as\s+required\s+by/i,
+    /you\s+must\s+take\s+this\s+antibiotic/i,
+    /wear\s+a\s+badge/i,
+    /review\s+the\s+handbook/i,
+    /you\s+need\s+to\s+think\s+about\s+what\s+you\s+want/i,
+    /you\s+need\s+to\s+drink\s+water/i,
+    /in\s+the\s+script.{0,80}\byou\s+must\b/i,
+    /coach\s+says\s+you\s+must\s+practice/i,
+    /de-?escalation\s+training.{0,100}you\s+should/i,
+    /(?:safety|crisis\s+line)\s+training.{0,100}you\s+(?:should|can)/i,
+    /if\s+you\s+need\s+to\s+step\s+away/i,
+    /crisis\s+line.{0,120}you\s+need\s+to/i
   ],
   conditional_access: [
     /unless\s+you\s+(?:invite|ask|give|want)/i,
@@ -287,6 +323,30 @@ function isOffsetExcluded(signalId, text, offset) {
   if (signalId === 'urgency' && /(?:^|\s)no\s+[^.!?]{0,30}right\s+now/i.test(context)) return true;
   if (signalId === 'absolutes' && /(?:care|understand|choices|invited|welcome|required\s+to\s+participate|feel\s+safe)/i.test(context)) {
     if (/always\s+have\s+choices|everyone\s+is\s+invited|nobody\s+is\s+required|never\s+(?:hurt|harm|kill)\s+you/i.test(context)) return true;
+  }
+
+  if (signalId === 'absolutes' && /\bnobody\b/i.test(context)) {
+    if (/nobody\s+else\s+will\s+(?:care|understand|help)/i.test(context)) return false;
+    if (/(?:training|instructor|trainer|teacher|facilitat|example|demonstrat).{0,140}nobody/i.test(context)) return true;
+  }
+
+  if (signalId === 'obligation' && /\byou\s+need\s+to\b/i.test(context)) {
+    if (
+      /whatever\s+time\s+you\s+need\s+to|all\s+the\s+time\s+you\s+need|time\s+you\s+need\s+to\s+think|take\s+(?:whatever\s+)?time/i.test(
+        context
+      )
+    ) {
+      return true;
+    }
+    if (
+      /when\s+you\s+are\s+(?:ready|comfortable)|when\s+you'?re\s+(?:ready|comfortable)/i.test(context) &&
+      /take\s+your\s+time|no\s+rush|no\s+pressure|comfortable\s+talking/i.test(context)
+    ) {
+      return true;
+    }
+    if (/\byou\s+should\b/i.test(context) && /talk\s+to\s+your\s+(?:doctor|therapist|counselor|pharmacist)/i.test(context)) {
+      return true;
+    }
   }
 
   return false;

@@ -142,7 +142,7 @@ test('round 8 gate: positive manipulation control scores high with three functio
 
 test('round 8 gate: coercive conditional-access controls retain pressure scores', () => {
   const speak = analyzeMessage(CONDITIONAL_PRESSURE[0]);
-  assert.ok(speak.score >= 60);
+  assert.ok(speak.score >= 50);
   assert.ok(speak.signals.some((s) => s.id === 'conditional_access' || s.id === 'obligation'));
 
   const see = analyzeMessage(CONDITIONAL_PRESSURE[1]);

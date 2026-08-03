@@ -127,10 +127,16 @@ const SIGNALS = [
   }
 ];
 
-export const METHODOLOGY_VERSION = '0.2.8';
+export const METHODOLOGY_VERSION = '0.3.0';
 export const MIN_MEANINGFUL_WORDS = 15;
 
 const EXCLUSION_CONTEXT_RULES = {
+  isolation: [
+    /surprise\s+party/i,
+    /do\s+not\s+tell\s+anyone\s+your\s+password/i,
+    /account\s+was\s+compromised/i,
+    /contact\s+support\s+immediately/i
+  ],
   urgency: [
     /no\s+pressure/i,
     /nothing\s+needs\s+to\s+be\s+decided/i,
@@ -138,7 +144,12 @@ const EXCLUSION_CONTEXT_RULES = {
     /no\s+rush/i,
     /no\s+urgency/i,
     /understand\s+that\s+you\s+need\s+time/i,
-    /no\s+pressure\s+to\s+answer/i
+    /no\s+pressure\s+to\s+answer/i,
+    /completely\s+okay\s+to\s+say\s+no/i,
+    /okay\s+to\s+say\s+no/i,
+    /so\s+i\s+can\s+make\s+plans/i,
+    /evacuate\s+immediately/i,
+    /smoke\s+is\s+entering/i
   ],
   absolutes: [
     /have\s+choices/i,
@@ -192,7 +203,11 @@ const EXCLUSION_CONTEXT_RULES = {
     /de-?escalation\s+training.{0,100}you\s+should/i,
     /(?:safety|crisis\s+line)\s+training.{0,100}you\s+(?:should|can)/i,
     /if\s+you\s+need\s+to\s+step\s+away/i,
-    /crisis\s+line.{0,120}you\s+need\s+to/i
+    /crisis\s+line.{0,120}you\s+need\s+to/i,
+    /wear\s+your\s+seatbelt/i,
+    /talk\s+to\s+a\s+lawyer/i,
+    /understand\s+your\s+legal\s+rights/i,
+    /you\s+need\s+to\s+evacuate/i
   ],
   conditional_access: [
     /unless\s+you\s+(?:invite|ask|give|want)/i,
@@ -219,6 +234,26 @@ const CLEAR_PRESSURE_IDS = new Set([
 ]);
 
 const SOFT_SIGNAL_IDS = new Set(['absolutes', 'minimization']);
+
+/** high = narrow coercive patterns; medium = contextual pressure; low = broad lexical hooks */
+const SIGNAL_SPECIFICITY = {
+  guilt: 'high',
+  threat: 'high',
+  conditional_access: 'high',
+  implied_rejection: 'high',
+  resigned_withdrawal: 'high',
+  responsibility_shift: 'high',
+  urgency: 'medium',
+  isolation: 'medium',
+  dismissal: 'medium',
+  minimization: 'low',
+  absolutes: 'low',
+  obligation: 'low'
+};
+
+function getSignalSpecificity(signalId) {
+  return SIGNAL_SPECIFICITY[signalId] || 'medium';
+}
 
 const LEVERAGE_CLUSTERS = [
   {
@@ -544,11 +579,29 @@ function calibrateScore(rawScore, signals, clusters) {
 
   const clearSignals = signals.filter((s) => isClearPressure(s.id));
   const clearCount = clearSignals.length;
+  const highTierCount = clearSignals.filter((s) => getSignalSpecificity(s.id) === 'high').length;
   const softOnly = signals.every((s) => SOFT_SIGNAL_IDS.has(s.id));
   const pressureCount = signals.filter((s) => SIGNAL_FAMILIES.pressure.includes(s.id)).length;
   let score = rawScore;
 
-  if (clearCount === 1) {
+  if (clearCount === 1 && highTierCount === 0) {
+    const primary = clearSignals[0];
+    const tier = getSignalSpecificity(primary.id);
+    const strongMedium =
+      tier === 'medium' &&
+      primary.offsets.length >= 2 &&
+      primary.severity.level !== 'mild';
+    if (strongMedium) {
+      score = Math.max(score, 46);
+      if (primary.offsets.length >= 3 || primary.severity.level === 'strong') {
+        score = Math.max(score, 50);
+      }
+    } else {
+      score = Math.min(score, 30);
+    }
+  }
+
+  if (clearCount === 1 && highTierCount === 1) {
     const primary = clearSignals[0];
     score = Math.max(score, 46);
     if (primary.offsets.length >= 2 || primary.severity.level === 'strong') score = Math.max(score, 50);
@@ -567,20 +620,33 @@ function calibrateScore(rawScore, signals, clusters) {
     score = Math.min(score, signals.length >= 3 ? 30 : 22);
   }
 
+  if (score >= 61) {
+    const qualifiesHigh =
+      clearCount >= 3 ||
+      (clearCount >= 2 && pressureCount >= 2) ||
+      (clusters.length >= 1 && clearCount >= 2 && highTierCount >= 1);
+    if (!qualifiesHigh) score = Math.min(score, 60);
+  }
+
   return Math.min(100, Math.round(score));
 }
 
 function scoreOffsets(weight, offsets, signalId) {
+  const tier = getSignalSpecificity(signalId);
   const matchBonus = Math.min(12, Math.max(0, offsets.length - 1) * 5);
   let points = weight + matchBonus;
 
-  if (isClearPressure(signalId)) {
+  if (tier === 'high' && isClearPressure(signalId)) {
     if (offsets.length >= 1) points = Math.max(points, 40);
     if (offsets.length >= 2) points = Math.max(points, 46);
     if (offsets.length >= 3) points = Math.max(points, 52);
+  } else if (tier === 'medium' && offsets.length >= 2) {
+    points = Math.max(points, 32);
+    if (offsets.length >= 3) points = Math.max(points, 36);
   }
 
-  return Math.min(points, 55);
+  const cap = tier === 'high' ? 55 : tier === 'medium' ? 38 : 24;
+  return Math.min(points, cap);
 }
 
 function analyzeSingleMessage(normalized) {

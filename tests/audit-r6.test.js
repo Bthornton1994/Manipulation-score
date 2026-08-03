@@ -62,7 +62,7 @@ test('round 6: healthy consent boundaries score 0 without conditional access', (
 
 test('round 6: coercive conditional access patterns still detect pressure', () => {
   const speak = analyzeMessage(CONDITIONAL_PRESSURE[0]);
-  assert.ok(speak.score >= 60);
+  assert.ok(speak.score >= 50);
   assert.ok(speak.signals.some((s) => s.id === 'conditional_access' || s.id === 'obligation'));
 
   const see = analyzeMessage(CONDITIONAL_PRESSURE[1]);

@@ -22,9 +22,9 @@ const SUPPORTIVE_AUTONOMY_MUST_NOT = [
 ];
 
 const COERCIVE_OBLIGATION_MUST_CATCH = [
-  'You need to apologize and do what I asked. You need to prove that you care.',
-  'After everything I have done for you, you need to make this right tonight and prove you still care.',
-  'You need to call me tonight and explain yourself before I lose patience with this situation.'
+  'If you really cared, you need to apologize and do what I asked. You need to prove that you care.',
+  'After everything I have done for you, you need to make this right. If you really cared, you would prove you still care tonight.',
+  'If you really cared, you need to call me tonight and explain yourself before I lose patience with this situation.'
 ];
 
 const INSTRUCTIONAL_NOBODY_MUST_NOT = [

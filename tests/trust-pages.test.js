@@ -50,7 +50,7 @@ test('acceptable use prohibits named-person scoring', async () => {
 
 test('privacy links to working contact channel', async () => {
   const html = await readFile('privacy.html', 'utf8');
-  assert.match(html, /github\.com\/Bthornton1994\/Manipulation-score\/issues/);
+  assert.match(html, /feedback@manipulationscore\.com/);
   assert.match(html, /href="contact\.html"/);
 });
 

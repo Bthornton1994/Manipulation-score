@@ -99,3 +99,19 @@ test('will your does not produce false kill-you safety evidence span', () => {
     assert.match(notice.evidenceSpan.text, /your/i);
   }
 });
+
+test('shoot you the moment is not treated as document-sharing benign context', () => {
+  const threats = [
+    'I will shoot you the moment you walk through that door.',
+    'I will shoot you the second you open that window.',
+    'I will shoot you the minute you step outside tonight.'
+  ];
+  for (const text of threats) {
+    assert.ok(detectSafetyNotice(text), `expected safety notice for: ${text}`);
+  }
+});
+
+test('shoot you the spreadsheet remains benign document-sharing context', () => {
+  const text = 'I will shoot you the updated spreadsheet after the meeting ends today.';
+  assert.equal(detectSafetyNotice(text), null);
+});

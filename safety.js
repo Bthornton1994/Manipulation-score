@@ -206,9 +206,11 @@ const BENIGN_CONSENT_PATTERNS = [
   /\bas\s+we\s+agreed\b/i
 ];
 
+const SHOOT_YOU_THE_DOCUMENT_RE =
+  /(?:i will\s+)?shoot\s+you\s+the\s+(?:updated\s+)?(?:spreadsheet|file|files|link|links|photo|photos|document|documents|report|details|info|email|pdf|deck|attachment)s?\b/i;
+
 const BENIGN_SAFETY_CONTEXT = [
-  /(?:i will\s+)?shoot\s+you\s+the\s+updated\s+spreadsheet/i,
-  /(?:i will\s+)?shoot\s+you\s+the\s+\w+/i,
+  SHOOT_YOU_THE_DOCUMENT_RE,
   /point\s+(?:the\s+)?knife\s+away/i,
   /mario\s+kart/i,
   /in\s+the\s+movie/i,

@@ -129,7 +129,8 @@ const MENACE_PATTERNS = [
   /\btold\s+me\s+to\s+leave\b/i,
   /\basked\s+me\s+to\s+leave\b/i,
   /\btold\s+me\s+to\s+go\s+away\b/i,
-  /\basked\s+me\s+to\s+stop\s+waiting\b/i
+  /\basked\s+me\s+to\s+stop\s+waiting\b/i,
+  /\basked\s+me\s+to\s+stop\b/i
 ];
 
 const BENIGN_CONSENT_PATTERNS = [
@@ -152,7 +153,13 @@ const BENIGN_CONSENT_PATTERNS = [
   /for\s+the\s+dinner\s+you\s+invited/i,
   /dinner\s+you\s+invited/i,
   /another\s+day\s+be\s+better/i,
-  /for\s+the\s+invitation/i
+  /for\s+the\s+invitation/i,
+  /\bride\s+you\s+requested\b/i,
+  /\basked\s+me\s+to\s+pick\s+you\s+up\b/i,
+  /\basked\s+me\s+to\s+walk\s+with\s+you\b/i,
+  /\bour\s+agreed\s+meeting\b/i,
+  /\bappointment\s+you\s+scheduled\b/i,
+  /\bas\s+we\s+agreed\b/i
 ];
 
 const CLAUSE_SPLIT_RE = /\s*;\s*|\s+\bbut\s+|\s+\bhowever\s+|\s+\byet\s+/gi;
@@ -402,16 +409,22 @@ function filterEligibleBehaviors(sentenceText, behaviors) {
   });
 }
 
-function isDirectFirstPersonStalking(sentenceText, behavior) {
+function firstPersonStalkingContext(sentenceText, behavior) {
   const clause = clauseForBehavior(sentenceText, behavior.start);
   const localStart = behavior.start - clause.start;
   const prefix = clause.text.slice(0, localStart);
-  const localContext = prefix + behavior.text;
-  return (
-    /\b(?:i\s+really\s+will|i\s+will|i'?ll|i\s+am\s+going\s+to|i'?m\s+going\s+to)\b/i.test(
-      localContext
-    ) ||
-    /\b(?:i\s+am|i'?m)\s+(?:actually|still|currently)\s+(?:waiting|following)/i.test(localContext)
+  return prefix + behavior.text;
+}
+
+function isExplicitFutureFirstPersonStalking(sentenceText, behavior) {
+  return /\b(?:i\s+really\s+will|i\s+will|i'?ll|i\s+am\s+going\s+to|i'?m\s+going\s+to)\b/i.test(
+    firstPersonStalkingContext(sentenceText, behavior)
+  );
+}
+
+function isContinuousAdverbFirstPersonStalking(sentenceText, behavior) {
+  return /\b(?:i\s+am|i'?m)\s+(?:actually|still|currently)\s+(?:waiting|following)/i.test(
+    firstPersonStalkingContext(sentenceText, behavior)
   );
 }
 
@@ -468,10 +481,29 @@ function detectContextualStalking(sentences, normalized) {
 
     if (
       !benignInSentence &&
-      eligibleBehaviors.some((behavior) => isDirectFirstPersonStalking(sentence.text, behavior))
+      eligibleBehaviors.some((behavior) =>
+        isExplicitFutureFirstPersonStalking(sentence.text, behavior)
+      )
     ) {
       const behavior = eligibleBehaviors.find((entry) =>
-        isDirectFirstPersonStalking(sentence.text, entry)
+        isExplicitFutureFirstPersonStalking(sentence.text, entry)
+      );
+      return makeStalkingResult(
+        normalized,
+        sentence.start + behavior.start,
+        sentence.start + behavior.end
+      );
+    }
+
+    if (
+      !benignInSentence &&
+      menace &&
+      eligibleBehaviors.some((behavior) =>
+        isContinuousAdverbFirstPersonStalking(sentence.text, behavior)
+      )
+    ) {
+      const behavior = eligibleBehaviors.find((entry) =>
+        isContinuousAdverbFirstPersonStalking(sentence.text, entry)
       );
       return makeStalkingResult(
         normalized,

@@ -37,7 +37,8 @@ test('index footer links to trust pages', async () => {
 
 test('methodology discloses regression count not accuracy percentage', async () => {
   const html = await readFile('methodology.html', 'utf8');
-  assert.match(html, /58 targeted.*fixtures/i);
+  assert.match(html, /targeted audit fixtures/i);
+  assert.match(html, /benign adversarial controls/i);
   assert.match(html, /representative validation study/i);
   assert.doesNotMatch(html, /100\s*%\s*accur/i);
 });

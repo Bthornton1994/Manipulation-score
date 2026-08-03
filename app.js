@@ -308,7 +308,7 @@ function createScoreSection(analysis) {
       element(
         'p',
         'abstention-note',
-        'No numeric score is shown when there is not enough text for screening in this alpha.'
+        'No numeric score is shown when there is not enough text for screening in this Controlled Beta.'
       )
     );
   }
@@ -316,7 +316,7 @@ function createScoreSection(analysis) {
   const methodology = element('p', 'methodology-status');
   const limitationsLink = element('a', '', 'Limitations');
   limitationsLink.href = 'limitations.html';
-  methodology.append('Alpha release · ', limitationsLink);
+  methodology.append('Controlled Beta · ', limitationsLink);
   children.push(methodology);
 
   section.append(...children);
@@ -672,9 +672,11 @@ if (exampleSelect) {
 
 if (clearButton) {
   clearButton.addEventListener('click', () => {
-    form.reset();
+    const historyWasOptedIn = isHistoryOptIn();
+    message.value = '';
     if (exampleSelect) exampleSelect.value = '';
     clearAttachedImage();
+    if (historyOptIn) historyOptIn.checked = historyWasOptedIn;
     updateInputState();
     renderEmptyState();
     message.focus();

@@ -1,0 +1,65 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+
+const TRUST_PAGES = [
+  'methodology.html',
+  'contact.html',
+  'acceptable-use.html',
+  'accessibility.html',
+  'changelog.html'
+];
+
+const FOOTER_LINKS = [
+  'methodology.html',
+  'contact.html',
+  'acceptable-use.html',
+  'accessibility.html',
+  'changelog.html'
+];
+
+test('trust pages have title, description, and main heading', async () => {
+  for (const page of TRUST_PAGES) {
+    const html = await readFile(page, 'utf8');
+    assert.match(html, /<title>.*Clarity.*Manipulation Score<\/title>/);
+    assert.match(html, /meta name="description"/);
+    assert.match(html, /<h1>/);
+    assert.match(html, /rel="canonical" href="https:\/\/manipulationscore\.com\//);
+  }
+});
+
+test('index footer links to trust pages', async () => {
+  const html = await readFile('index.html', 'utf8');
+  for (const link of FOOTER_LINKS) {
+    assert.match(html, new RegExp(`href="${link}"`));
+  }
+});
+
+test('methodology discloses regression count not accuracy percentage', async () => {
+  const html = await readFile('methodology.html', 'utf8');
+  assert.match(html, /58 targeted.*fixtures/i);
+  assert.match(html, /representative validation study/i);
+  assert.doesNotMatch(html, /100\s*%\s*accur/i);
+});
+
+test('acceptable use prohibits named-person scoring', async () => {
+  const html = await readFile('acceptable-use.html', 'utf8');
+  assert.match(html, /Publicly score, rank, or label named individuals/i);
+  assert.match(html, /proof in legal/i);
+});
+
+test('privacy links to working contact channel', async () => {
+  const html = await readFile('privacy.html', 'utf8');
+  assert.match(html, /github\.com\/Bthornton1994\/Manipulation-score\/issues/);
+  assert.match(html, /href="contact\.html"/);
+});
+
+test('service worker shells trust pages with network-first', async () => {
+  const worker = await readFile('service-worker.js', 'utf8');
+  for (const page of TRUST_PAGES) {
+    assert.match(worker, new RegExp(`'\\./${page}'`));
+  }
+  assert.match(worker, /methodology\.html/);
+  assert.match(worker, /contact\.html/);
+  assert.match(worker, /acceptable-use\.html/);
+});

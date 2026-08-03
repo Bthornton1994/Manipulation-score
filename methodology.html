@@ -24,7 +24,7 @@
       <p>Clarity screens observable <strong>language functions</strong> in a pasted message—patterns that may compress informed, voluntary choice. Examples include guilt leverage, forced urgency, isolation framing, conditional access, and similar pressure functions described in the taxonomy below.</p>
       <p>Clarity does <strong>not</strong> measure intent, personality, diagnosis, truth, relationship safety, or whether a person is “manipulative.” It highlights language that <em>may</em> narrow reflection space. Context, history, and tone always matter more than any score.</p>
 
-      <h2>Language-function taxonomy (screening v0.3.0)</h2>
+      <h2>Language-function taxonomy (screening v0.3.2)</h2>
       <p>Twelve pattern families are evaluated in the current Controlled Beta:</p>
       <ul>
         <li><strong>Guilt leverage</strong> — care or loyalty used as currency for compliance.</li>
@@ -69,7 +69,7 @@
       </ul>
 
       <h2>Current version and evaluation status</h2>
-      <p><strong>Screening version:</strong> v0.3.0 (methodology and safety logic deployed with this site build).</p>
+      <p><strong>Screening version:</strong> v0.3.2 (methodology and safety logic deployed with this site build).</p>
       <p><strong>Specificity tiers:</strong> Phrase families are classified as high, medium, or low specificity. A single low-specificity match (for example a bare “you need to” in an autonomy-supporting sentence) stays in the Low band. Moderate results require a high-specificity pattern, multiple independent pressure functions, or several clear repetitions within one medium-specificity function. High results require multiple independent functions, defined leverage clusters, or several clear pressure signals together.</p>
       <p><strong>Regression testing:</strong> An expanded automated regression suite (targeted audit fixtures, benign adversarial controls, and safety probes) runs before each release. This is a <strong>regression count</strong>, not a representative validation study. Sensitivity, specificity, fairness, and real-world performance on natural messages have not been established.</p>
       <p>No representative accuracy percentage should be inferred from this count.</p>
@@ -80,7 +80,8 @@
         <li>Screenshot OCR can introduce noise that affects word counts and matches.</li>
         <li>Irony, sarcasm, cultural context, and relationship history are not modeled.</li>
         <li>Safety rules prioritize catching explicit harm language; false negatives remain possible.</li>
-        <li>Scores apply to pasted text only—not threads, images without text, or non-verbal conduct.</li>
+        <li>Scores apply to pasted English text. Multi-message threads show per-message results; the overall band reflects the highest-scoring eligible message in the thread.</li>
+        <li>Image upload is disabled in this Beta candidate. OCR is English-only when enabled in future releases.</li>
       </ul>
 
       <h2>Corrections and feedback</h2>

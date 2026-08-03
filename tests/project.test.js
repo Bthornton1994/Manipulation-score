@@ -94,7 +94,7 @@ test('logo shows Manipulation Score as brand and Clarity as product', async () =
 test('history is opt-in and guarded before localStorage writes', async () => {
   const app = await readFile('app.js', 'utf8');
   assert.match(app, /history-storage\.js/);
-  assert.match(app, /if \(!isHistoryOptIn\(\)\) return/);
+  assert.match(app, /isHistoryEnabledInThisTab/);
   assert.match(app, /history-opt-in/);
   assert.match(app, /history-delete-all/);
 });

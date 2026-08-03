@@ -47,7 +47,7 @@ test('legal pages exist and link back to home', async () => {
 
   const contact = await readFile('contact.html', 'utf8');
   assert.match(contact, /href="\.\/"/);
-  assert.match(contact, /github\.com\/Bthornton1994\/Manipulation-score\/issues/);
+  assert.match(contact, /feedback@manipulationscore\.com/);
 });
 
 test('fonts are self-hosted', async () => {

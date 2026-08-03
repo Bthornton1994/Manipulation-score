@@ -7,7 +7,7 @@ Clarity runs entirely in your browser. No accounts, no uploads, no analytics.
 ## Features
 
 - On-device pattern analysis with highlighted evidence in the message
-- Eight language signal categories with plain-language explanations
+- Twelve language signal categories with plain-language explanations
 - Three response styles: pause, boundary, and clarify
 - Installable PWA with offline support after first visit
 - Self-hosted fonts — no third-party requests at runtime

@@ -722,6 +722,8 @@ function openMobileMenu() {
     navToggle.setAttribute('aria-expanded', 'true');
     navToggle.setAttribute('aria-label', 'Close menu');
   }
+  const firstFocusable = mobileMenu.querySelector('a, button');
+  if (firstFocusable) firstFocusable.focus();
 }
 
 function closeMobileMenu() {
@@ -734,6 +736,7 @@ function closeMobileMenu() {
   if (navToggle) {
     navToggle.setAttribute('aria-expanded', 'false');
     navToggle.setAttribute('aria-label', 'Open menu');
+    navToggle.focus();
   }
 }
 

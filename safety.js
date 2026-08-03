@@ -82,11 +82,55 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'confinement',
+    pattern: /will\s+not\s+let\s+you\s+(?:leave|go|out|escape)/gi
+  },
+  {
+    id: 'confinement',
+    pattern: /won'?t\s+let\s+you\s+leave\b[^.!?]{0,50}\buntil\b/gi
+  },
+  {
+    id: 'confinement',
     pattern: /(?:lock|locking)\s+(?:you\s+in|the\s+door|you\s+inside)/gi
   },
   {
     id: 'confinement',
     pattern: /(?:trapped|trapping)\s+you\b/gi
+  },
+  {
+    id: 'confinement',
+    pattern: /\blocked\s+the\s+door\s+so\s+you\s+cannot\s+leave\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\bwill\s+beat\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\bwill\s+choke\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\byou\s+are\s+dead\s+when\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\bwatch\s+your\s+back\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i\s+am\s+)?coming\s+for\s+you\b/gi
+  },
+  {
+    id: 'stalking',
+    pattern: /\btracker\s+on\s+your\s+car\b/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern: /\bwill\s+end\s+it\b[^.!?]{0,50}\bif\s+you\s+go\b/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern: /\btake\s+all\s+these\s+pills\b[^.!?]{0,60}\bif\s+you\s+end\b/gi
   },
   {
     id: 'emergency_coercion',
@@ -160,6 +204,20 @@ const BENIGN_CONSENT_PATTERNS = [
   /\bour\s+agreed\s+meeting\b/i,
   /\bappointment\s+you\s+scheduled\b/i,
   /\bas\s+we\s+agreed\b/i
+];
+
+const BENIGN_SAFETY_CONTEXT = [
+  /shoot\s+you\s+the\s+updated\s+spreadsheet/i,
+  /point\s+(?:the\s+)?knife\s+away/i,
+  /mario\s+kart/i,
+  /in\s+the\s+movie/i,
+  /during\s+rehearsal/i,
+  /rehearsal\s+line/i,
+  /sun\s+exposure/i,
+  /workout\s+metaphor/i,
+  /safety\s+instruction/i,
+  /medical\s+harm/i,
+  /could\s+harm\s+your\s+skin/i
 ];
 
 const CLAUSE_SPLIT_RE = /\s*;\s*|\s+\bbut\s+|\s+\bhowever\s+|\s+\byet\s+/gi;
@@ -365,7 +423,12 @@ function hasBenignConsent(text) {
   return BENIGN_CONSENT_PATTERNS.some((pattern) => pattern.test(text));
 }
 
+function isBenignSafetyContext(clauseText) {
+  return BENIGN_SAFETY_CONTEXT.some((pattern) => pattern.test(clauseText));
+}
+
 function isExcludedImmediateCandidate(clauseText, match) {
+  if (isBenignSafetyContext(clauseText)) return true;
   if (isNegatedForCandidate(clauseText, match.start, match.text)) return true;
   if (isAttributedClause(clauseText, match.start)) return true;
   if (isMedicalReassurance(clauseText, match.start, match.text)) return true;

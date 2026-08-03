@@ -37,7 +37,8 @@ test('index footer links to trust pages', async () => {
 
 test('methodology discloses regression count not accuracy percentage', async () => {
   const html = await readFile('methodology.html', 'utf8');
-  assert.match(html, /58 targeted.*fixtures/i);
+  assert.match(html, /targeted audit fixtures/i);
+  assert.match(html, /benign adversarial controls/i);
   assert.match(html, /representative validation study/i);
   assert.doesNotMatch(html, /100\s*%\s*accur/i);
 });
@@ -50,7 +51,7 @@ test('acceptable use prohibits named-person scoring', async () => {
 
 test('privacy links to working contact channel', async () => {
   const html = await readFile('privacy.html', 'utf8');
-  assert.match(html, /github\.com\/Bthornton1994\/Manipulation-score\/issues/);
+  assert.match(html, /feedback@manipulationscore\.com/);
   assert.match(html, /href="contact\.html"/);
 });
 

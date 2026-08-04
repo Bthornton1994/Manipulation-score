@@ -793,14 +793,6 @@ export function analyzeMessage(text) {
     return { ...buildEmptyResult(), level: 'No message' };
   }
 
-  if (isLikelyUnsupportedLanguage(normalized)) {
-    return createAbstentionResult([
-      'English-only screening in this Controlled Beta.',
-      'This message appears to use a language or script Clarity does not screen yet.',
-      'Clarity currently screens English text only. Paste an English translation or summary to screen patterns.'
-    ]);
-  }
-
   const segments = splitMessages(normalized);
   if (segments.length > 1) {
     const segmentAnalyses = segments.map((segment, index) => ({
@@ -808,12 +800,31 @@ export function analyzeMessage(text) {
       text: segment,
       analysis: analyzeSegment(segment)
     }));
-    return buildThreadResult(normalized, segmentAnalyses);
+    const threadResult = buildThreadResult(normalized, segmentAnalyses);
+    if (threadResult.safetyNotice) {
+      return threadResult;
+    }
+    if (isLikelyUnsupportedLanguage(normalized)) {
+      return createAbstentionResult([
+        'English-only screening in this Controlled Beta.',
+        'This message appears to use a language or script Clarity does not screen yet.',
+        'Clarity currently screens English text only. Paste an English translation or summary to screen patterns.'
+      ]);
+    }
+    return threadResult;
   }
 
   const safetyNotice = detectSafetyNotice(normalized);
   if (safetyNotice) {
     return createSafetyResult(safetyNotice, normalized);
+  }
+
+  if (isLikelyUnsupportedLanguage(normalized)) {
+    return createAbstentionResult([
+      'English-only screening in this Controlled Beta.',
+      'This message appears to use a language or script Clarity does not screen yet.',
+      'Clarity currently screens English text only. Paste an English translation or summary to screen patterns.'
+    ]);
   }
 
   const meaningfulWords = countMeaningfulWords(normalized);

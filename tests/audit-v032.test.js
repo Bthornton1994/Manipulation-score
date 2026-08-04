@@ -84,6 +84,20 @@ test('unsupported language abstains with explanation', () => {
   assert.match(result.abstentionReasons.join(' '), /English-only/i);
 });
 
+test('safety notice takes priority over English-only abstention', () => {
+  const singleBlock =
+    'Si realmente me amas ahora I will kill you tonight when you come home without asking permission first.';
+  const thread =
+    'Si realmente me amas, deja todo.\n\nI will kill you tonight when you come home.';
+
+  for (const text of [singleBlock, thread]) {
+    const result = analyzeMessage(text);
+    assert.ok(result.safetyNotice, `expected safety notice for: ${text.slice(0, 60)}…`);
+    assert.equal(result.abstained, false);
+    assert.equal(result.scoreSuppressed, true);
+  }
+});
+
 test('normalizeAnalysisText handles narrow no-break space', () => {
   const spaced =
     'If you really cared about me, you would regret ignoring me again and I need you to understand that clearly today.';

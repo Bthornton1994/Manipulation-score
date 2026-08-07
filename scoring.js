@@ -350,9 +350,6 @@ export function countMeaningfulWords(text) {
   return (text.match(/\b[a-zA-Z]{2,}\b/g) || []).length;
 }
 
-const SCORING_NEGATION =
-  /\b(?:never|not|no|cannot|can't|won't|would never|do not|don't|does not|doesn't|should not|shouldn't|wouldn't|am not|is not|are not|isn't|aren't|wasn't|weren't)\b/i;
-
 function getMatchContext(text, start, end, padding = 56) {
   const ctxStart = Math.max(0, start - padding);
   const ctxEnd = Math.min(text.length, end + padding);
@@ -361,8 +358,6 @@ function getMatchContext(text, start, end, padding = 56) {
 
 function isOffsetExcluded(signalId, text, offset) {
   const context = getMatchContext(text, offset.start, offset.end);
-  const immediateBefore = text.slice(Math.max(0, offset.start - 18), offset.start);
-  if (SCORING_NEGATION.test(immediateBefore)) return true;
 
   const guiltWindow = text.slice(Math.max(0, offset.start - 45), offset.end);
   if (

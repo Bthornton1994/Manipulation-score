@@ -71,6 +71,16 @@ test('negated selfish phrase does not score guilt', () => {
   }
 });
 
+test('coercive phrasing after not angry still scores urgency and threat', () => {
+  const text =
+    'I am not angry but you will regret this and if you do not answer right now I will leave forever and never speak to you.';
+  const result = analyzeMessage(text);
+  assert.ok(!result.abstained);
+  assert.ok(result.signals.some((s) => s.id === 'urgency'));
+  assert.ok(result.signals.some((s) => s.id === 'threat'));
+  assert.ok(result.score >= 61);
+});
+
 test('unsupported language abstains with explanation', () => {
   assert.ok(
     isLikelyUnsupportedLanguage(

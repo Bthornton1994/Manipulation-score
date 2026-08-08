@@ -359,16 +359,37 @@ function isNegatedForCandidate(clauseText, matchStart, matchText) {
   return false;
 }
 
-function isThirdPartyQuote(clauseText, matchStart, matchText) {
-  if (isFirstPersonThreatMatch(clauseText, matchStart, matchText)) return false;
+function hasOpenQuoteBefore(text, index) {
+  let doubleQuotes = 0;
+  let singleQuotes = 0;
+  for (let i = 0; i < index; i += 1) {
+    const ch = text[i];
+    if (ch === '"' && singleQuotes % 2 === 0) doubleQuotes += 1;
+    if (ch === "'" && doubleQuotes % 2 === 0) singleQuotes += 1;
+  }
+  return doubleQuotes % 2 === 1 || singleQuotes % 2 === 1;
+}
 
+function isRangeInsideQuote(text, start, end) {
+  return hasOpenQuoteBefore(text, start) && hasOpenQuoteBefore(text, end);
+}
+
+function isThirdPartyQuote(clauseText, matchStart, matchText) {
+  const matchEnd = matchStart + (matchText?.length || 0);
   const before = clauseText.slice(0, matchStart);
   const recent = before.slice(-120);
   const attributionMatch = recent.match(
     /(?:character|villain|actor|suspect|defendant|attacker|witness|police|they|he|she|someone|instructor|trainer|teacher|facilitator|coach)\s+said\b([\s\S]*)$/i
   );
-  if (attributionMatch && /["']/.test(attributionMatch[1])) return true;
-  if (REPORTED_QUOTE_ATTRIBUTION.test(recent) && /["']/.test(recent)) return true;
+  if (attributionMatch && /["']/.test(attributionMatch[1])) {
+    if (isRangeInsideQuote(clauseText, matchStart, matchEnd)) return true;
+  }
+  if (REPORTED_QUOTE_ATTRIBUTION.test(recent) && /["']/.test(recent)) {
+    if (isRangeInsideQuote(clauseText, matchStart, matchEnd)) return true;
+  }
+
+  if (isFirstPersonThreatMatch(clauseText, matchStart, matchText)) return false;
+
   return false;
 }
 
@@ -493,9 +514,38 @@ function isBenignSafetyContextForMatch(clauseText, match) {
 function isExcludedImmediateCandidate(clauseText, match) {
   if (isBenignSafetyContextForMatch(clauseText, match)) return true;
   if (isNegatedForCandidate(clauseText, match.start, match.text)) return true;
-  if (isAttributedClause(clauseText, match.start)) return true;
+  if (isAttributedClause(clauseText, match.start, match.text)) return true;
   if (isMedicalReassurance(clauseText, match.start, match.text)) return true;
   return false;
+}
+
+function locateFlexibleSpan(source, matchedText) {
+  if (!matchedText) return null;
+  const escaped = matchedText.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const flexible = escaped.replace(/\s+/g, '\\s+');
+  const re = new RegExp(flexible, 'i');
+  const match = re.exec(source);
+  if (!match) return null;
+  return { start: match.index, end: match.index + match[0].length };
+}
+
+function scanImmediateHarm(flatText) {
+  const sentences = splitSentences(flatText);
+
+  for (const sentence of sentences) {
+    const clauses = splitClauses(sentence.text);
+
+    for (const clause of clauses) {
+      const candidates = findRuleMatches(clause.text, IMMEDIATE_RULES);
+
+      for (const candidate of candidates) {
+        if (isExcludedImmediateCandidate(clause.text, candidate)) continue;
+        return { category: candidate.id, matchText: candidate.text };
+      }
+    }
+  }
+
+  return null;
 }
 
 function getExpandedContext(sentences, index) {
@@ -686,39 +736,40 @@ function detectContextualStalking(sentences, normalized) {
   return null;
 }
 
+function makeImmediateHarmNotice(category, matchText, sourceNormalized, blockOffset = 0) {
+  const span = locateFlexibleSpan(sourceNormalized.slice(blockOffset), matchText);
+  if (!span) {
+    return { ...SAFETY_NOTICE, category };
+  }
+
+  const globalStart = blockOffset + span.start;
+  const globalEnd = blockOffset + span.end;
+  return {
+    ...SAFETY_NOTICE,
+    category,
+    evidenceSpan: {
+      start: globalStart,
+      end: globalEnd,
+      text: sourceNormalized.slice(globalStart, globalEnd)
+    }
+  };
+}
+
 function detectSafetyInBlock(blockText, blockOffset, fullNormalized) {
   const normalized = normalizeForMatching(blockText);
   if (!normalized) return null;
 
-  const sentences = splitSentences(normalized);
-
-  for (const sentence of sentences) {
-    const clauses = splitClauses(sentence.text);
-
-    for (const clause of clauses) {
-      const candidates = findRuleMatches(clause.text, IMMEDIATE_RULES);
-
-      for (const candidate of candidates) {
-        if (isExcludedImmediateCandidate(clause.text, candidate)) continue;
-
-        const localStart = sentence.start + clause.start + candidate.start;
-        const localEnd = sentence.start + clause.start + candidate.end;
-        const globalStart = blockOffset + localStart;
-        const globalEnd = blockOffset + localEnd;
-
-        return {
-          ...SAFETY_NOTICE,
-          category: candidate.id,
-          evidenceSpan: {
-            start: globalStart,
-            end: globalEnd,
-            text: fullNormalized.slice(globalStart, globalEnd)
-          }
-        };
-      }
-    }
+  const immediate = scanImmediateHarm(normalized);
+  if (immediate) {
+    return makeImmediateHarmNotice(
+      immediate.category,
+      immediate.matchText,
+      fullNormalized,
+      blockOffset
+    );
   }
 
+  const sentences = splitSentences(normalized);
   const stalking = detectContextualStalking(sentences, normalized);
   if (!stalking) return null;
 
@@ -746,6 +797,16 @@ export function detectSafetyNotice(text) {
   if (!normalized) return null;
 
   const blocks = splitMessageBlocks(normalized);
+
+  // Blank-line splits must not fragment direct-violence patterns (e.g. "kill" / "you").
+  if (blocks.length > 1) {
+    const collapsed = normalizeForMatching(normalized);
+    const immediate = scanImmediateHarm(collapsed);
+    if (immediate) {
+      return makeImmediateHarmNotice(immediate.category, immediate.matchText, normalized);
+    }
+  }
+
   for (const block of blocks) {
     const notice = detectSafetyInBlock(block.text, block.start, normalized);
     if (notice) return notice;

@@ -331,29 +331,43 @@ function extractHarmVerb(matchText) {
   return verb ? verb[1].toLowerCase() : null;
 }
 
+function negationAppliesBeforeHarm(clauseText, matchStart, negationEnd) {
+  const between = clauseText.slice(negationEnd, matchStart);
+  const reassertion = /\b(?:i\s+will|i'll|i'?ll|i'?m\s+going\s+to)\b/gi;
+  let match;
+  while ((match = reassertion.exec(between)) !== null) {
+    const afterReassert = between.slice(match.index + match[0].length);
+    if (!new RegExp(`^\\s*(?:${NEGATION_WORD})\\b`, 'i').test(afterReassert)) {
+      return false;
+    }
+    return false;
+  }
+  return true;
+}
+
 function isNegatedForCandidate(clauseText, matchStart, matchText) {
   const harmVerb = extractHarmVerb(matchText);
   if (!harmVerb) return false;
 
   const prefix = clauseText.slice(0, matchStart);
   const escaped = harmVerb.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const candidatePhrase = clauseText.slice(matchStart, matchStart + matchText.length);
+  const suffix = clauseText.slice(matchStart, matchStart + matchText.length);
+  const maxGap = harmVerb === 'hurt' || harmVerb === 'harm' ? 12 : 8;
+  const harmTail =
+    harmVerb === 'hurt' || harmVerb === 'harm'
+      ? `(?:want\\s+to\\s+)?(?:hurt|harm)\\s+you\\b`
+      : `${escaped}\\b`;
 
-  const negatedVerb = new RegExp(
-    `\\b${NEGATION_WORD}(?:\\s+\\w+){0,8}\\s+${escaped}\\b`,
-    'i'
-  );
-  if (negatedVerb.test(prefix + candidatePhrase)) return true;
-
-  if (harmVerb === 'hurt' || harmVerb === 'harm') {
-    if (
-      new RegExp(
-        `\\b${NEGATION_WORD}(?:\\s+\\w+){0,12}\\b(?:want\\s+to\\s+)?(?:hurt|harm)\\s+you\\b`,
-        'i'
-      ).test(prefix + candidatePhrase)
-    ) {
-      return true;
-    }
+  const negationWords = new RegExp(`\\b(${NEGATION_WORD})\\b`, 'gi');
+  let negMatch;
+  while ((negMatch = negationWords.exec(prefix)) !== null) {
+    const negationEnd = negMatch.index + negMatch[1].length;
+    const between = clauseText.slice(negationEnd, matchStart);
+    const gapWords = (between.match(/\b\w+\b/g) || []).length;
+    if (gapWords > maxGap) continue;
+    const span = `${between}${suffix}`;
+    if (!new RegExp(`^${harmTail}$`, 'i').test(span.trim())) continue;
+    if (negationAppliesBeforeHarm(clauseText, matchStart, negationEnd)) return true;
   }
 
   return false;

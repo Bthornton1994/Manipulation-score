@@ -17,11 +17,11 @@ const IMMEDIATE_RULES = [
   {
     id: 'direct_violence',
     pattern:
-      /\b(?:i'?m|i am|im)\s+going\s+to\s+(?:kill|hurt|harm|shoot|stab|murder)\s+you\b/gi
+      /\b(?:i'?m|i am|im)\s+going\s+to\s+(?:kill|hurt|harm|shoot|stab|murder|beat|choke)\s+you\b/gi
   },
   {
     id: 'direct_violence',
-    pattern: /\b(?:i will|i'll)\s+(?:kill|hurt|harm|shoot|stab|murder)\s+you\b/gi
+    pattern: /\b(?:i will|i'll)\s+(?:kill|hurt|harm|shoot|stab|murder|beat|choke)\s+you\b/gi
   },
   {
     id: 'direct_violence',
@@ -327,7 +327,7 @@ function findStalkingBehaviors(text) {
 }
 
 function extractHarmVerb(matchText) {
-  const verb = matchText.match(/\b(kill|hurt|harm|murder|shoot|stab)\b/i);
+  const verb = matchText.match(/\b(kill|hurt|harm|murder|shoot|stab|beat|choke)\b/i);
   return verb ? verb[1].toLowerCase() : null;
 }
 
@@ -387,7 +387,7 @@ function isInstructionalQuote(clauseText, matchStart) {
     TRAINING_EXAMPLE_PHRASE.test(clauseText)
   ) {
     const firstPersonBefore =
-      /\b(?:i'?m|i am|i will|i'?ll)\s+(?:going\s+to|will)\s+(?:kill|hurt|harm|shoot|stab)/i.test(
+      /\b(?:i'?m|i am|i will|i'?ll)\s+(?:going\s+to|will)\s+(?:kill|hurt|harm|shoot|stab|beat|choke)/i.test(
         clauseText.slice(0, matchStart)
       );
     if (!firstPersonBefore) return true;
@@ -399,7 +399,7 @@ function isInstructionalQuote(clauseText, matchStart) {
 function isTrainingOnlyClause(clauseText) {
   if (!TRAINING_SEGMENT.test(clauseText)) return false;
   const firstPersonThreat =
-    /\b(?:i'?m|i am|i will|i'?ll)\s+(?:going\s+to|will)\s+(?:kill|hurt|harm|shoot|stab|murder)\s+you\b/i.test(
+    /\b(?:i'?m|i am|i will|i'?ll)\s+(?:going\s+to|will)\s+(?:kill|hurt|harm|shoot|stab|murder|beat|choke)\s+you\b/i.test(
       clauseText
     );
   return !firstPersonThreat;
@@ -443,7 +443,7 @@ function isFirstPersonThreatMatch(clauseText, matchStart, matchText) {
   if (/\b(?:i\s+will|i'll|i'?ll)\b/i.test(local)) return true;
   if (/\b(?:i'?m|i am)\s+going\s+to\b/i.test(local)) return true;
   const window = clauseText.slice(Math.max(0, matchStart - 8), matchStart + matchText.length);
-  return /\b(?:i\s+will|i'll|i'?ll|i'?m|i am)\s+(?:going\s+to\s+)?(?:kill|hurt|harm|shoot|stab|murder)\b/i.test(
+  return /\b(?:i\s+will|i'll|i'?ll|i'?m|i am)\s+(?:going\s+to\s+)?(?:kill|hurt|harm|shoot|stab|murder|beat|choke)\b/i.test(
     window
   );
 }

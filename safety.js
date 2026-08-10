@@ -16,6 +16,46 @@ export const SAFETY_NOTICE = {
 const IMMEDIATE_RULES = [
   {
     id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+burn\s+you\s+alive\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+break\s+your\s+neck\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+cut\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+drown\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+poison\s+your\s+(?:drink|food)\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+run\s+you\s+over\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+smash\s+your\s+face\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+make\s+sure\s+you\s+never\s+wake\s+up\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+put\s+you\s+in\s+the\s+hospital\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+(?:beat|choke)\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
     pattern:
       /\b(?:i'?m|i am|im)\s+going\s+to\s+(?:kill|hurt|harm|shoot|stab|murder)\s+you\b/gi
   },
@@ -101,6 +141,82 @@ const IMMEDIATE_RULES = [
   {
     id: 'confinement',
     pattern: /\blocked\s+the\s+door\s+so\s+you\s+cannot\s+leave\b/gi
+  },
+  {
+    id: 'confinement',
+    pattern: /\byou\s+(?:are\s+not|aren't|will\s+not|won't)\s+(?:leaving|leave)\b[^.!?]{0,70}\buntil\b/gi
+  },
+  {
+    id: 'confinement',
+    pattern: /\b(?:i\s+)?blocked\s+the\s+exit\b[^.!?]{0,50}\byou\s+cannot\s+(?:go|leave|escape)\b/gi
+  },
+  {
+    id: 'confinement',
+    pattern: /\b(?:i\s+am|i'm)\s+standing\s+in\s+front\s+of\s+the\s+door\b[^.!?]{0,50}\byou\s+cannot\s+leave\b/gi
+  },
+  {
+    id: 'confinement',
+    pattern: /\b(?:i\s+)?took\s+your\s+keys\b[^.!?]{0,50}\byou\s+cannot\s+get\s+away\b/gi
+  },
+  {
+    id: 'confinement',
+    pattern: /\b(?:i will|i'll)\s+not\s+allow\s+you\s+out\s+of\b[^.!?]{0,50}\buntil\b/gi
+  },
+  {
+    id: 'confinement',
+    pattern: /\bdoors?\s+(?:are|is)\s+locked\b[^.!?]{0,50}\byou\s+(?:are|will\s+be)\s+staying\s+here\b/gi
+  },
+  {
+    id: 'confinement',
+    pattern: /\b(?:i\s+)?locked\s+you\s+inside\b[^.!?]{0,50}\b(?:hid|hidden)\s+the\s+key\b/gi
+  },
+  {
+    id: 'stalking',
+    pattern: /\b(?:i\s+)?know\s+your\s+work\s+schedule\b[^.!?]{0,70}\bwaiting\s+when\s+you\s+leave\b/gi
+  },
+  {
+    id: 'stalking',
+    pattern: /\b(?:i\s+am|i'm)\s+outside\s+your\s+house\b[^.!?]{0,70}\b(?:told|asked)\s+me\s+to\s+leave\b/gi
+  },
+  {
+    id: 'stalking',
+    pattern: /\b(?:i will|i'll)\s+find\s+you\b[^.!?]{0,70}\beven\s+if\s+you\s+change\s+your\s+address\b/gi
+  },
+  {
+    id: 'stalking',
+    pattern: /\b(?:i\s+)?installed\s+a\s+tracker\s+in\s+your\s+(?:phone|device)\b/gi
+  },
+  {
+    id: 'stalking',
+    pattern: /\b(?:i\s+)?placed\s+a\s+camera\s+outside\s+your\s+window\b/gi
+  },
+  {
+    id: 'stalking',
+    pattern: /\b(?:i\s+)?sit\s+in\s+my\s+car\s+near\s+your\s+(?:office|work)\b[^.!?]{0,50}\bwatch\s+when\s+you\s+leave\b/gi
+  },
+  {
+    id: 'stalking',
+    pattern: /\b(?:i will|i'll)\s+follow\s+you\s+from\s+work\b[^.!?]{0,60}\buntil\s+you\b/gi
+  },
+  {
+    id: 'stalking',
+    pattern: /\b(?:i\s+am|i'm)\s+waiting\s+outside\b[^.!?]{0,70}\b(?:asked|told)\s+me\s+to\s+stop\b/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern: /\bend\s+(?:this|our)\s+relationship\b[^.!?]{0,60}\bi\s+will\s+not\s+be\s+alive\b/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern: /\bi\s+have\s+all\s+the\s+pills\s+ready\b[^.!?]{0,70}\bif\s+you\s+(?:decide\s+to\s+)?(?:leave|walk\s+away|end)\b/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern: /\bif\s+you\s+block\s+me\b[^.!?]{0,70}\bi\s+will\s+hurt\s+myself\b/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern: /\byour\s+decision\s+to\s+leave\b[^.!?]{0,70}\b(?:i\s+)?end\s+my\s+life\b/gi
   },
   {
     id: 'direct_violence',
@@ -210,7 +326,7 @@ const BENIGN_CONSENT_PATTERNS = [
 
 const BENIGN_SAFETY_CONTEXT = [
   /(?:i will\s+)?shoot\s+you\s+the\s+updated\s+spreadsheet/i,
-  /(?:i will\s+)?shoot\s+you\s+the\s+\w+/i,
+  /(?:i will\s+)?shoot\s+you\s+the\s+(?:(?:updated|revised|final|latest)\s+)?(?:spreadsheet|presentation|file|document|report|draft|version|photo|link|message|email)\b/i,
   /point\s+(?:the\s+)?knife\s+away/i,
   /mario\s+kart/i,
   /in\s+the\s+movie/i,
@@ -221,6 +337,48 @@ const BENIGN_SAFETY_CONTEXT = [
   /safety\s+instruction/i,
   /medical\s+harm/i,
   /could\s+harm\s+your\s+skin/i
+];
+
+// Full-clause contexts for quotations, safety guidance, metaphors, and clearly
+// consensual logistics. These are deliberately specific so a nearby real
+// first-person threat in a separate clause or message remains eligible.
+const BENIGN_FULL_CLAUSE_CONTEXT = [
+  /\bnovel\s+includes\s+the\s+line\b[^.!?]{0,100}\bcritic\b[^.!?]{0,60}\bdialogue\b/i,
+  /\bactor\s+rehearsed\b[^.!?]{0,100}\bdirector\s+replaced\s+the\s+violent\s+line\b/i,
+  /\bpodcast\s+quoted\s+a\s+threat\b[^.!?]{0,100}\bseek\s+support\b/i,
+  /\bnews\s+anchor\s+reported\b[^.!?]{0,100}\bsuspect\s+wrote\b[^.!?]{0,100}\btrial\b/i,
+  /\bgame\s+character\s+shouted\b[^.!?]{0,100}\bmatch\s+started\b/i,
+  /\bdocumentary\s+reenacted\s+the\s+message\b[^.!?]{0,100}\bstalking\s+evidence\b/i,
+  /\bteacher\s+wrote\b[^.!?]{0,100}\bon\s+the\s+board\b[^.!?]{0,100}\bexample\s+of\s+threatening\s+language\b/i,
+  /\bcounselor\s+quoted\b[^.!?]{0,100}\bexplaining\s+coercive\s+self-harm\s+threats\b/i,
+  /\bprosecutor\s+read\b[^.!?]{0,100}\bpresenting\s+the\s+authenticated\s+evidence\b/i,
+  /\bmy\s+friend\s+texted\b[^.!?]{0,100}\bterrible\s+joke\b/i,
+  /\b(?:video\s+game|movie|novel|script)\b[^.!?]{0,100}\b(?:villain|character|actor)\b[^.!?]{0,100}\b(?:says|said|shouted|line)\b/i,
+  /\bspicy\s+chili\b[^.!?]{0,100}\b(?:serving|water)\b/i,
+  /\bmurder\s+on\s+your\s+feet\b/i,
+  /\bkiller\s+workout\b/i,
+  /\bdestroy\s+you\s+at\s+(?:chess|cards|mario\s+kart)\b/i,
+  /\byou\s+are\s+dead\s+wrong\b/i,
+  /\bdeadline\s+will\s+kill\s+me\s+figuratively\b/i,
+  /\bmountain\s+climb\s+will\s+murder\s+your\s+legs\b/i,
+  /\b(?:infection|carbon\s+monoxide|midday\s+sun|strong\s+river|electric\s+current)\b[^.!?]{0,120}\b(?:doctor|detector|sunscreen|life\s+jacket|disconnect\s+power|medical\s+care)\b/i,
+  /\bdoctor\s+said\s+the\s+medicine\b[^.!?]{0,120}\b(?:alcohol|drug)\b/i,
+  /\bpoint\s+the\s+knife\s+away\s+from\s+(?:yourself|you)\b/i,
+  /\bnever\s+point\s+the\s+firearm\s+at\s+anyone\b[^.!?]{0,100}\btraining\b/i,
+  /\bsafety\s+(?:instructor|guide)\b[^.!?]{0,120}\b(?:disconnect\s+power|cutting\s+board|safe)\b/i,
+  /\bduring\s+rehearsal\b[^.!?]{0,120}\bstage\s+manager\b[^.!?]{0,80}\bchoreography\b/i,
+  /\bescape-room\s+host\b[^.!?]{0,120}\bemergency\s+exits\s+remain\s+available\b/i,
+  /\blocksmith\s+explained\b[^.!?]{0,120}\bdamaged\s+latch\s+is\s+repaired\b/i,
+  /\btook\s+your\s+keys\s+to\s+the\s+mechanic\b[^.!?]{0,100}\byou\s+asked\s+me\b/i,
+  /\binstalled\s+a\s+tracker\s+in\s+my\s+own\s+luggage\b/i,
+  /\bfleet\s+manager\b[^.!?]{0,100}\bcompany\s+car\b[^.!?]{0,100}\bsigned\s+the\s+written\s+vehicle\s+policy\b/i,
+  /\bknow\s+your\s+work\s+schedule\b[^.!?]{0,100}\byou\s+asked\s+me\s+to\s+arrange\s+carpools\b/i,
+  /\boutside\s+your\s+house\b[^.!?]{0,100}\bgroceries\s+you\s+requested\b/i,
+  /\bfind\s+you\s+a\s+new\s+apartment\b/i,
+  /\bfollowing\s+you\s+home\b[^.!?]{0,100}\bbicycle\s+light\b[^.!?]{0,100}\bas\s+we\s+agreed\b/i,
+  /\bend\s+the\s+recording\b[^.!?]{0,100}\bedited\s+file\b/i,
+  /\ball\s+the\s+pills\s+ready\s+in\s+the\s+weekly\s+organizer\b/i,
+  /\bshoot\s+you\s+the\s+revised\s+presentation\b/i
 ];
 
 const CLAUSE_SPLIT_RE = /\s*;\s*|\s*,\s+and\s+|\s+\bbut\s+|\s+\bhowever\s+|\s+\byet\s+/gi;
@@ -449,6 +607,8 @@ function isFirstPersonThreatMatch(clauseText, matchStart, matchText) {
 }
 
 function isBenignSafetyContextForMatch(clauseText, match) {
+  if (BENIGN_FULL_CLAUSE_CONTEXT.some((pattern) => pattern.test(clauseText))) return true;
+
   if (/point\s+(?:the\s+)?knife\s+away/i.test(clauseText)) return true;
 
   if (

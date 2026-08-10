@@ -40,7 +40,7 @@
 .text-btn{background:none;border:none;padding:4px 2px;min-height:32px;font:600 11px Manrope;color:var(--muted);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 .text-btn:hover{color:var(--ink)}
 .text-btn:focus-visible{outline:2px solid var(--teal);outline-offset:2px;border-radius:2px}
-.image-remove-btn[hidden],.clear-btn[hidden]{display:none!important}
+.image-attach-btn[hidden],.image-remove-btn[hidden],.clear-btn[hidden]{display:none!important}
 .input-panel .input-meta{margin:8px 0 16px}
 .image-upload-note{font-size:10px;color:var(--muted);margin:10px 0 0;line-height:1.45}
 .example-row{margin-top:4px;margin-bottom:12px}

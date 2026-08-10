@@ -546,7 +546,7 @@ function renderEmptyState() {
     <div class="empty-state">
       <div class="radar"><span></span></div>
       <h3>Your analysis will appear here</h3>
-      <p>Score, highlighted phrases, plain-language explanations, and calm response options.</p>
+      <p>Pattern band, highlighted phrases, plain-language explanations, and calm response options.</p>
     </div>`;
 }
 
@@ -594,7 +594,10 @@ function saveHistory(text, analysis) {
       id: Date.now(),
       text: trimmed.slice(0, 2500),
       preview: trimmed.slice(0, 100),
-      score: analysis.scoreSuppressed || analysis.abstained ? null : analysis.score,
+      score:
+        PILOT_SUPPRESS_NUMERIC_SCORE || analysis.scoreSuppressed || analysis.abstained
+          ? null
+          : analysis.score,
       level: analysis.level || (analysis.abstained ? 'Abstained' : analysis.safetyNotice ? 'Safety' : null),
       timestamp: Date.now()
     });
@@ -669,10 +672,16 @@ function renderHistory() {
     button.type = 'button';
     const scoreLabel = item.score == null ? '—' : String(item.score);
     button.append(
-      element('span', 'history-score', scoreLabel),
-      element('span', 'history-preview', item.preview),
-      element('span', 'history-meta', item.level || '')
+      element(
+        'span',
+        'history-score',
+        PILOT_SUPPRESS_NUMERIC_SCORE ? item.level || 'Band' : scoreLabel
+      ),
+      element('span', 'history-preview', item.preview)
     );
+    if (!PILOT_SUPPRESS_NUMERIC_SCORE) {
+      button.append(element('span', 'history-meta', item.level || ''));
+    }
     button.addEventListener('click', () => {
       setMessageValue(item.text || item.preview, { invalidate: false });
       renderAnalysis(analyzeMessage(message.value), message.value);

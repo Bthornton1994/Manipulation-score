@@ -607,7 +607,20 @@ function isFirstPersonThreatMatch(clauseText, matchStart, matchText) {
 }
 
 function isBenignSafetyContextForMatch(clauseText, match) {
-  if (BENIGN_FULL_CLAUSE_CONTEXT.some((pattern) => pattern.test(clauseText))) return true;
+  // Only suppress when the candidate itself sits inside a benign framing span.
+  // A co-occurring idiom elsewhere in the same clause must not hide a real threat
+  // (e.g. "you are dead wrong and I will kill you").
+  for (const pattern of BENIGN_FULL_CLAUSE_CONTEXT) {
+    const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
+    const re = new RegExp(pattern.source, flags);
+    let phraseMatch;
+    while ((phraseMatch = re.exec(clauseText)) !== null) {
+      const phraseStart = phraseMatch.index;
+      const phraseEnd = phraseMatch.index + phraseMatch[0].length;
+      if (match.start >= phraseStart && match.end <= phraseEnd) return true;
+      if (phraseMatch[0].length === 0) re.lastIndex += 1;
+    }
+  }
 
   if (/point\s+(?:the\s+)?knife\s+away/i.test(clauseText)) return true;
 

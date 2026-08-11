@@ -846,11 +846,52 @@ function detectContextualStalking(sentences, normalized) {
   return null;
 }
 
+const CROSS_SENTENCE_WEAPON_RE = /\b(?:gun|knife|weapon|pistol|rifle|machete)\b/gi;
+const CROSS_SENTENCE_WEAPON_WINDOW = 120;
+
+function detectCrossSentenceWeaponThreat(normalized) {
+  CROSS_SENTENCE_WEAPON_RE.lastIndex = 0;
+  let match;
+
+  while ((match = CROSS_SENTENCE_WEAPON_RE.exec(normalized)) !== null) {
+    const window = normalized.slice(match.index, match.index + CROSS_SENTENCE_WEAPON_WINDOW);
+    if (!/\byou\b/i.test(window)) continue;
+
+    const candidate = {
+      id: 'weapon_threat',
+      start: match.index,
+      end: match.index + match[0].length,
+      text: match[0]
+    };
+
+    if (isExcludedImmediateCandidate(normalized, candidate)) continue;
+
+    return candidate;
+  }
+
+  return null;
+}
+
 function detectSafetyInBlock(blockText, blockOffset, fullNormalized) {
   const normalized = normalizeForMatching(blockText);
   if (!normalized) return null;
 
   const sentences = splitSentences(normalized);
+
+  const crossSentenceWeapon = detectCrossSentenceWeaponThreat(normalized);
+  if (crossSentenceWeapon) {
+    const globalStart = blockOffset + crossSentenceWeapon.start;
+    const globalEnd = blockOffset + crossSentenceWeapon.end;
+    return {
+      ...SAFETY_NOTICE,
+      category: crossSentenceWeapon.id,
+      evidenceSpan: {
+        start: globalStart,
+        end: globalEnd,
+        text: fullNormalized.slice(globalStart, globalEnd)
+      }
+    };
+  }
 
   for (const sentence of sentences) {
     const clauses = splitClauses(sentence.text);

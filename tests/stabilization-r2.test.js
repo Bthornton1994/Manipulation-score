@@ -9,6 +9,7 @@ test('service worker uses network-first for safety-critical assets', async () =>
   assert.match(worker, /app\.js/);
   assert.match(worker, /scoring\.js/);
   assert.match(worker, /safety\.js/);
+  assert.match(worker, /text-normalize\.js/);
   assert.match(worker, /index\.html/);
   assert.match(worker, /cacheFirst/);
 });

@@ -16,39 +16,48 @@ export const SAFETY_NOTICE = {
 const IMMEDIATE_RULES = [
   {
     id: 'direct_violence',
-    pattern: /\b(?:i will|i'll)\s+burn\s+you\s+alive\b/gi
+    pattern:
+      /\b(?:(?:i will|i'll)|(?:i'?m|i am)\s+going\s+to)\s+burn\s+you\s+alive\b/gi
   },
   {
     id: 'direct_violence',
-    pattern: /\b(?:i will|i'll)\s+break\s+your\s+neck\b/gi
+    pattern:
+      /\b(?:(?:i will|i'll)|(?:i'?m|i am)\s+going\s+to)\s+break\s+your\s+neck\b/gi
   },
   {
     id: 'direct_violence',
-    pattern: /\b(?:i will|i'll)\s+cut\s+you\b/gi
+    pattern:
+      /\b(?:(?:i will|i'll)|(?:i'?m|i am)\s+going\s+to)\s+cut\s+you\b/gi
   },
   {
     id: 'direct_violence',
-    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+drown\s+you\b/gi
+    pattern:
+      /\b(?:(?:i will|i'll)|(?:i'?m|i am)\s+going\s+to)\s+drown\s+you\b/gi
   },
   {
     id: 'direct_violence',
-    pattern: /\b(?:i will|i'll)\s+poison\s+your\s+(?:drink|food)\b/gi
+    pattern:
+      /\b(?:(?:i will|i'll)|(?:i'?m|i am)\s+going\s+to)\s+poison\s+your\s+(?:drink|food)\b/gi
   },
   {
     id: 'direct_violence',
-    pattern: /\b(?:i will|i'll)\s+run\s+you\s+over\b/gi
+    pattern:
+      /\b(?:(?:i will|i'll)|(?:i'?m|i am)\s+going\s+to)\s+run\s+you\s+over\b/gi
   },
   {
     id: 'direct_violence',
-    pattern: /\b(?:i will|i'll)\s+smash\s+your\s+face\b/gi
+    pattern:
+      /\b(?:(?:i will|i'll)|(?:i'?m|i am)\s+going\s+to)\s+smash\s+your\s+face\b/gi
   },
   {
     id: 'direct_violence',
-    pattern: /\b(?:i will|i'll)\s+make\s+sure\s+you\s+never\s+wake\s+up\b/gi
+    pattern:
+      /\b(?:(?:i will|i'll)|(?:i'?m|i am)\s+going\s+to)\s+make\s+sure\s+you\s+never\s+wake\s+up\b/gi
   },
   {
     id: 'direct_violence',
-    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+put\s+you\s+in\s+the\s+hospital\b/gi
+    pattern:
+      /\b(?:(?:i will|i'll)|(?:i'?m|i am)\s+going\s+to)\s+put\s+you\s+in\s+the\s+hospital\b/gi
   },
   {
     id: 'direct_violence',

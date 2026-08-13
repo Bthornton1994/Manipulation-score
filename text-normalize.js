@@ -5,12 +5,21 @@ const FORMAT_CHARS = /[\u200B-\u200D\uFEFF]/g;
 
 /**
  * Normalize text for scoring and safety matching while preserving paragraph breaks.
+ *
+ * formatMode:
+ * - 'strip' (default): remove zero-width/format chars and soft hyphens. Preserves
+ *   mid-word evasion repair (k\u200Bill → kill) but can glue tokens when those
+ *   chars sit on a word boundary (kill\u200Byou → killyou).
+ * - 'space': treat those chars as spaces so between-word invisible separators
+ *   remain token boundaries for safety matching.
  */
-export function normalizeAnalysisText(text) {
+export function normalizeAnalysisText(text, { formatMode = 'strip' } = {}) {
+  const formatReplacement = formatMode === 'space' ? ' ' : '';
+  const softHyphenReplacement = formatMode === 'space' ? ' ' : '';
   return (text || '')
     .normalize('NFKC')
-    .replace(FORMAT_CHARS, '')
-    .replace(/\u00AD/g, '')
+    .replace(FORMAT_CHARS, formatReplacement)
+    .replace(/\u00AD/g, softHyphenReplacement)
     .replace(SMART_APOSTROPHE, "'")
     .replace(SMART_QUOTE, '"')
     .replace(UNICODE_SPACES, ' ')
@@ -19,8 +28,8 @@ export function normalizeAnalysisText(text) {
     .trim();
 }
 
-export function normalizeForMatching(text) {
-  return normalizeAnalysisText(text).replace(/\n+/g, ' ');
+export function normalizeForMatching(text, options) {
+  return normalizeAnalysisText(text, options).replace(/\n+/g, ' ');
 }
 
 /**

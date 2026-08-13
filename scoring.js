@@ -801,6 +801,23 @@ export function analyzeMessage(text) {
     ]);
   }
 
+  // Run safety on the original string so format-char dual-path (strip vs space)
+  // still sees zero-width separators. Pre-normalized text would already glue
+  // kill\u200Byou → killyou and permanently hide the between-word form.
+  const safetyNotice = detectSafetyNotice(text);
+  if (safetyNotice) {
+    const segments = splitMessages(normalized);
+    if (segments.length > 1) {
+      const segmentAnalyses = segments.map((segment, index) => ({
+        index: index + 1,
+        text: segment,
+        analysis: analyzeSegment(segment)
+      }));
+      return { ...createSafetyResult(safetyNotice, normalized), segments: segmentAnalyses };
+    }
+    return createSafetyResult(safetyNotice, normalized);
+  }
+
   const segments = splitMessages(normalized);
   if (segments.length > 1) {
     const segmentAnalyses = segments.map((segment, index) => ({
@@ -809,11 +826,6 @@ export function analyzeMessage(text) {
       analysis: analyzeSegment(segment)
     }));
     return buildThreadResult(normalized, segmentAnalyses);
-  }
-
-  const safetyNotice = detectSafetyNotice(normalized);
-  if (safetyNotice) {
-    return createSafetyResult(safetyNotice, normalized);
   }
 
   const meaningfulWords = countMeaningfulWords(normalized);

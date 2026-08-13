@@ -898,11 +898,7 @@ function detectSafetyInBlock(blockText, blockOffset, fullNormalized) {
   return stalking;
 }
 
-/**
- * @returns {typeof SAFETY_NOTICE & { category?: string, evidenceSpan?: { start: number, end: number, text: string } } | null}
- */
-export function detectSafetyNotice(text) {
-  const normalized = normalizeAnalysisText(text);
+function detectSafetyNoticeOnNormalized(normalized) {
   if (!normalized) return null;
 
   const blocks = splitMessageBlocks(normalized);
@@ -912,4 +908,20 @@ export function detectSafetyNotice(text) {
   }
 
   return null;
+}
+
+/**
+ * @returns {typeof SAFETY_NOTICE & { category?: string, evidenceSpan?: { start: number, end: number, text: string } } | null}
+ */
+export function detectSafetyNotice(text) {
+  // Strip mode first: repairs mid-word zero-width insertions (k\u200Bill → kill).
+  const stripped = normalizeAnalysisText(text);
+  const strippedNotice = detectSafetyNoticeOnNormalized(stripped);
+  if (strippedNotice) return strippedNotice;
+
+  // Space mode: keeps between-word format/soft-hyphen separators as token
+  // boundaries (kill\u200Byou → kill you). Skip when identical to strip mode.
+  const spaced = normalizeAnalysisText(text, { formatMode: 'space' });
+  if (!spaced || spaced === stripped) return null;
+  return detectSafetyNoticeOnNormalized(spaced);
 }

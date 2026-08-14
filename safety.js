@@ -86,16 +86,18 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'self_harm_coercion',
-    pattern: /(?:kill|hurt)\s+myself\s+if\s+you/gi
-  },
-  {
-    id: 'self_harm_coercion',
-    pattern: /\bif\s+you\s+leave\b[^.!?]{0,60}\b(?:kill|hurt)\s+myself/gi
+    pattern:
+      /(?:(?:kill|hurt)\s+myself|end\s+my\s+life|commit\s+suicide)\s+if\s+you/gi
   },
   {
     id: 'self_harm_coercion',
     pattern:
-      /(?:kill myself|hurt myself|end my life).{0,50}(?:your fault|because of you|you made me|if you leave)/gi
+      /\bif\s+you\s+(?:leave|break\s+up|dump|abandon|divorce)\b[^.!?]{0,80}\b(?:(?:kill|hurt)\s+myself|end\s+my\s+life|commit\s+suicide)\b/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern:
+      /(?:kill myself|hurt myself|end my life|commit suicide).{0,50}(?:your fault|because of you|you made me|if you (?:leave|break\s+up|dump|abandon|divorce))/gi
   },
   {
     id: 'self_harm_coercion',

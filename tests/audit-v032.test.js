@@ -92,3 +92,24 @@ test('normalizeAnalysisText handles narrow no-break space', () => {
   const result = analyzeMessage(spaced.replace('would regret', 'would\u202Fregret'));
   assert.ok(result.score >= 31 || result.safetyNotice);
 });
+
+test('passive trapped-here confinement phrasing triggers safety notice', () => {
+  const cases = [
+    'You are trapped here and cannot escape from me tonight.',
+    'You are trapped in here and cannot get out until morning.',
+    'I have you trapped here and you cannot leave until you apologize.'
+  ];
+  for (const text of cases) {
+    assert.ok(detectSafetyNotice(text), `expected safety notice for: ${text}`);
+    const result = analyzeMessage(text);
+    assert.ok(result.safetyNotice, `expected analysis safety notice for: ${text}`);
+  }
+});
+
+test('escape-room trapped phrasing stays benign', () => {
+  const text =
+    'The escape-room host said you are trapped here until the puzzle is solved and emergency exits remain available.';
+  assert.equal(detectSafetyNotice(text), null);
+  const result = analyzeMessage(text);
+  assert.ok(!result.safetyNotice);
+});

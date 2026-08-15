@@ -50,6 +50,23 @@ test('cross-message threat is not suppressed by prior benign message', () => {
   assert.ok(notice, 'expected safety notice in second message block');
 });
 
+test('benign logistics clause does not suppress co-located first-person threat', () => {
+  const cases = [
+    'I know your work schedule because you asked me to arrange carpools and I will kill you if you tell anyone.',
+    'I am outside your house with the groceries you requested and I will stab you when you open the door.',
+    'I took your keys to the mechanic like you asked me and I locked you inside and hid the key.'
+  ];
+  for (const text of cases) {
+    assert.ok(detectSafetyNotice(text), text);
+  }
+});
+
+test('benign logistics-only clause still skips safety notice', () => {
+  const text =
+    'I know your work schedule because you asked me to arrange carpools for next week and I will not visit unless you invite me.';
+  assert.equal(detectSafetyNotice(text), null);
+});
+
 test('zero-width character inside kill still triggers safety', () => {
   const text = 'I will k\u200Bill you tonight after everyone leaves the house.';
   assert.ok(detectSafetyNotice(text));

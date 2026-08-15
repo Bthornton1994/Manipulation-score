@@ -52,7 +52,19 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'direct_violence',
-    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+(?:beat|choke)\s+you\b/gi
+    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+(?:beat|choke|strangle)\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+strangle\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+slit\s+your\s+throat\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+slit\s+your\s+throat\b/gi
   },
   {
     id: 'direct_violence',
@@ -225,6 +237,10 @@ const IMMEDIATE_RULES = [
   {
     id: 'direct_violence',
     pattern: /\bwill\s+choke\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\bwill\s+strangle\s+you\b/gi
   },
   {
     id: 'direct_violence',

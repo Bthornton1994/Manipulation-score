@@ -606,8 +606,24 @@ function isFirstPersonThreatMatch(clauseText, matchStart, matchText) {
   );
 }
 
+function isBenignPhraseMatchForCandidate(clauseText, match, patterns) {
+  for (const pattern of patterns) {
+    const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
+    const re = new RegExp(pattern.source, flags);
+    let phraseMatch;
+    while ((phraseMatch = re.exec(clauseText)) !== null) {
+      if (isNegatedBenignPhrase(clauseText, phraseMatch.index)) continue;
+
+      const phraseStart = phraseMatch.index;
+      const phraseEnd = phraseMatch.index + phraseMatch[0].length;
+      if (match.start >= phraseStart && match.end <= phraseEnd) return true;
+    }
+  }
+  return false;
+}
+
 function isBenignSafetyContextForMatch(clauseText, match) {
-  if (BENIGN_FULL_CLAUSE_CONTEXT.some((pattern) => pattern.test(clauseText))) return true;
+  if (isBenignPhraseMatchForCandidate(clauseText, match, BENIGN_FULL_CLAUSE_CONTEXT)) return true;
 
   if (/point\s+(?:the\s+)?knife\s+away/i.test(clauseText)) return true;
 
@@ -627,26 +643,8 @@ function isBenignSafetyContextForMatch(clauseText, match) {
     return true;
   }
 
-  for (const pattern of BENIGN_SAFETY_CONTEXT) {
-    const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
-    const re = new RegExp(pattern.source, flags);
-    let phraseMatch;
-    while ((phraseMatch = re.exec(clauseText)) !== null) {
-      if (isNegatedBenignPhrase(clauseText, phraseMatch.index)) continue;
+  if (isBenignPhraseMatchForCandidate(clauseText, match, BENIGN_SAFETY_CONTEXT)) return true;
 
-      const phraseStart = phraseMatch.index;
-      const phraseEnd = phraseMatch.index + phraseMatch[0].length;
-
-      if (match.start >= phraseStart && match.end <= phraseEnd) return true;
-      if (
-        phraseStart === match.start &&
-        phraseEnd > match.end &&
-        /(?:shoot|stab)\s+you\s+the\b/i.test(phraseMatch[0])
-      ) {
-        return true;
-      }
-    }
-  }
   return false;
 }
 

@@ -56,6 +56,18 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+rape\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+rape\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\bwill\s+rape\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
     pattern:
       /\b(?:i'?m|i am|im)\s+going\s+to\s+(?:kill|hurt|harm|shoot|stab|murder)\s+you\b/gi
   },
@@ -485,7 +497,7 @@ function findStalkingBehaviors(text) {
 }
 
 function extractHarmVerb(matchText) {
-  const verb = matchText.match(/\b(kill|hurt|harm|murder|shoot|stab)\b/i);
+  const verb = matchText.match(/\b(kill|hurt|harm|murder|shoot|stab|rape)\b/i);
   return verb ? verb[1].toLowerCase() : null;
 }
 

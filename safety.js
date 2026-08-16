@@ -846,11 +846,79 @@ function detectContextualStalking(sentences, normalized) {
   return null;
 }
 
+const CROSS_SENTENCE_SELF_HARM_WINDOW = 120;
+
+const CROSS_SENTENCE_SELF_HARM_PATTERNS = [
+  {
+    id: 'self_harm_coercion',
+    pattern:
+      /(?:your fault|because of you|you made me).{0,120}(?:kill myself|hurt myself|end my life|commit suicide)/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern:
+      /(?:kill myself|hurt myself|end my life|commit suicide).{0,120}(?:your fault|because of you|you made me)/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern:
+      /(?:if you (?:leave|break up|dump|abandon|divorce)|break up with me|end (?:this|our) relationship|end things with me).{0,120}(?:kill myself|hurt myself|end my life|commit suicide|take all these pills)/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern:
+      /(?:all the pills ready|take all these pills).{0,120}(?:if you (?:leave|walk away|end|decide)|end (?:this|our) relationship|break up)/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern:
+      /(?:if you block me).{0,120}(?:hurt myself|kill myself|end my life)/gi
+  }
+];
+
+function detectCrossSentenceSelfHarmCoercion(normalized) {
+  for (const rule of CROSS_SENTENCE_SELF_HARM_PATTERNS) {
+    const flags = rule.pattern.flags.includes('g') ? rule.pattern.flags : `${rule.pattern.flags}g`;
+    const re = new RegExp(rule.pattern.source, flags);
+    let match;
+
+    while ((match = re.exec(normalized)) !== null) {
+      const candidate = {
+        id: rule.id,
+        start: match.index,
+        end: match.index + match[0].length,
+        text: match[0]
+      };
+
+      if (isExcludedImmediateCandidate(normalized, candidate)) continue;
+
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
 function detectSafetyInBlock(blockText, blockOffset, fullNormalized) {
   const normalized = normalizeForMatching(blockText);
   if (!normalized) return null;
 
   const sentences = splitSentences(normalized);
+
+  const crossSentenceSelfHarm = detectCrossSentenceSelfHarmCoercion(normalized);
+  if (crossSentenceSelfHarm) {
+    const globalStart = blockOffset + crossSentenceSelfHarm.start;
+    const globalEnd = blockOffset + crossSentenceSelfHarm.end;
+    return {
+      ...SAFETY_NOTICE,
+      category: crossSentenceSelfHarm.id,
+      evidenceSpan: {
+        start: globalStart,
+        end: globalEnd,
+        text: fullNormalized.slice(globalStart, globalEnd)
+      }
+    };
+  }
 
   for (const sentence of sentences) {
     const clauses = splitClauses(sentence.text);

@@ -120,7 +120,7 @@ test('v0.3.2 gate: release copy and cache are internally consistent', async () =
   assert.match(contact, /currently v0\.3\.2/);
   assert.match(methodology, /Screening version:<\/strong> v0\.3\.2/);
   assert.match(changelog, /Controlled Beta candidate v0\.3\.2/);
-  assert.match(worker, /clarity-v34/);
+  assert.match(worker, /clarity-v35/);
   assert.match(styles, /\.image-attach-btn\[hidden\][^{]*\{display:none!important\}/);
 });
 

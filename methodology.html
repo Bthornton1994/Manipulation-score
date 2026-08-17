@@ -14,17 +14,17 @@
   <body class="legal-page">
     <header class="site-header site-header-static">
       <a class="brand" href="./"><span class="brand-mark">M</span><span class="brand-text"><span class="brand-name">Manipulation Score</span><span class="brand-sub">Clarity</span></span></a>
-      <a class="text-link" href="./">← Back to Clarity</a>
+      <nav class="legal-mini-nav" aria-label="Section"><a href="./">Home</a><a href="learn.html">Learn</a><a href="analyze.html">Analyze</a></nav>
     </header>
     <main class="legal-content">
       <h1>Methodology</h1>
-      <p class="legal-updated">Last updated: August 3, 2026</p>
+      <p class="legal-updated">Last updated: August 17, 2026</p>
 
       <h2>What Clarity measures</h2>
       <p>Clarity screens observable <strong>language functions</strong> in a pasted message—patterns that may compress informed, voluntary choice. Examples include guilt leverage, forced urgency, isolation framing, conditional access, and similar pressure functions described in the taxonomy below.</p>
       <p>Clarity does <strong>not</strong> measure intent, personality, diagnosis, truth, relationship safety, or whether a person is “manipulative.” It highlights language that <em>may</em> narrow reflection space. Context, history, and tone always matter more than any score.</p>
 
-      <h2>Language-function taxonomy (screening v0.3.2)</h2>
+      <h2>Language-function taxonomy (screening v0.3.3)</h2>
       <p>Twelve pattern families are evaluated in the current Controlled Beta:</p>
       <ul>
         <li><strong>Guilt leverage</strong> — care or loyalty used as currency for compliance.</li>
@@ -69,10 +69,10 @@
       </ul>
 
       <h2>Current version and evaluation status</h2>
-      <p><strong>Screening version:</strong> v0.3.2 (methodology and safety logic deployed with this site build).</p>
+      <p><strong>Screening version:</strong> v0.3.3 (methodology and safety logic deployed with this site build).</p>
       <p><strong>Specificity tiers:</strong> Phrase families are classified as high, medium, or low specificity. A single low-specificity match (for example a bare “you need to” in an autonomy-supporting sentence) stays in the Low band. Moderate results require a high-specificity pattern, multiple independent pressure functions, or several clear repetitions within one medium-specificity function. High results require multiple independent functions, defined leverage clusters, or several clear pressure signals together.</p>
-      <p><strong>Regression testing:</strong> An expanded automated regression suite (targeted audit fixtures, benign adversarial controls, and safety probes) runs before each release. This is a <strong>regression count</strong>, not a representative validation study. Sensitivity, specificity, fairness, and real-world performance on natural messages have not been established.</p>
-      <p>No representative accuracy percentage should be inferred from this count.</p>
+      <p><strong>Regression testing:</strong> An expanded automated regression suite (targeted audit fixtures, benign adversarial controls, safety probes, and a labeled gold harness) runs before each release. This is a <strong>regression count</strong>, not a representative validation study. Sensitivity, specificity, fairness, and real-world performance on natural messages have not been established.</p>
+      <p>No representative accuracy percentage should be inferred from this count. The gold harness fails a release if locked benign cases leave Low or locked explicit-harm cases are missed.</p>
 
       <h2>Known limitations and failure modes</h2>
       <ul>

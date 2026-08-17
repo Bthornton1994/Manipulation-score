@@ -1,6 +1,6 @@
 # Manipulation Score — Clarity
 
-**Clarity** is the message analysis product from **Manipulation Score**—a privacy-first tool that helps people identify potentially manipulative language, understand the signals behind a score, and choose grounded responses.
+**Manipulation Score** is a private literacy platform. **Clarity** is the on-device message screener—it helps people inspect potentially pressuring language, understand the functions behind an experimental band, and choose a grounded response.
 
 Clarity runs entirely in your browser. No accounts, no uploads, no analytics.
 
@@ -81,7 +81,9 @@ Clarity by Manipulation Score is an educational aid—not a diagnosis, safety as
 
 | File | Purpose |
 |------|---------|
-| `index.html` | Landing page and analyzer UI |
+| `index.html` | Platform home (Learn or Analyze) |
+| `learn.html` | Twelve language functions and lookalikes |
+| `analyze.html` | Clarity analyzer UI |
 | `app.js` | UI logic (safe DOM rendering) |
 | `scoring.js` | Deterministic scoring engine |
 | `service-worker.js` | Offline caching |

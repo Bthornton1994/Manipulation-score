@@ -54,6 +54,72 @@ const NON_ENGLISH_MARKERS =
 /**
  * Returns true when the text is likely outside supported English screening.
  */
+const CLAUSE_SPLIT_RE = /\s*;\s*|\s*,\s+and\s+|\s+\bbut\s+|\s+\bhowever\s+|\s+\byet\s+/gi;
+
+export function splitSentences(text) {
+  const segments = [];
+  const re = /[^.!?]+(?:[.!?]+|$)/g;
+  let match;
+  while ((match = re.exec(text)) !== null) {
+    const raw = match[0];
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    const lead = raw.indexOf(trimmed);
+    const start = match.index + lead;
+    segments.push({ text: trimmed, start, end: start + trimmed.length });
+  }
+  if (!segments.length && text) {
+    segments.push({ text, start: 0, end: text.length });
+  }
+  return segments;
+}
+
+export function splitClauses(segmentText) {
+  const clauses = [];
+  let lastEnd = 0;
+  CLAUSE_SPLIT_RE.lastIndex = 0;
+  let splitMatch;
+  while ((splitMatch = CLAUSE_SPLIT_RE.exec(segmentText)) !== null) {
+    const chunk = segmentText.slice(lastEnd, splitMatch.index).trim();
+    if (chunk) {
+      const start = segmentText.indexOf(chunk, lastEnd);
+      clauses.push({ text: chunk, start, end: start + chunk.length });
+    }
+    lastEnd = splitMatch.index + splitMatch[0].length;
+  }
+  const tail = segmentText.slice(lastEnd).trim();
+  if (tail) {
+    const start = segmentText.indexOf(tail, lastEnd);
+    clauses.push({ text: tail, start, end: start + tail.length });
+  }
+  if (!clauses.length && segmentText.trim()) {
+    const trimmed = segmentText.trim();
+    clauses.push({ text: trimmed, start: 0, end: trimmed.length });
+  }
+  return clauses;
+}
+
+/** Clause that contains an offset in the full (possibly multi-sentence) text. */
+export function findClauseAt(text, offsetStart) {
+  const sentences = splitSentences(text);
+  const sentence =
+    sentences.find((s) => offsetStart >= s.start && offsetStart < s.end) ||
+    sentences[sentences.length - 1] ||
+    { text, start: 0, end: text.length };
+  const relative = Math.max(0, offsetStart - sentence.start);
+  const clauses = splitClauses(sentence.text);
+  const clause =
+    clauses.find((c) => relative >= c.start && relative < c.end) || clauses[0];
+  if (!clause) {
+    return { text: sentence.text, start: sentence.start, end: sentence.end };
+  }
+  return {
+    text: clause.text,
+    start: sentence.start + clause.start,
+    end: sentence.start + clause.end
+  };
+}
+
 export function isLikelyUnsupportedLanguage(text) {
   if (NON_ENGLISH_MARKERS.test(text)) return true;
 

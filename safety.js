@@ -326,7 +326,7 @@ const BENIGN_CONSENT_PATTERNS = [
 
 const BENIGN_SAFETY_CONTEXT = [
   /(?:i will\s+)?shoot\s+you\s+the\s+updated\s+spreadsheet/i,
-  /(?:i will\s+)?shoot\s+you\s+the\s+(?:(?:updated|revised|final|latest)\s+)?(?:spreadsheet|presentation|file|document|report|draft|version|photo|link|message|email)\b/i,
+  /(?:i will\s+)?shoot\s+you\s+the\s+(?:(?:updated|revised|final|latest)\s+)?(?:spreadsheet|presentation|file|document|report|draft|version|photo|link|message|email|deck)\b/i,
   /point\s+(?:the\s+)?knife\s+away/i,
   /mario\s+kart/i,
   /in\s+the\s+movie/i,
@@ -606,7 +606,51 @@ function isFirstPersonThreatMatch(clauseText, matchStart, matchText) {
   );
 }
 
+function isClassBasedFictionOrTraining(clauseText, match) {
+  const mediaFrame =
+    /\b(?:in|from|on)\s+the\s+(?:movie|film|novel|book|script|play|show|podcast|game|video game|documentary)\b/i.test(
+      clauseText
+    );
+  const roleFrame =
+    /\b(?:actor|villain|character|instructor|trainer|teacher|facilitator|coach|prosecutor|news anchor|critic)\b/i.test(
+      clauseText
+    ) &&
+    /\b(?:said|says|rehearsed|quoted|wrote|yelled|shouted|read|includes the line)\b/i.test(
+      clauseText
+    );
+  const trainingFrame =
+    /\b(?:training|rehearsal|workshop|example of (?:threatening|stalking)|training scenario|fictional)\b/i.test(
+      clauseText
+    );
+
+  if (!(mediaFrame || roleFrame || trainingFrame)) return false;
+
+  if (
+    isFirstPersonThreatMatch(clauseText, match.start, match.text) &&
+    !mediaFrame &&
+    !roleFrame &&
+    !trainingFrame
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function isClassBasedRequestedLogistics(clauseText) {
+  const requested =
+    /\b(?:you asked me|you invited|you requested|as we agreed|you asked me to)\b/i.test(
+      clauseText
+    );
+  const logistics =
+    /\b(?:ride|walk|keys|tracker|schedule|carpool|groceries|outside your|mechanic|luggage)\b/i.test(
+      clauseText
+    );
+  return requested && logistics;
+}
+
 function isBenignSafetyContextForMatch(clauseText, match) {
+  if (isClassBasedFictionOrTraining(clauseText, match)) return true;
+  if (isClassBasedRequestedLogistics(clauseText)) return true;
   if (BENIGN_FULL_CLAUSE_CONTEXT.some((pattern) => pattern.test(clauseText))) return true;
 
   if (/point\s+(?:the\s+)?knife\s+away/i.test(clauseText)) return true;

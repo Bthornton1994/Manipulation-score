@@ -20,6 +20,18 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+(?:set|light)\s+you\s+on\s+fire\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+(?:set|light)\s+you\s+on\s+fire\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\bwill\s+(?:set|light)\s+you\s+on\s+fire\b/gi
+  },
+  {
+    id: 'direct_violence',
     pattern: /\b(?:i will|i'll)\s+break\s+your\s+neck\b/gi
   },
   {

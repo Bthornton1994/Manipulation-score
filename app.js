@@ -72,6 +72,7 @@ function setMessageValue(value, { invalidate = true } = {}) {
 }
 
 function updateInputState() {
+  if (!message || !count) return;
   count.textContent = `${message.value.length.toLocaleString()} / 2,500`;
   if (clearButton) clearButton.hidden = !message.value;
 }
@@ -392,12 +393,30 @@ function createSignalCard(signal) {
   responses.append(element('p', 'signal-responses-label', 'Responses you could adapt'));
 
   const pauseRow = element('div', 'response-row');
-  pauseRow.append(element('p', 'response-text', `“${signal.responses.pause}”`), createCopyButton(signal.responses.pause, 'Copy'));
+  pauseRow.append(
+    element('p', 'response-style-label', 'Pause'),
+    element('p', 'response-text', `“${signal.responses.pause}”`),
+    createCopyButton(signal.responses.pause, 'Copy')
+  );
   responses.append(pauseRow);
 
   const boundaryRow = element('div', 'response-row');
-  boundaryRow.append(element('p', 'response-text', `“${signal.responses.boundary}”`), createCopyButton(signal.responses.boundary, 'Copy'));
+  boundaryRow.append(
+    element('p', 'response-style-label', 'Boundary'),
+    element('p', 'response-text', `“${signal.responses.boundary}”`),
+    createCopyButton(signal.responses.boundary, 'Copy')
+  );
   responses.append(boundaryRow);
+
+  if (signal.responses.clarify) {
+    const clarifyRow = element('div', 'response-row');
+    clarifyRow.append(
+      element('p', 'response-style-label', 'Clarify'),
+      element('p', 'response-text', `“${signal.responses.clarify}”`),
+      createCopyButton(signal.responses.clarify, 'Copy')
+    );
+    responses.append(clarifyRow);
+  }
 
   card.append(responses);
   return card;
@@ -454,14 +473,15 @@ function createPatternsSection(analysis) {
   return section;
 }
 
-function createThreadSection(segmentAnalyses) {
+function createThreadSection(segmentAnalyses, analysis = {}) {
   const section = element('section', 'thread-section');
   section.append(
     element('h3', 'results-heading', `Thread · ${segmentAnalyses.length} messages`),
     element(
       'p',
       'thread-note',
-      'Each message below was analyzed separately. Blank lines separate messages. The overall band reflects the highest-scoring eligible message in this thread.'
+      analysis.threadSummary ||
+        'Each message below was screened separately. Blank lines separate messages. The overall line is the highest band, not a verdict on the whole conversation.'
     )
   );
 
@@ -522,7 +542,7 @@ function renderAnalysis(analysis, sourceText) {
     : [createScoreSection(analysis), createPatternsSection(analysis), createPatternGuide()];
 
   if (!special && analysis.segments?.length) {
-    children.splice(1, 0, createThreadSection(analysis.segments));
+    children.splice(1, 0, createThreadSection(analysis.segments, analysis));
   }
 
   results.replaceChildren(...children);
@@ -710,10 +730,12 @@ function populateExamples() {
   });
 }
 
+if (message) {
 message.addEventListener('input', () => {
   updateInputState();
   invalidateResults();
 });
+}
 
 if (exampleSelect) {
   exampleSelect.addEventListener('change', () => {
@@ -851,10 +873,24 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
+if (form && message) {
 form.addEventListener('submit', (event) => {
   event.preventDefault();
   renderAnalysis(analyzeMessage(message.value), message.value);
 });
+}
+
+function applyAnalyzeQuery() {
+  if (!message) return;
+  const params = new URLSearchParams(window.location.search);
+  const raw = params.get('e') || params.get('example');
+  if (!raw) return;
+  const byIndex = EXAMPLES[Number(raw)];
+  const byLabel = EXAMPLES.find((ex) => ex.label.toLowerCase() === raw.toLowerCase());
+  const text = byIndex?.text || byLabel?.text || raw;
+  if (text) setMessageValue(text, { invalidate: false });
+}
+applyAnalyzeQuery();
 
 if (historyOptIn) {
   historyOptIn.addEventListener('change', () => {

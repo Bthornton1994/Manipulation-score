@@ -11,7 +11,7 @@ import {
 import { isLikelyUnsupportedLanguage } from '../text-normalize.js';
 
 test('v0.3.2 methodology version and pilot mode', () => {
-  assert.equal(METHODOLOGY_VERSION, '0.3.2');
+  assert.equal(METHODOLOGY_VERSION, '0.3.3');
   assert.equal(PILOT_SUPPRESS_NUMERIC_SCORE, true);
 });
 

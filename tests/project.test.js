@@ -112,26 +112,27 @@ test('index labels hero example as experimental', async () => {
 });
 
 test('index discloses history off by default', async () => {
-  const html = await readFile('index.html', 'utf8');
-  assert.match(html, /History off by default|history-opt-in/);
-  assert.match(html, /Delete all history/);
-  assert.doesNotMatch(html, /No message storage/);
+  const home = await readFile('index.html', 'utf8');
+  const analyze = await readFile('analyze.html', 'utf8');
+  assert.match(home, /History off by default/);
+  assert.match(analyze, /history-opt-in/);
+  assert.match(analyze, /Delete all history/);
+  assert.doesNotMatch(home, /No message storage/);
 });
 
-test('index supports client-side image upload', async () => {
-  const html = await readFile('index.html', 'utf8');
+test('analyze keeps a disabled image-upload control for a future OCR gate', async () => {
+  const html = await readFile('analyze.html', 'utf8');
   assert.match(html, /id="image-upload-btn"/);
   assert.match(html, /class="image-attach-btn"/);
   assert.match(html, /class="file-input-offscreen"/);
   assert.match(html, /Analyze message/);
-  assert.match(html, /Images are read on your device only/);
+  assert.match(html, /Image upload is disabled/);
   assert.match(html, /accept="[^"]*image\/\*[^"]*"/);
   assert.match(html, /\.heic/);
-  assert.doesNotMatch(html, /screenshot/i);
 });
 
-test('index CSP allows on-device OCR', async () => {
-  const html = await readFile('index.html', 'utf8');
+test('analyze CSP allows on-device OCR if the gate is later enabled', async () => {
+  const html = await readFile('analyze.html', 'utf8');
   assert.match(html, /wasm-unsafe-eval/);
   assert.match(html, /worker-src[^;]*blob:/);
 });

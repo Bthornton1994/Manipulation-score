@@ -1,7 +1,8 @@
 import { detectSafetyNotice } from './safety.js';
 import {
   normalizeAnalysisText,
-  isLikelyUnsupportedLanguage
+  isLikelyUnsupportedLanguage,
+  findClauseAt
 } from './text-normalize.js';
 
 export const SCORE_BANDS = [
@@ -37,7 +38,7 @@ const SIGNALS = [
     label: 'Guilt leverage',
     function: 'Uses care, loyalty, or past effort as currency—making a boundary or delay feel like proof you do not care enough.',
     weight: 20,
-    pattern: /if you (?:really )?(?:cared|loved|loved me)|after all i(?:'ve| have) done|you owe me|\bungrateful\b|\bselfish\b|how could you/gi,
+    pattern: /if you (?:really )?(?:cared|loved|loved me)|after (?:all|everything) i(?:'ve| have) done|you owe me|\bungrateful\b|\bselfish\b|how could you/gi,
     education: 'Guilt framing ties affection or loyalty to a specific action. A normal boundary can be reframed as betrayal.'
   },
   {
@@ -131,7 +132,7 @@ const SIGNALS = [
   }
 ];
 
-export const METHODOLOGY_VERSION = '0.3.2';
+export const METHODOLOGY_VERSION = '0.3.3';
 export const PILOT_SUPPRESS_NUMERIC_SCORE = true;
 export { normalizeAnalysisText } from './text-normalize.js';
 export const MIN_MEANINGFUL_WORDS = 15;
@@ -361,6 +362,7 @@ function getMatchContext(text, start, end, padding = 56) {
 
 function isOffsetExcluded(signalId, text, offset) {
   const context = getMatchContext(text, offset.start, offset.end);
+  const clause = findClauseAt(text, offset.start);
   const immediateBefore = text.slice(Math.max(0, offset.start - 18), offset.start);
   if (SCORING_NEGATION.test(immediateBefore)) return true;
 
@@ -374,7 +376,7 @@ function isOffsetExcluded(signalId, text, offset) {
   }
 
   const rules = EXCLUSION_CONTEXT_RULES[signalId];
-  if (rules?.some((rule) => rule.test(context))) return true;
+  if (rules?.some((rule) => rule.test(context) || rule.test(clause.text))) return true;
 
   if (signalId === 'urgency' && /(?:^|\s)no\s+[^.!?]{0,30}right\s+now/i.test(context)) return true;
   if (signalId === 'absolutes' && /(?:care|understand|choices|invited|welcome|required\s+to\s+participate|feel\s+safe)/i.test(context)) {
@@ -484,7 +486,8 @@ export function getSignalSeverity(signal) {
 export function getSignalResponses(signalId) {
   return {
     pause: RESPONSES.pause[signalId] || RESPONSES.pause.default,
-    boundary: RESPONSES.boundary[signalId] || RESPONSES.boundary.default
+    boundary: RESPONSES.boundary[signalId] || RESPONSES.boundary.default,
+    clarify: RESPONSES.clarify[signalId] || RESPONSES.clarify.default
   };
 }
 
@@ -774,6 +777,11 @@ function buildThreadResult(normalized, segmentAnalyses) {
     entry.analysis.score > best.analysis.score ? entry : best
   );
 
+  const highCount = scoredSegments.filter((entry) => entry.analysis.score >= 61).length;
+  const moderateCount = scoredSegments.filter(
+    (entry) => entry.analysis.score >= 31 && entry.analysis.score <= 60
+  ).length;
+
   return {
     ...primary.analysis,
     abstained: false,
@@ -783,7 +791,7 @@ function buildThreadResult(normalized, segmentAnalyses) {
     methodologyVersion: METHODOLOGY_VERSION,
     experimentalScreening: true,
     segments: segmentAnalyses,
-    threadSummary: 'Overall reflects the highest-scoring eligible message in this thread.'
+    threadSummary: `Highest band in this thread: ${primary.analysis.level} (${highCount} High, ${moderateCount} Moderate of ${segmentAnalyses.length} messages). Each message is screened separately—the overall line is not a verdict on the whole conversation.`
   };
 }
 

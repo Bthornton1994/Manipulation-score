@@ -1,7 +1,9 @@
-const CACHE_NAME = 'clarity-v34';
+const CACHE_NAME = 'clarity-v35';
 const APP_SHELL = [
   './',
   './index.html',
+  './analyze.html',
+  './learn.html',
   './privacy.html',
   './terms.html',
   './limitations.html',
@@ -39,7 +41,7 @@ const APP_SHELL = [
 ];
 
 const NETWORK_FIRST_PATTERN =
-  /\/(index\.html|privacy\.html|terms\.html|limitations\.html|methodology\.html|contact\.html|acceptable-use\.html|accessibility\.html|changelog\.html|styles\.css|fonts\.css|app\.js|scoring\.js|safety\.js|history-storage\.js|service-worker\.js)$/;
+  /\/(index\.html|analyze\.html|learn\.html|privacy\.html|terms\.html|limitations\.html|methodology\.html|contact\.html|acceptable-use\.html|accessibility\.html|changelog\.html|styles\.css|fonts\.css|app\.js|scoring\.js|safety\.js|text-normalize\.js|history-storage\.js|service-worker\.js)$/;
 
 function isNetworkFirstRequest(url) {
   if (url.origin !== self.location.origin) return false;

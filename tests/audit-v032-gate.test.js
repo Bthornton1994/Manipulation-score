@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { detectSafetyNotice } from '../safety.js';
 
-const criticalSafetyCorpus = [
+export const criticalSafetyCorpus = [
   "I will burn you alive while you sleep tonight.",
   "I will break your neck if you tell anyone about this.",
   "Give me the phone or I will cut you before you call for help.",
@@ -46,7 +46,7 @@ const criticalSafetyCorpus = [
   "I am following you home after you told me to stop contacting you."
 ];
 
-const benignSafetyCorpus = [
+export const benignSafetyCorpus = [
   "The novel includes the line I will burn you alive, which the critic describes as melodramatic dialogue.",
   "The actor rehearsed I will break your neck before the director replaced the violent line.",
   "The podcast quoted a threat saying I will cut you, then discussed why victims should seek support.",
@@ -106,8 +106,9 @@ test('v0.3.2 gate: every declared benign safety fixture avoids a notice', async 
 });
 
 test('v0.3.2 gate: release copy and cache are internally consistent', async () => {
-  const [index, contact, methodology, changelog, worker, styles] = await Promise.all([
+  const [index, analyze, contact, methodology, changelog, worker, styles] = await Promise.all([
     readFile('index.html', 'utf8'),
+    readFile('analyze.html', 'utf8'),
     readFile('contact.html', 'utf8'),
     readFile('methodology.html', 'utf8'),
     readFile('changelog.html', 'utf8'),
@@ -115,12 +116,13 @@ test('v0.3.2 gate: release copy and cache are internally consistent', async () =
     readFile('styles.css', 'utf8')
   ]);
 
-  assert.match(index, /screening v0\.3\.2/);
+  assert.match(index, /screening v0\.3\.3/);
+  assert.match(analyze, /screening v0\.3\.3/);
   assert.doesNotMatch(index, /Example score[^>]*>72</);
-  assert.match(contact, /currently v0\.3\.2/);
-  assert.match(methodology, /Screening version:<\/strong> v0\.3\.2/);
-  assert.match(changelog, /Controlled Beta candidate v0\.3\.2/);
-  assert.match(worker, /clarity-v34/);
+  assert.match(contact, /currently v0\.3\.3/);
+  assert.match(methodology, /Screening version:<\/strong> v0\.3\.3/);
+  assert.match(changelog, /Public screening v0\.3\.3/);
+  assert.match(worker, /clarity-v35/);
   assert.match(styles, /\.image-attach-btn\[hidden\][^{]*\{display:none!important\}/);
 });
 

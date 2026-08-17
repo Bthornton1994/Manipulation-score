@@ -52,16 +52,48 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'direct_violence',
-    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+(?:beat|choke)\s+you\b/gi
+    pattern:
+      /\b(?:i'?m|i am)\s+going\s+to\s+(?:beat|choke|suffocate|smother|hang|electrocute)\s+you\b/gi
   },
   {
     id: 'direct_violence',
     pattern:
-      /\b(?:i'?m|i am|im)\s+going\s+to\s+(?:kill|hurt|harm|shoot|stab|murder)\s+you\b/gi
+      /\b(?:i will|i'll)\s+(?:beat|choke|suffocate|smother|hang|electrocute)\s+you\b/gi
   },
   {
     id: 'direct_violence',
-    pattern: /\b(?:i will|i'll)\s+(?:kill|hurt|harm|shoot|stab|murder)\s+you\b/gi
+    pattern:
+      /\b(?:i'?m|i am)\s+going\s+to\s+(?:sexually\s+)?assault\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+(?:sexually\s+)?assault\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+molest\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+molest\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+set\s+you\s+on\s+fire\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+set\s+you\s+on\s+fire\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern:
+      /\b(?:i'?m|i am|im)\s+going\s+to\s+(?:kill|hurt|harm|shoot|stab|murder|dismember)\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern:
+      /\b(?:i will|i'll)\s+(?:kill|hurt|harm|shoot|stab|murder|dismember)\s+you\b/gi
   },
   {
     id: 'direct_violence',
@@ -220,11 +252,23 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'direct_violence',
-    pattern: /\bwill\s+beat\s+you\b/gi
+    pattern: /\bwill\s+(?:beat|choke|suffocate|smother|hang|electrocute)\s+you\b/gi
   },
   {
     id: 'direct_violence',
-    pattern: /\bwill\s+choke\s+you\b/gi
+    pattern: /\bwill\s+(?:sexually\s+)?assault\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\bwill\s+molest\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\bwill\s+set\s+you\s+on\s+fire\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\bwill\s+dismember\s+you\b/gi
   },
   {
     id: 'direct_violence',
@@ -485,7 +529,9 @@ function findStalkingBehaviors(text) {
 }
 
 function extractHarmVerb(matchText) {
-  const verb = matchText.match(/\b(kill|hurt|harm|murder|shoot|stab)\b/i);
+  const verb = matchText.match(
+    /\b(kill|hurt|harm|murder|shoot|stab|molest|assault|suffocate|smother|hang|electrocute|dismember)\b/i
+  );
   return verb ? verb[1].toLowerCase() : null;
 }
 

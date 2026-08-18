@@ -625,18 +625,17 @@ function isClassBasedFictionOrTraining(clauseText, match) {
 
   if (!(mediaFrame || roleFrame || trainingFrame)) return false;
 
-  if (
-    isFirstPersonThreatMatch(clauseText, match.start, match.text) &&
-    !mediaFrame &&
-    !roleFrame &&
-    !trainingFrame
-  ) {
-    return false;
+  // Bare training/workshop/fictional keywords must not hide a real first-person
+  // threat. Media or speaking-role attribution may still mark the clause benign;
+  // quoted training examples are also handled by isAttributedClause.
+  if (isFirstPersonThreatMatch(clauseText, match.start, match.text)) {
+    return mediaFrame || roleFrame;
   }
+
   return true;
 }
 
-function isClassBasedRequestedLogistics(clauseText) {
+function isClassBasedRequestedLogistics(clauseText, match) {
   const requested =
     /\b(?:you asked me|you invited|you requested|as we agreed|you asked me to)\b/i.test(
       clauseText
@@ -645,12 +644,17 @@ function isClassBasedRequestedLogistics(clauseText) {
     /\b(?:ride|walk|keys|tracker|schedule|carpool|groceries|outside your|mechanic|luggage)\b/i.test(
       clauseText
     );
-  return requested && logistics;
+  if (!(requested && logistics)) return false;
+  // Consensual logistics must not hide a co-located first-person threat.
+  if (match && isFirstPersonThreatMatch(clauseText, match.start, match.text)) {
+    return false;
+  }
+  return true;
 }
 
 function isBenignSafetyContextForMatch(clauseText, match) {
   if (isClassBasedFictionOrTraining(clauseText, match)) return true;
-  if (isClassBasedRequestedLogistics(clauseText)) return true;
+  if (isClassBasedRequestedLogistics(clauseText, match)) return true;
   if (BENIGN_FULL_CLAUSE_CONTEXT.some((pattern) => pattern.test(clauseText))) return true;
 
   if (/point\s+(?:the\s+)?knife\s+away/i.test(clauseText)) return true;

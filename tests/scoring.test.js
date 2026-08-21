@@ -158,3 +158,38 @@ test('intensity tags use Mild Clear and Strong labels', () => {
   assert.equal(getSignalSeverity({ weight: 18, points: 22 }).label, 'Clear');
   assert.equal(getSignalSeverity({ weight: 18, points: 30 }).label, 'Strong');
 });
+
+test('benign exclusion phrases in a prior clause do not suppress coercive signals after but', () => {
+  const text =
+    'There is no pressure to decide right now, but you need to answer immediately or I will be very upset with you today please.';
+  const result = analyzeMessage(text);
+  assert.equal(result.abstained, false);
+  assert.ok(result.score >= 31, `expected Moderate+ score, got ${result.score}`);
+  assert.ok(
+    result.signals.some((signal) => signal.id === 'urgency'),
+    'expected urgency signal after benign no-pressure clause'
+  );
+});
+
+test('supportive take-your-time clause does not suppress later assigned obligation', () => {
+  const text =
+    'Take whatever time you need to think about it, but you need to answer me tonight or I will be upset with you forever please decide.';
+  const result = analyzeMessage(text);
+  assert.equal(result.abstained, false);
+  assert.ok(
+    result.signals.some((signal) => signal.id === 'obligation'),
+    'expected obligation in the coercive clause after supportive take-time framing'
+  );
+  assert.ok(result.score > 0, `expected non-zero score, got ${result.score}`);
+});
+
+test('same-clause supportive obligation framing still excludes', () => {
+  const text =
+    'Please take whatever time you need to think about what you want before we talk again this week about plans.';
+  const result = analyzeMessage(text);
+  assert.equal(
+    result.signals.some((signal) => signal.id === 'obligation'),
+    false,
+    'supportive take-time wording in the same clause should stay excluded'
+  );
+});

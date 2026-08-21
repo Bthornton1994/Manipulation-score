@@ -354,15 +354,11 @@ export function countMeaningfulWords(text) {
 const SCORING_NEGATION =
   /\b(?:never|not|no|cannot|can't|won't|would never|do not|don't|does not|doesn't|should not|shouldn't|wouldn't|am not|is not|are not|isn't|aren't|wasn't|weren't)\b/i;
 
-function getMatchContext(text, start, end, padding = 56) {
-  const ctxStart = Math.max(0, start - padding);
-  const ctxEnd = Math.min(text.length, end + padding);
-  return text.slice(ctxStart, ctxEnd);
-}
-
 function isOffsetExcluded(signalId, text, offset) {
-  const context = getMatchContext(text, offset.start, offset.end);
-  const clause = findClauseAt(text, offset.start);
+  // Exclusions are clause-scoped. A 56-char context window reaches into prior
+  // clauses joined by "but"/"however", so supportive phrasing there must not
+  // suppress coercive matches in the current clause.
+  const clauseText = findClauseAt(text, offset.start).text;
   const immediateBefore = text.slice(Math.max(0, offset.start - 18), offset.start);
   if (SCORING_NEGATION.test(immediateBefore)) return true;
 
@@ -376,33 +372,33 @@ function isOffsetExcluded(signalId, text, offset) {
   }
 
   const rules = EXCLUSION_CONTEXT_RULES[signalId];
-  if (rules?.some((rule) => rule.test(context) || rule.test(clause.text))) return true;
+  if (rules?.some((rule) => rule.test(clauseText))) return true;
 
-  if (signalId === 'urgency' && /(?:^|\s)no\s+[^.!?]{0,30}right\s+now/i.test(context)) return true;
-  if (signalId === 'absolutes' && /(?:care|understand|choices|invited|welcome|required\s+to\s+participate|feel\s+safe)/i.test(context)) {
-    if (/always\s+have\s+choices|everyone\s+is\s+invited|nobody\s+is\s+required|never\s+(?:hurt|harm|kill)\s+you/i.test(context)) return true;
+  if (signalId === 'urgency' && /(?:^|\s)no\s+[^.!?]{0,30}right\s+now/i.test(clauseText)) return true;
+  if (signalId === 'absolutes' && /(?:care|understand|choices|invited|welcome|required\s+to\s+participate|feel\s+safe)/i.test(clauseText)) {
+    if (/always\s+have\s+choices|everyone\s+is\s+invited|nobody\s+is\s+required|never\s+(?:hurt|harm|kill)\s+you/i.test(clauseText)) return true;
   }
 
-  if (signalId === 'absolutes' && /\bnobody\b/i.test(context)) {
-    if (/nobody\s+else\s+will\s+(?:care|understand|help)/i.test(context)) return false;
-    if (/(?:training|instructor|trainer|teacher|facilitat|example|demonstrat).{0,140}nobody/i.test(context)) return true;
+  if (signalId === 'absolutes' && /\bnobody\b/i.test(clauseText)) {
+    if (/nobody\s+else\s+will\s+(?:care|understand|help)/i.test(clauseText)) return false;
+    if (/(?:training|instructor|trainer|teacher|facilitat|example|demonstrat).{0,140}nobody/i.test(clauseText)) return true;
   }
 
-  if (signalId === 'obligation' && /\byou\s+need\s+to\b/i.test(context)) {
+  if (signalId === 'obligation' && /\byou\s+need\s+to\b/i.test(clauseText)) {
     if (
       /whatever\s+time\s+you\s+need\s+to|all\s+the\s+time\s+you\s+need|time\s+you\s+need\s+to\s+think|take\s+(?:whatever\s+)?time/i.test(
-        context
+        clauseText
       )
     ) {
       return true;
     }
     if (
-      /when\s+you\s+are\s+(?:ready|comfortable)|when\s+you'?re\s+(?:ready|comfortable)/i.test(context) &&
-      /take\s+your\s+time|no\s+rush|no\s+pressure|comfortable\s+talking/i.test(context)
+      /when\s+you\s+are\s+(?:ready|comfortable)|when\s+you'?re\s+(?:ready|comfortable)/i.test(clauseText) &&
+      /take\s+your\s+time|no\s+rush|no\s+pressure|comfortable\s+talking/i.test(clauseText)
     ) {
       return true;
     }
-    if (/\byou\s+should\b/i.test(context) && /talk\s+to\s+your\s+(?:doctor|therapist|counselor|pharmacist)/i.test(context)) {
+    if (/\byou\s+should\b/i.test(clauseText) && /talk\s+to\s+your\s+(?:doctor|therapist|counselor|pharmacist)/i.test(clauseText)) {
       return true;
     }
   }

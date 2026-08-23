@@ -40,6 +40,21 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'direct_violence',
+    pattern:
+      /\b(?:(?:i will|i'll)|(?:i'?m|i am)\s+going\s+to)\s+kidnap\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern:
+      /\b(?:(?:i will|i'll)|(?:i'?m|i am)\s+going\s+to)\s+abduct\s+you\b/gi
+  },
+  {
+    id: 'confinement',
+    pattern:
+      /\b(?:(?:i will|i'll)|(?:i'?m|i am)\s+going\s+to)\s+hold\s+you\s+hostage\b/gi
+  },
+  {
+    id: 'direct_violence',
     pattern: /\b(?:i will|i'll)\s+smash\s+your\s+face\b/gi
   },
   {

@@ -40,6 +40,24 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'direct_violence',
+    pattern:
+      /\b(?:i will|i'll|i'?m|i am)\s+(?:going\s+to\s+)?push\s+you\s+off\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern:
+      /\b(?:i will|i'll|i'?m|i am)\s+(?:going\s+to\s+)?inject\s+you\s+with\s+(?:something\s+)?(?:lethal|poison|acid|a\s+deadly)\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i will|i'll|i'?m|i am)\s+(?:going\s+to\s+)?overdose\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i will|i'll|i'?m|i am)\s+(?:going\s+to\s+)?blind\s+you\s+with\b/gi
+  },
+  {
+    id: 'direct_violence',
     pattern: /\b(?:i will|i'll)\s+smash\s+your\s+face\b/gi
   },
   {

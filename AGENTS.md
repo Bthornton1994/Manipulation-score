@@ -17,12 +17,27 @@ Only edit `VISION.md` when the task explicitly authorizes a vision change. Keep 
 
 Small fixes do not require a formal vision analysis, but they must not violate the vision. Before handoff, report the checks performed and any remaining vision tension.
 
-## Engineering quality layer
+## Engineering execution principles
 
-For substantial software work, use pstack as an optional Cursor engineering-quality layer when it is installed. Upstream: `https://github.com/cursor/plugins/tree/main/pstack`.
+These rules are tool-agnostic. Apply them in Cursor, Claude Code, Codex, GitHub tooling, other agent runtimes, or human engineering work.
 
-pstack is subordinate to this repository's vision, methodology, acceptable-use rules, safety/privacy requirements, release rules, and explicit authority boundaries. Its autonomy defaults never authorize a merge, deployment, scoring or methodology change, data write, external message, publication, account or permission change, or other consequential action that this repository has not already authorized.
+For substantial work:
 
-When using Cursor, prefer `/poteto-mode` for non-trivial engineering work and use pstack's adversarial review, eval, verification-skill, and decision-trail workflows when they fit the task. When using Claude Code, Codex, or another runtime, apply the equivalent disciplines without pretending Cursor-only commands exist: model the domain before coding, keep validation at boundaries, make operations idempotent, reproduce defects when practical, sequence changes into verifiable units, verify the real artifact rather than only CI, and independently challenge consequential changes.
+- prefer the smallest sufficient change and remove obsolete complexity before adding layers;
+- settle core data shapes, ownership, invariants, and concurrency assumptions before downstream logic;
+- integrate new requirements from first principles rather than bolting them onto accidental structure;
+- minimize hidden state, indirection, and reader load;
+- prioritize the intended user experience over implementation convenience;
+- compare multiple approaches when a consequential design is genuinely uncertain;
+- build rerunnable scripts, validators, harnesses, generators, or benchmarks for repeated work and proof;
+- model the domain explicitly and validate external data at system boundaries;
+- make invalid states difficult to represent and lifecycle operations idempotent;
+- migrate callers and remove obsolete internal APIs rather than maintaining permanent dual paths without cause;
+- eliminate unnecessary shared mutable state before adding serialization or locks;
+- reproduce defects and fix root causes when practical;
+- sequence multi-step work into verifiable units and verify the real artifact or runtime behavior rather than treating green CI as sufficient proof;
+- independently challenge consequential changes involving methodology, scoring, safety, privacy, evidence, release controls, or irreversible state;
+- answer reversible, observable engineering questions with safe experiments when possible;
+- encode repeated lessons into tests, schemas, types, invariants, metadata, verification tooling, or versioned Skills instead of repeating prose instructions.
 
-Do not vendor the whole pstack plugin into this repository by default. Install it through Cursor so the plugin can evolve upstream while these repository-local governance rules remain stable.
+These principles improve execution quality but grant no authority. They do not authorize merges, deployments, scoring or methodology changes, data writes, external messages, publication, account or permission changes, or any other consequential action not already allowed by this repository's vision, methodology, acceptable-use rules, and safety/privacy boundaries.

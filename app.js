@@ -494,11 +494,13 @@ function createThreadSection(segmentAnalyses, analysis = {}) {
       element(
         'p',
         'thread-score',
-        analysis.scoreSuppressed || analysis.abstained
-          ? analysis.bandHeadline || 'Not screened'
-          : PILOT_SUPPRESS_NUMERIC_SCORE
-            ? `Pattern band: ${analysis.level}`
-            : `Screening ${analysis.score} · ${analysis.level}`
+        analysis.safetyNotice
+          ? 'Safety notice'
+          : analysis.scoreSuppressed || analysis.abstained
+            ? analysis.bandHeadline || 'Not screened'
+            : PILOT_SUPPRESS_NUMERIC_SCORE
+              ? `Pattern band: ${analysis.level}`
+              : `Screening ${analysis.score} · ${analysis.level}`
       )
     );
     if (analysis.signals.length) {
@@ -541,7 +543,7 @@ function renderAnalysis(analysis, sourceText) {
     ? [createScoreSection(analysis)]
     : [createScoreSection(analysis), createPatternsSection(analysis), createPatternGuide()];
 
-  if (!special && analysis.segments?.length) {
+  if (analysis.segments?.length) {
     children.splice(1, 0, createThreadSection(analysis.segments, analysis));
   }
 

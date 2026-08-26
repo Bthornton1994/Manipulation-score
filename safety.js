@@ -95,7 +95,22 @@ const IMMEDIATE_RULES = [
   {
     id: 'self_harm_coercion',
     pattern:
+      /\b(?:i will|i'll|i'?m\s+going\s+to|i\s+am\s+going\s+to)\s+(?:jump\s+off(?:\s+a)?\s+bridge|jump\s+in\s+front\s+of\s+(?:a\s+)?(?:train|bus|car|truck|subway)|(?:cut|slash)\s+my\s+wrists|overdose|\bOD\b)\s+if\s+you/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern:
+      /\bif\s+you\s+(?:leave|break\s+up|dump|abandon|divorce)\b[^.!?]{0,80}\b(?:i will|i'll|i'?m\s+going\s+to|i\s+am\s+going\s+to)\s+(?:jump\s+off(?:\s+a)?\s+bridge|jump\s+in\s+front\s+of\s+(?:a\s+)?(?:train|bus|car|truck|subway)|(?:cut|slash)\s+my\s+wrists|overdose|\bOD\b)/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern:
       /(?:kill myself|hurt myself|end my life).{0,50}(?:your fault|because of you|you made me|if you leave)/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern:
+      /\b(?:i will|i'll|i'?m\s+going\s+to|i\s+am\s+going\s+to)\s+(?:jump\s+off(?:\s+a)?\s+bridge|jump\s+in\s+front\s+of\s+(?:a\s+)?(?:train|bus|car|truck|subway)|(?:cut|slash)\s+my\s+wrists|overdose|\bOD\b).{0,50}(?:your fault|because of you|you made me)/gi
   },
   {
     id: 'self_harm_coercion',

@@ -28,7 +28,13 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'direct_violence',
-    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+drown\s+you\b/gi
+    pattern:
+      /\b(?:(?:i will|i'll)|(?:i'?m|i am)\s+going\s+to)\s+drown\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern:
+      /\b(?:(?:i will|i'll)|(?:i'?m|i am)\s+going\s+to)\s+hang\s+you\b(?!\s+out\s+to\s+dry)/gi
   },
   {
     id: 'direct_violence',
@@ -86,25 +92,27 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'self_harm_coercion',
-    pattern: /(?:kill|hurt)\s+myself\s+if\s+you/gi
-  },
-  {
-    id: 'self_harm_coercion',
-    pattern: /\bif\s+you\s+leave\b[^.!?]{0,60}\b(?:kill|hurt)\s+myself/gi
+    pattern: /(?:kill|hurt|hang|shoot|drown)\s+myself\s+if\s+you/gi
   },
   {
     id: 'self_harm_coercion',
     pattern:
-      /(?:kill myself|hurt myself|end my life).{0,50}(?:your fault|because of you|you made me|if you leave)/gi
+      /\bif\s+you\s+leave\b[^.!?]{0,60}\b(?:kill|hurt|hang|shoot|drown)\s+myself/gi
   },
   {
     id: 'self_harm_coercion',
     pattern:
-      /(?:your fault|because of you|you made me).{0,50}(?:kill myself|hurt myself|end my life|suicide)/gi
+      /(?:kill myself|hurt myself|hang myself|shoot myself|drown myself|end my life).{0,50}(?:your fault|because of you|you made me|if you leave)/gi
   },
   {
     id: 'self_harm_coercion',
-    pattern: /(?:suicide|kill myself).{0,40}(?:your fault|because of you)/gi
+    pattern:
+      /(?:your fault|because of you|you made me).{0,50}(?:kill myself|hurt myself|hang myself|shoot myself|drown myself|end my life|suicide)/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern:
+      /(?:suicide|kill myself|hang myself|shoot myself|drown myself).{0,40}(?:your fault|because of you)/gi
   },
   {
     id: 'weapon_threat',
@@ -485,7 +493,7 @@ function findStalkingBehaviors(text) {
 }
 
 function extractHarmVerb(matchText) {
-  const verb = matchText.match(/\b(kill|hurt|harm|murder|shoot|stab)\b/i);
+  const verb = matchText.match(/\b(kill|hurt|harm|murder|shoot|stab|hang|drown)\b/i);
   return verb ? verb[1].toLowerCase() : null;
 }
 

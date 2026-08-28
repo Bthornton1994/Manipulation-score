@@ -2,12 +2,16 @@ const SMART_APOSTROPHE = /[\u2018\u2019\u02BC\u0060\u201B]/g;
 const SMART_QUOTE = /[\u201C\u201D\u201E\u2033\u2036]/g;
 const UNICODE_SPACES = /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g;
 const FORMAT_CHARS = /[\u200B-\u200D\uFEFF]/g;
+/** Em/en and other unicode dashes — treat as token separators (not ASCII `-`). */
+const UNICODE_DASHES = /[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/g;
 
 /**
  * Normalize text for scoring and safety matching while preserving paragraph breaks.
  */
 export function normalizeAnalysisText(text) {
   return (text || '')
+    // Before NFKC so fullwidth/small dashes are not folded to ASCII `-`.
+    .replace(UNICODE_DASHES, ' ')
     .normalize('NFKC')
     .replace(FORMAT_CHARS, '')
     .replace(/\u00AD/g, '')

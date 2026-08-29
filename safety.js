@@ -52,16 +52,18 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'direct_violence',
-    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+(?:beat|choke)\s+you\b/gi
+    pattern:
+      /\b(?:i'?m|i am)\s+going\s+to\s+(?:be\s+)?(?:beat(?:ing)?|chok(?:e|ing))\s+you\b/gi
   },
   {
     id: 'direct_violence',
     pattern:
-      /\b(?:i'?m|i am|im)\s+going\s+to\s+(?:kill|hurt|harm|shoot|stab|murder)\s+you\b/gi
+      /\b(?:i'?m|i am|im)\s+going\s+to\s+(?:be\s+)?(?:kill(?:ing)?|hurt(?:ing)?|harm(?:ing)?|shoot(?:ing)?|stab(?:bing)?|murder(?:ing)?)\s+you\b/gi
   },
   {
     id: 'direct_violence',
-    pattern: /\b(?:i will|i'll)\s+(?:kill|hurt|harm|shoot|stab|murder)\s+you\b/gi
+    pattern:
+      /\b(?:i will|i'll)\s+(?:be\s+)?(?:kill(?:ing)?|hurt(?:ing)?|harm(?:ing)?|shoot(?:ing)?|stab(?:bing)?|murder(?:ing)?)\s+you\b/gi
   },
   {
     id: 'direct_violence',
@@ -69,42 +71,42 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'direct_violence',
-    pattern: /\b(?:kill|hurt|harm|murder)\s+you\b/gi
+    pattern: /\b(?:kill(?:ing)?|hurt(?:ing)?|harm(?:ing)?|murder(?:ing)?)\s+you\b/gi
   },
   {
     id: 'direct_violence',
-    pattern: /\bhurt\s+you\s+if\b/gi
+    pattern: /\bhurt(?:ing)?\s+you\s+if\b/gi
   },
   {
     id: 'direct_violence',
-    pattern: /\bif\s+you\s+leave\b[^.!?]{0,50}\b(?:hurt|harm|kill|murder)\b/gi
+    pattern: /\bif\s+you\s+leave\b[^.!?]{0,50}\b(?:hurt(?:ing)?|harm(?:ing)?|kill(?:ing)?|murder(?:ing)?)\b/gi
   },
   {
     id: 'direct_violence',
     pattern:
-      /\bif\s+you\s+leave\b[^.!?]{0,30}\b(?:i will|i'?ll)\b[^.!?]{0,30}\b(?:hurt|harm|kill)\b/gi
+      /\bif\s+you\s+leave\b[^.!?]{0,30}\b(?:i will|i'?ll)\b[^.!?]{0,30}\b(?:hurt(?:ing)?|harm(?:ing)?|kill(?:ing)?)\b/gi
   },
   {
     id: 'self_harm_coercion',
-    pattern: /(?:kill|hurt)\s+myself\s+if\s+you/gi
+    pattern: /(?:kill(?:ing)?|hurt(?:ing)?)\s+myself\s+if\s+you/gi
   },
   {
     id: 'self_harm_coercion',
-    pattern: /\bif\s+you\s+leave\b[^.!?]{0,60}\b(?:kill|hurt)\s+myself/gi
-  },
-  {
-    id: 'self_harm_coercion',
-    pattern:
-      /(?:kill myself|hurt myself|end my life).{0,50}(?:your fault|because of you|you made me|if you leave)/gi
+    pattern: /\bif\s+you\s+leave\b[^.!?]{0,60}\b(?:kill(?:ing)?|hurt(?:ing)?)\s+myself/gi
   },
   {
     id: 'self_harm_coercion',
     pattern:
-      /(?:your fault|because of you|you made me).{0,50}(?:kill myself|hurt myself|end my life|suicide)/gi
+      /(?:kill(?:ing)? myself|hurt(?:ing)? myself|end my life).{0,50}(?:your fault|because of you|you made me|if you leave)/gi
   },
   {
     id: 'self_harm_coercion',
-    pattern: /(?:suicide|kill myself).{0,40}(?:your fault|because of you)/gi
+    pattern:
+      /(?:your fault|because of you|you made me).{0,50}(?:kill(?:ing)? myself|hurt(?:ing)? myself|end my life|suicide)/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern: /(?:suicide|kill(?:ing)? myself).{0,40}(?:your fault|because of you)/gi
   },
   {
     id: 'weapon_threat',
@@ -212,7 +214,8 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'self_harm_coercion',
-    pattern: /\bif\s+you\s+block\s+me\b[^.!?]{0,70}\bi\s+will\s+hurt\s+myself\b/gi
+    pattern:
+      /\bif\s+you\s+block\s+me\b[^.!?]{0,70}\bi\s+will\s+(?:be\s+)?hurt(?:ing)?\s+myself\b/gi
   },
   {
     id: 'self_harm_coercion',
@@ -220,11 +223,12 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'direct_violence',
-    pattern: /\bwill\s+beat\s+you\b/gi
+    pattern:
+      /\b(?:i will|i'll)\s+(?:be\s+)?(?:beat(?:ing)?|chok(?:e|ing))\s+you\b/gi
   },
   {
     id: 'direct_violence',
-    pattern: /\bwill\s+choke\s+you\b/gi
+    pattern: /\bwill\s+(?:be\s+)?(?:beat(?:ing)?|chok(?:e|ing))\s+you\b/gi
   },
   {
     id: 'direct_violence',
@@ -485,8 +489,10 @@ function findStalkingBehaviors(text) {
 }
 
 function extractHarmVerb(matchText) {
-  const verb = matchText.match(/\b(kill|hurt|harm|murder|shoot|stab)\b/i);
-  return verb ? verb[1].toLowerCase() : null;
+  const verb = matchText.match(
+    /\b(kill(?:ing)?|hurt(?:ing)?|harm(?:ing)?|murder(?:ing)?|shoot(?:ing)?|stab(?:bing)?)\b/i
+  );
+  return verb ? verb[1].toLowerCase().replace(/ing$/i, '').replace(/bb$/i, 'b') : null;
 }
 
 function isNegatedForCandidate(clauseText, matchStart, matchText) {
@@ -545,7 +551,7 @@ function isInstructionalQuote(clauseText, matchStart) {
     TRAINING_EXAMPLE_PHRASE.test(clauseText)
   ) {
     const firstPersonBefore =
-      /\b(?:i'?m|i am|i will|i'?ll)\s+(?:going\s+to|will)\s+(?:kill|hurt|harm|shoot|stab)/i.test(
+      /\b(?:i'?m|i am|i will|i'?ll)\s+(?:going\s+to\s+(?:be\s+)?|will\s+(?:be\s+)?|(?:be\s+)?)(?:kill(?:ing)?|hurt(?:ing)?|harm(?:ing)?|shoot(?:ing)?|stab(?:bing)?)/i.test(
         clauseText.slice(0, matchStart)
       );
     if (!firstPersonBefore) return true;
@@ -557,7 +563,7 @@ function isInstructionalQuote(clauseText, matchStart) {
 function isTrainingOnlyClause(clauseText) {
   if (!TRAINING_SEGMENT.test(clauseText)) return false;
   const firstPersonThreat =
-    /\b(?:i'?m|i am|i will|i'?ll)\s+(?:going\s+to|will)\s+(?:kill|hurt|harm|shoot|stab|murder)\s+you\b/i.test(
+    /\b(?:i'?m|i am|i will|i'?ll)\s+(?:going\s+to\s+(?:be\s+)?|will\s+(?:be\s+)?|(?:be\s+)?)(?:kill(?:ing)?|hurt(?:ing)?|harm(?:ing)?|shoot(?:ing)?|stab(?:bing)?|murder(?:ing)?)\s+you\b/i.test(
       clauseText
     );
   return !firstPersonThreat;
@@ -601,7 +607,7 @@ function isFirstPersonThreatMatch(clauseText, matchStart, matchText) {
   if (/\b(?:i\s+will|i'll|i'?ll)\b/i.test(local)) return true;
   if (/\b(?:i'?m|i am)\s+going\s+to\b/i.test(local)) return true;
   const window = clauseText.slice(Math.max(0, matchStart - 8), matchStart + matchText.length);
-  return /\b(?:i\s+will|i'll|i'?ll|i'?m|i am)\s+(?:going\s+to\s+)?(?:kill|hurt|harm|shoot|stab|murder)\b/i.test(
+  return /\b(?:i\s+will|i'll|i'?ll|i'?m|i am)\s+(?:going\s+to\s+)?(?:be\s+)?(?:kill(?:ing)?|hurt(?:ing)?|harm(?:ing)?|shoot(?:ing)?|stab(?:bing)?|murder(?:ing)?)\b/i.test(
     window
   );
 }

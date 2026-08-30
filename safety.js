@@ -52,16 +52,27 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'direct_violence',
-    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+(?:beat|choke)\s+you\b/gi
+    pattern:
+      /\b(?:i'?m|i am)\s+(?:going\s+to|gonna)\s+(?:beat|choke)\s+you\b/gi
   },
   {
     id: 'direct_violence',
     pattern:
-      /\b(?:i'?m|i am|im)\s+going\s+to\s+(?:kill|hurt|harm|shoot|stab|murder)\s+you\b/gi
+      /\b(?:i'?m|i am|im)\s+(?:going\s+to|gonna)\s+(?:kill|hurt|harm|shoot|stab|murder)\s+you\b/gi
   },
   {
     id: 'direct_violence',
     pattern: /\b(?:i will|i'll)\s+(?:kill|hurt|harm|shoot|stab|murder)\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern:
+      /\b(?:(?:i will|i'll)|(?:i'?m|i am)\s+(?:going\s+to|gonna))\s+(?:end|take)\s+your\s+life\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern:
+      /\b(?:(?:i will|i'll)|(?:i'?m|i am)\s+(?:going\s+to|gonna))\s+have\s+you\s+killed\b/gi
   },
   {
     id: 'direct_violence',

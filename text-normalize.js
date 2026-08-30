@@ -2,13 +2,64 @@ const SMART_APOSTROPHE = /[\u2018\u2019\u02BC\u0060\u201B]/g;
 const SMART_QUOTE = /[\u201C\u201D\u201E\u2033\u2036]/g;
 const UNICODE_SPACES = /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g;
 const FORMAT_CHARS = /[\u200B-\u200D\uFEFF]/g;
+const COMBINING_MARKS = /\p{M}/gu;
+
+// Cyrillic/Greek letters that visually match Latin and are used to bypass word-boundary rules.
+const LATIN_CONFUSABLES = new Map([
+  ['\u0430', 'a'],
+  ['\u0435', 'e'],
+  ['\u043E', 'o'],
+  ['\u0440', 'p'],
+  ['\u0441', 'c'],
+  ['\u0443', 'u'],
+  ['\u0445', 'x'],
+  ['\u0456', 'i'],
+  ['\u043A', 'k'],
+  ['\u0410', 'A'],
+  ['\u0415', 'E'],
+  ['\u041E', 'O'],
+  ['\u0420', 'P'],
+  ['\u0421', 'C'],
+  ['\u0423', 'U'],
+  ['\u0425', 'X'],
+  ['\u0391', 'A'],
+  ['\u0392', 'B'],
+  ['\u0395', 'E'],
+  ['\u0397', 'H'],
+  ['\u0399', 'I'],
+  ['\u039A', 'K'],
+  ['\u039C', 'M'],
+  ['\u039D', 'N'],
+  ['\u039F', 'O'],
+  ['\u03A1', 'P'],
+  ['\u03A4', 'T'],
+  ['\u03A7', 'X'],
+  ['\u03A5', 'Y'],
+  ['\u03B1', 'a'],
+  ['\u03B5', 'e'],
+  ['\u03BF', 'o'],
+  ['\u03C1', 'p'],
+  ['\u03C7', 'x'],
+  ['\u03BA', 'k']
+]);
+
+function mapLatinConfusables(text) {
+  let out = '';
+  for (const char of text) {
+    out += LATIN_CONFUSABLES.get(char) ?? char;
+  }
+  return out;
+}
 
 /**
  * Normalize text for scoring and safety matching while preserving paragraph breaks.
  */
 export function normalizeAnalysisText(text) {
-  return (text || '')
+  return mapLatinConfusables(
+    (text || '')
     .normalize('NFKC')
+    .normalize('NFKD')
+    .replace(COMBINING_MARKS, '')
     .replace(FORMAT_CHARS, '')
     .replace(/\u00AD/g, '')
     .replace(SMART_APOSTROPHE, "'")
@@ -16,7 +67,8 @@ export function normalizeAnalysisText(text) {
     .replace(UNICODE_SPACES, ' ')
     .replace(/[ \t\f\v]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
-    .trim();
+    .trim()
+  );
 }
 
 export function normalizeForMatching(text) {

@@ -3,11 +3,13 @@ import { extractTextFromImage, releaseOcrWorker, isSupportedImageFile } from './
 import {
   migrateHistoryStorage,
   isHistoryOptIn as readHistoryOptIn,
+  getBrowserLocalStorage,
   STORAGE_KEY,
   OPT_IN_KEY
 } from './history-storage.js';
 
-migrateHistoryStorage(localStorage);
+const browserStorage = getBrowserLocalStorage();
+if (browserStorage) migrateHistoryStorage(browserStorage);
 
 const form = document.querySelector('#analysis-form');
 const message = document.querySelector('#message');
@@ -585,13 +587,17 @@ function dedupeHistory(items) {
 }
 
 function isHistoryOptIn() {
-  return readHistoryOptIn(localStorage);
+  return browserStorage ? readHistoryOptIn(browserStorage) : false;
 }
 
 function setHistoryOptIn(enabled) {
+  if (!browserStorage) {
+    updateHistoryControls();
+    return;
+  }
   try {
-    if (enabled) localStorage.setItem(OPT_IN_KEY, 'true');
-    else localStorage.removeItem(OPT_IN_KEY);
+    if (enabled) browserStorage.setItem(OPT_IN_KEY, 'true');
+    else browserStorage.removeItem(OPT_IN_KEY);
   } catch {
     /* localStorage unavailable */
   }
@@ -599,14 +605,14 @@ function setHistoryOptIn(enabled) {
 }
 
 function saveHistory(text, analysis) {
-  if (!isHistoryEnabledInThisTab()) return;
+  if (!isHistoryEnabledInThisTab() || !browserStorage) return;
 
   try {
     const trimmed = text.trim();
     const key = normalizeHistoryKey(trimmed);
     if (!key) return;
 
-    const items = dedupeHistory(JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'));
+    const items = dedupeHistory(JSON.parse(browserStorage.getItem(STORAGE_KEY) || '[]'));
     const withoutDuplicate = items.filter(
       (item) => normalizeHistoryKey(item.text || item.preview || '') !== key
     );
@@ -621,24 +627,29 @@ function saveHistory(text, analysis) {
       level: analysis.level || (analysis.abstained ? 'Abstained' : analysis.safetyNotice ? 'Safety' : null),
       timestamp: Date.now()
     });
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(withoutDuplicate.slice(0, MAX_HISTORY)));
+    browserStorage.setItem(STORAGE_KEY, JSON.stringify(withoutDuplicate.slice(0, MAX_HISTORY)));
   } catch {
     /* localStorage unavailable */
   }
 }
 
 function loadHistory() {
+  if (!browserStorage) return [];
   try {
-    return dedupeHistory(JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'));
+    return dedupeHistory(JSON.parse(browserStorage.getItem(STORAGE_KEY) || '[]'));
   } catch {
     return [];
   }
 }
 
 function deleteHistoryItem(id) {
+  if (!browserStorage) {
+    renderHistory();
+    return;
+  }
   try {
     const items = loadHistory().filter((item) => item.id !== id);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    browserStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   } catch {
     /* localStorage unavailable */
   }
@@ -646,8 +657,12 @@ function deleteHistoryItem(id) {
 }
 
 function deleteAllHistory() {
+  if (!browserStorage) {
+    renderHistory();
+    return;
+  }
   try {
-    localStorage.removeItem(STORAGE_KEY);
+    browserStorage.removeItem(STORAGE_KEY);
   } catch {
     /* localStorage unavailable */
   }
@@ -658,8 +673,8 @@ function updateHistoryControls() {
   const optedIn = isHistoryOptIn();
   if (historyOptIn) historyOptIn.checked = optedIn;
   if (historyDeleteAll) {
-    const hasItems = loadHistory().length > 0;
-    historyDeleteAll.hidden = !optedIn || !hasItems;
+    // Keep delete available whenever stored analyses exist, even after opt-out.
+    historyDeleteAll.hidden = loadHistory().length === 0;
   }
 }
 
@@ -670,7 +685,7 @@ function renderHistory() {
   const items = loadHistory();
   historyList.replaceChildren();
 
-  if (!isHistoryOptIn()) {
+  if (!isHistoryOptIn() && !items.length) {
     historyList.append(
       element(
         'p',
@@ -681,7 +696,15 @@ function renderHistory() {
     return;
   }
 
-  if (!items.length) {
+  if (!isHistoryOptIn() && items.length) {
+    historyList.append(
+      element(
+        'p',
+        'history-empty',
+        'Saving is off. Existing analyses remain on this device until you delete them.'
+      )
+    );
+  } else if (!items.length) {
     historyList.append(element('p', 'history-empty', 'No saved analyses yet—stored only on this device until you delete them.'));
     return;
   }
@@ -885,9 +908,12 @@ function applyAnalyzeQuery() {
   const params = new URLSearchParams(window.location.search);
   const raw = params.get('e') || params.get('example');
   if (!raw) return;
-  const byIndex = EXAMPLES[Number(raw)];
+  // Only built-in examples — never treat arbitrary query text as message content
+  // (that would put private wording into the request URL / host logs).
+  const byIndex =
+    /^\d+$/.test(raw) && Number.isInteger(Number(raw)) ? EXAMPLES[Number(raw)] : undefined;
   const byLabel = EXAMPLES.find((ex) => ex.label.toLowerCase() === raw.toLowerCase());
-  const text = byIndex?.text || byLabel?.text || raw;
+  const text = byIndex?.text || byLabel?.text;
   if (text) setMessageValue(text, { invalidate: false });
 }
 applyAnalyzeQuery();

@@ -57,3 +57,13 @@ test('opt-in flag is independent of storage key', () => {
   const storage = mockStorage({ [OPT_IN_KEY]: 'true' });
   assert.equal(isHistoryOptIn(storage), true);
 });
+
+test('getBrowserLocalStorage returns a usable Storage when available', async () => {
+  const { getBrowserLocalStorage } = await import('../history-storage.js');
+  const storage = getBrowserLocalStorage();
+  if (!storage) {
+    assert.ok(true, 'environment has no localStorage');
+    return;
+  }
+  assert.equal(typeof storage.getItem, 'function');
+});

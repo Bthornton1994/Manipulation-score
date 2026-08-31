@@ -4,6 +4,21 @@ export const OPT_IN_KEY = 'clarity-history-opt-in-v1';
 export const MIGRATION_KEY = 'clarity-history-migration-v2';
 
 /**
+ * Return browser localStorage, or null when access throws (e.g. blocked cookies).
+ * Evaluating `localStorage` itself can throw before any Storage method runs.
+ * @returns {Storage | null}
+ */
+export function getBrowserLocalStorage() {
+  try {
+    const storage = globalThis.localStorage;
+    void storage.length;
+    return storage;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Remove legacy auto-saved history from pre-opt-in releases.
  * @param {Storage} storage
  */

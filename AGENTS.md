@@ -41,3 +41,9 @@ For substantial work:
 - encode repeated lessons into tests, schemas, types, invariants, metadata, verification tooling, or versioned Skills instead of repeating prose instructions.
 
 These principles improve execution quality but grant no authority. They do not authorize merges, deployments, scoring or methodology changes, data writes, external messages, publication, account or permission changes, or any other consequential action not already allowed by this repository's vision, methodology, acceptable-use rules, and safety/privacy boundaries.
+
+## UI design engineering skills
+
+For UI or interaction work, read `docs/DESIGN_ENGINEERING.md` and `.claude/skills/emil-design-eng/SKILL.md` before editing. Use the supporting `animate`, `review-animations`, `improve-animations`, `find-animation-opportunities`, `animation-vocabulary`, `apple-design`, `pick-ui-library`, and `prototype` skills when the task calls for implementation, review, planning, vocabulary, gesture/material guidance, library selection, or genuine variant exploration.
+
+The project's existing vision, security, privacy, accessibility, safety, data, and release rules remain authoritative. These skills guide interface craft and never authorize a merge, deployment, data write, external communication, or product-behavior change.

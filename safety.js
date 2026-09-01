@@ -228,15 +228,20 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'direct_violence',
-    pattern: /\byou\s+are\s+dead\s+when\b/gi
+    // Exclude "dead when it comes to …" figurative ranking idioms.
+    pattern: /\byou\s+are\s+dead\s+when\b(?!\s+it\s+comes\s+to\b)/gi
   },
   {
     id: 'direct_violence',
-    pattern: /\bwatch\s+your\s+back\b/gi
+    // Keep "watch your back when you leave"; drop ergonomic "when lifting/carrying…".
+    pattern:
+      /\bwatch\s+your\s+back\b(?!\s+when\s+(?!you\b|i\b|we\b|they\b|he\b|she\b))/gi
   },
   {
     id: 'direct_violence',
-    pattern: /\b(?:i\s+am\s+)?coming\s+for\s+you\b/gi
+    // Keep bare/menacing "coming for you"; drop pickup/logistics continuations.
+    pattern:
+      /\b(?:i\s+am\s+)?coming\s+for\s+you\b(?!\s+(?:after|at|around|before)\b[^.!?]{0,50}\b(?:lunch|dinner|breakfast|coffee|brunch|meeting|appointment|standup|sync|call)\b)(?![^.!?]{0,50}\bso we\s+can\b)/gi
   },
   {
     id: 'stalking',

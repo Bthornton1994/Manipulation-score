@@ -79,3 +79,23 @@ This repository vendors a focused subset of Leonxlnx's `taste-skill` collection 
 - Guardrails: Preserve no-account operation, history off by default, local-only message handling, uncertainty, evidence-linked language, safety notices, and non-diagnostic framing. Do not change scoring, signal definitions, methodology, or message handling.
 
 The upstream collection also contains image-generation, image-to-code, Stitch, legacy v1, and fixed aesthetic preset skills. Those are intentionally not vendored here because they would introduce unrelated assets, dependencies, or visual mandates. The vendored files are source material for agents, and this repository's governing instructions override them.
+
+## ibelick UI Skills
+
+- Upstream: https://github.com/ibelick/ui-skills
+- Pinned source commit: `f2dadf221a166a79606b337d08ce0b04d0d2bfd9`
+- License: MIT, see `docs/IBELICK-UI-SKILLS-LICENSE.md`.
+- Vendored files: `ui-skills-root`, `baseline-ui`, `improve-ui`, `fixing-accessibility`, and `fixing-motion-performance`.
+- `create-design-md` is intentionally not vendored because this repository already has governing design documentation.
+
+### Application
+
+- Route UI work through the smallest relevant skill. Use the baseline rules for text wrapping, tabular numbers, touch targets, existing tokens, and bounded interaction polish.
+- Use the accessibility rules for accessible names, keyboard access, focus and dialogs, forms and errors, announcements, contrast, and reduced motion.
+- Use the motion-performance rules for compositor-first motion, batched measurement, IntersectionObserver or CSS timelines for visibility and scroll behavior, and scoped blur or filters.
+- Use the existing product stack and primitives. Do not add a UI library, migrate animation libraries, add a CLI or runtime dependency, or create a parallel design system solely because the upstream collection mentions one.
+- Use `improve-ui` as an evidence gate for coherent surfaces. It is read-only on product source and plans bounded work; implementation remains governed by this repository's instructions and the owner-approved task.
+
+- Scope: public landing, Learn, trust pages, responsive navigation, and analyzer shell presentation.
+- Preserve: local-only operation, uncertainty, evidence-linked language, safety notices, and non-diagnostic framing.
+- Exclude: scoring, signal definitions, methodology, OCR, history storage, message handling, and safety behavior.

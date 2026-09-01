@@ -63,3 +63,11 @@ For existing UI work, read `docs/DESIGN_ENGINEERING.md`, `.claude/skills/design-
 - Keep user-facing text plain and specific. Avoid decorative labels, fake precision, and dash flourishes in new visible copy while preserving required product terminology and disclaimers.
 - Do not copy image-generation, GSAP, fixed visual-preset, or landing-page patterns into product, trust, benefits, analyzer, or operational surfaces unless the surface is in scope, the interaction is justified, and dependencies are checked.
 - Existing project instructions, product boundaries, accessibility requirements, and release controls remain authoritative.
+
+## UI Skills from ibelick
+
+For UI work, use the vendored `ui-skills-root` routing layer to select the smallest useful context. Use `baseline-ui` for spacing, hierarchy, typography, touch targets, and interaction polish; `fixing-accessibility` for controls, forms, focus, and semantics; `fixing-motion-performance` for animation and scroll-linked behavior; and `improve-ui` for evidence-backed surface audits and bounded implementation plans.
+
+These files are vendored from `https://github.com/ibelick/ui-skills` at commit `f2dadf221a166a79606b337d08ce0b04d0d2bfd9` and are reference material, not a runtime dependency. Existing Emil, Jakub, and Leon guidance, `VISION.md`, methodology, acceptable-use, safety, privacy, and release controls remain authoritative.
+
+Apply the guidance to the public landing, Learn, trust, and analyzer shell only. Preserve no-account operation, history-off-by-default behavior, local-only message handling, uncertainty, evidence-linked language, safety notices, and non-diagnostic framing. Do not change scoring, signal definitions, methodology, or message handling.

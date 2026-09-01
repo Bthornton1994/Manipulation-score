@@ -328,3 +328,9 @@ main{display:block;overflow-x:hidden}
     scroll-behavior:auto!important;
   }
 }
+
+/* ibelick UI Skills baseline */
+.hero h1,.hero-title,.section-heading h2,.steps h2,.principles h2,.legal-content h1,.legal-content h2,.learn-card h2,.learn-card h3,.empty-state h3,.score-head h3{text-wrap:balance}
+.hero-lede,.section-heading>p,.legal-content p,.legal-content li,.learn-card p,.learn-next p{text-wrap:pretty}
+.score-ring b,.signal-row b{font-variant-numeric:tabular-nums}
+.text-btn{min-height:44px}

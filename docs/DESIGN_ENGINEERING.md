@@ -57,7 +57,7 @@ This repository vendors a focused subset of Leonxlnx's `taste-skill` collection 
 ### Source
 
 - Upstream: https://github.com/Leonxlnx/taste-skill
-- Pinned source commit: `undefined`
+- Pinned source commit: `ccbc15639c97057cbfcf32ecebc38ef716e4bb37`
 - License: MIT, see `docs/LEONXLNX-TASTE-SKILL-LICENSE.md`.
 - The pinned core skill is v2 experimental, so agent behavior remains reproducible at this revision.
 - Vendored files:

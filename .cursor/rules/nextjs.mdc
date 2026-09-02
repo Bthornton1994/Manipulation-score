@@ -1,0 +1,20 @@
+---
+description: Next.js 15+ request API and caching guidance for route, page, layout, and server code.
+globs: **/app/**/*.{ts,tsx},**/pages/**/*.{ts,tsx},**/route.{ts,tsx},next.config.*,middleware.*,proxy.*
+alwaysApply: false
+---
+
+# Next.js 15+ request and caching rules
+
+Apply this rule only in a repository that uses Next.js. Confirm the version and active caching configuration in `package.json` and `next.config.*` before making a framework-specific change.
+
+- In Next.js 15, `cookies()`, `headers()`, `params`, and `searchParams` are asynchronous. Always `await` them in async server code. For newer Next.js versions, confirm the current API contract before changing an existing boundary.
+- In Next.js 15, `fetch()` is uncached by default. Opt in explicitly with `{ cache: 'force-cache' }` or `{ next: { revalidate: N } }`.
+- GET route handlers are uncached by default in Next.js 15. Add `export const revalidate = N` or another explicit cache strategy when caching is intended.
+- Server Components are the default. Add `"use client"` only for state, effects, refs, event handlers, or browser APIs.
+- Do not carry Next.js 14 caching assumptions into a Next.js 15+ repository. For Next.js 16 or Cache Components, verify the repository’s active configuration and current docs, and keep intended cache behavior explicit.
+
+References:
+- Next.js 15 upgrade guide: https://nextjs.org/docs/app/guides/upgrading/version-15
+- Next.js `fetch` API reference: https://nextjs.org/docs/app/api-reference/functions/fetch
+- Next.js route handlers: https://nextjs.org/docs/app/api-reference/file-conventions/route

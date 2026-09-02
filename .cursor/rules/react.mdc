@@ -1,0 +1,20 @@
+---
+description: React 19 component, action, memoization, ref, and effect guidance.
+globs: **/*.{tsx,jsx}
+alwaysApply: false
+---
+
+# React 19 rules
+
+Apply this rule to React 19+ components. Confirm the repository’s React version and whether the React Compiler is enabled before making compiler-specific assumptions.
+
+- `ref` is a normal prop now. Do NOT use `forwardRef` in new components.
+- When the React Compiler is enabled, do NOT hand-wrap things in `useMemo`, `useCallback`, or `React.memo` unless profiling shows a real regression. When it is not enabled, profile before adding manual memoization rather than adding it by habit.
+- Mutations go through `<form action={fn}>` + `useActionState` (from `react`) when using React form actions. Never introduce `useFormState` from `react-dom`.
+- Compute derived values during render. `useEffect` is for external systems only, not for deriving state from props or other state.
+
+References:
+- React 19 release: https://react.dev/blog/2024/12/05/react-19
+- `ref` and `forwardRef`: https://react.dev/reference/react/forwardRef
+- `useActionState`: https://react.dev/reference/react/useActionState
+- React Compiler and manual memoization: https://react.dev/reference/react/useMemo

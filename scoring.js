@@ -54,7 +54,11 @@ const SIGNALS = [
     label: 'Conditional threat',
     function: 'Links cooperation to a stated or implied penalty—making honesty or refusal feel risky.',
     weight: 26,
-    pattern: /or else|you(?:'ll| will) regret|if you don(?:'t|’t| not)|i(?:'ll| will) leave|never (?:speak|talk) to you|you(?:'ll| will) be sorry/gi,
+    // Bare "if you don't" / "I will leave" / "or else" are too common in logistics.
+    // Require compliance/consequence continuation so workplace phrasing does not
+    // inflate into High via false conditional-threat matches.
+    pattern:
+      /or else(?=\s+you\b|[.!?]|$)|you(?:'ll| will) regret|if you don(?:'t|’t| not)(?=\s*(?:[,.](?:\s|$)|$|i(?:\s|'|’)|you(?:'ll| will|\s)|(?:do|stop|listen|answer|text|call|reply|respond|come|agree|apologize|comply|obey|leave|talk|stay|go|get|give|tell|send|delete|block|choose|pick|drop|fix|sign|pay|transfer)\b))|i(?:'ll| will) leave(?!\s+(?:the\b|a\b|an\b|it\b|my\b|your\b|this\b|that\b|work\b|early\b|for\b|keys\b|packet\b|desk\b|report\b|office\b|house\b|building\b|him\b|her\b|them\b|home\b|town\b|city\b|message\b|note\b|voicemail\b|comment\b))|never (?:speak|talk) to you|you(?:'ll| will) be sorry/gi,
     education: 'Conditional threats connect compliance to punishment or withdrawal. Safety and honesty can feel costly.'
   },
   {

@@ -2,6 +2,9 @@ const SMART_APOSTROPHE = /[\u2018\u2019\u02BC\u0060\u201B]/g;
 const SMART_QUOTE = /[\u201C\u201D\u201E\u2033\u2036]/g;
 const UNICODE_SPACES = /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g;
 const FORMAT_CHARS = /[\u200B-\u200D\uFEFF]/g;
+/** Weapon emojis normalized to words IMMEDIATE_RULES and weapon_threat already match. */
+const KNIFE_EMOJI = /\u{1F52A}|\u{1F5E1}\uFE0F?|\u{1F5E1}/gu;
+const GUN_EMOJI = /\u{1F52B}\uFE0F?/gu;
 
 /**
  * Normalize text for scoring and safety matching while preserving paragraph breaks.
@@ -10,6 +13,8 @@ export function normalizeAnalysisText(text) {
   return (text || '')
     .normalize('NFKC')
     .replace(FORMAT_CHARS, '')
+    .replace(KNIFE_EMOJI, 'knife')
+    .replace(GUN_EMOJI, 'gun')
     .replace(/\u00AD/g, '')
     .replace(SMART_APOSTROPHE, "'")
     .replace(SMART_QUOTE, '"')

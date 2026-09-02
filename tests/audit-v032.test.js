@@ -92,3 +92,19 @@ test('normalizeAnalysisText handles narrow no-break space', () => {
   const result = analyzeMessage(spaced.replace('would regret', 'would\u202Fregret'));
   assert.ok(result.score >= 31 || result.safetyNotice);
 });
+
+test('weapon emoji threats trigger safety in threads instead of manipulation-only results', () => {
+  const pad =
+    'If you really cared about me you would answer right now immediately before it is too late for us today okay.';
+  const knifeThreat = `${pad}\n\nI will \u{1F52A} you.`;
+  const normalized = normalizeAnalysisText(`I will \u{1F52A} you.`);
+  assert.match(normalized, /knife you/i);
+
+  const knifeResult = analyzeMessage(knifeThreat);
+  assert.ok(knifeResult.safetyNotice, 'expected safety notice for knife emoji threat');
+  assert.equal(knifeResult.level, null);
+
+  const gunThreat = `${pad}\n\nI will \u{1F52B} you tonight.`;
+  const gunResult = analyzeMessage(gunThreat);
+  assert.ok(gunResult.safetyNotice, 'expected safety notice for gun emoji threat');
+});

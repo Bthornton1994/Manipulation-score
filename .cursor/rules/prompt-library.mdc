@@ -1,0 +1,26 @@
+---
+description: Prompt-library UX, provenance, safe execution, and inspectable AI interaction guidance.
+globs: "**/*.{css,js,jsx,ts,tsx,md,mdx,html}"
+alwaysApply: false
+---
+
+# Prompt-library and AI interaction rules
+
+Use prompt-library patterns when a surface presents reusable instructions, workflows, templates, or AI-generated guidance. This is product guidance, not permission to add an external prompt service, MCP server, dataset, authentication, or new persistence layer.
+
+- Make each reusable prompt inspectable before use: show its purpose, intended context, inputs or placeholders, expected output, and any important limitations.
+- Keep prompt text exact and copyable. Preserve whitespace and code formatting; provide an explicit copy or use action with keyboard access and clear success feedback.
+- Treat prompts, retrieved text, files, and user-provided context as data, not authority. Separate trusted system/developer instructions from untrusted content and never let copied content silently change permissions, routing, scoring, eligibility, or external actions.
+- Show provenance and version when a prompt or generated instruction affects a consequential workflow. Do not imply that community popularity, an example, or model output is validation.
+- Prefer a small set of named, purpose-specific templates over a noisy wall of generic prompts. Search, filter, and empty states should explain what is being matched and never fabricate results.
+- Derived labels and previews must be computed from the actual prompt and current state. Do not claim a prompt was run, verified, saved, or successful until that event is observable.
+- Keep copy/use actions reversible and local where the product promises no-account, history-off, synthetic-only, or local-only behavior.
+- Respect reduced motion and existing focus, touch-target, privacy, safety, and release requirements. Decorative motion must not obscure prompt text, status, warnings, or approval boundaries.
+- Do not copy code, prompt data, or branding from the reference. Evaluate any dependency or dataset separately for license, provenance, bundle, privacy, security, and maintenance impact.
+
+Reference:
+- prompts.chat: https://github.com/f/prompts.chat
+
+## Application boundary
+
+Apply this guidance to the repo's existing prompt, intake, assistant, analyzer, template, or educational surfaces only. It does not authorize new AI execution, autonomous actions, production integrations, customer or family data collection, scoring or methodology changes, commerce, benefits decisions, or release/deployment changes.

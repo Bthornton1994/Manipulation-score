@@ -1,6 +1,6 @@
 ---
 description: Prisma client lifetime, query safety, payload shape, batching, and migration guidance.
-globs: prisma/**/*,**/*.prisma,**/*prisma*.{ts,tsx,js,mjs}
+globs: "prisma/**/*,**/*.prisma,**/*prisma*.{ts,tsx,js,mjs}"
 alwaysApply: false
 ---
 

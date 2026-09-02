@@ -1,6 +1,6 @@
 ---
 description: Tailwind CSS v4 CSS-first imports, tokens, and responsive guidance.
-globs: **/*.css,tailwind.config.*,postcss.config.*
+globs: "**/*.css,tailwind.config.*,postcss.config.*"
 alwaysApply: false
 ---
 

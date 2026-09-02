@@ -1,6 +1,6 @@
 ---
 description: TypeScript type-safety and exhaustive-union guidance.
-globs: **/*.{ts,tsx}
+globs: "**/*.{ts,tsx}"
 alwaysApply: false
 ---
 

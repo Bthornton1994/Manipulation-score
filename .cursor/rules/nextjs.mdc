@@ -1,6 +1,6 @@
 ---
 description: Next.js 15+ request API and caching guidance for route, page, layout, and server code.
-globs: **/app/**/*.{ts,tsx},**/pages/**/*.{ts,tsx},**/route.{ts,tsx},next.config.*,middleware.*,proxy.*
+globs: "**/app/**/*.{ts,tsx},**/pages/**/*.{ts,tsx},**/route.{ts,tsx},next.config.*,middleware.*,proxy.*"
 alwaysApply: false
 ---
 

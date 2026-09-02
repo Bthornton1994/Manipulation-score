@@ -1,6 +1,6 @@
 ---
 description: React 19 component, action, memoization, ref, and effect guidance.
-globs: **/*.{tsx,jsx}
+globs: "**/*.{tsx,jsx}"
 alwaysApply: false
 ---
 

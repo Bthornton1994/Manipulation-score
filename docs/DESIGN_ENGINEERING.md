@@ -99,3 +99,13 @@ The upstream collection also contains image-generation, image-to-code, Stitch, l
 - Scope: public landing, Learn, trust pages, responsive navigation, and analyzer shell presentation.
 - Preserve: local-only operation, uncertainty, evidence-linked language, safety notices, and non-diagnostic framing.
 - Exclude: scoring, signal definitions, methodology, OCR, history storage, message handling, and safety behavior.
+
+
+## External UI and copy quality gates
+
+- Use the existing design system and the smallest relevant skill from `docs/EXTERNAL-AGENT-SKILLS.md`; do not introduce a parallel visual system.
+- Use `no-ai-design-slop` as a removal-first review. Preserve product-specific identity, useful density, honest placeholders, and explicit states.
+- Use `no-ai-slop` for visible copy. Preserve supported claims and approved disclaimers; do not add invented proof or inflated outcomes.
+- Use `frontend-ui-engineering` for keyboard access, responsive behavior, loading, empty, error, and focus states.
+- Use `source-driven-development` for framework-specific changes and `verification-before-completion` before completion claims.
+- Scope: public landing, Learn, trust pages, and analyzer shell presentation. Product behavior, data handling, scoring, benefits, commerce, authority, and release gates remain outside this design layer.

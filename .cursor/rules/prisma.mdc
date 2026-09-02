@@ -10,7 +10,11 @@ Apply this rule only when the repository intentionally uses Prisma and has a Pri
 
 - Use one PrismaClient per process via a `globalThis` singleton. Never create one per request.
 - Prefer `select` over `include` — `include` loads whole rows and bloats the typed payload.
-- Raw SQL only as a tagged template: `db.$queryRaw`SELECT ... WHERE email = ${email}``. Never `$queryRawUnsafe` with a built-up string. That is SQL injection.
+- Raw SQL only as a tagged template. For example:
+  ```ts
+  db.$queryRaw`SELECT ... WHERE email = ${email}`
+  ```
+- Never `$queryRawUnsafe` with a built-up string. That is SQL injection.
 - `db push` is prototype-only. Use `migrate dev` locally, `migrate deploy` in CI.
 - Batch with `where: { id: { in: ids } }`. Never query inside a `for` loop.
 

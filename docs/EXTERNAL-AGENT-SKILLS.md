@@ -39,3 +39,7 @@ The linked @Av1dlive source post recommends a Grok Bot and Cursor Cloud Agent wo
 ## Boundaries
 
 Existing project instructions, product vision, privacy, safety, data, security, tenant-isolation, methodology, and release controls remain authoritative. This file and the vendored skills are reference material for agents. They do not authorize autonomous execution, production access, external communication, commerce, supplier activity, publication, merging, or deployment.
+
+## Linked agent repository references
+
+The repository discovery list in `docs/EXTERNAL-AGENT-REPOSITORIES.md` is reference material only. The listed systems are not Agent Skills and are not vendored or runtime dependencies. The selected repo-local skills remain the only newly loaded agent guidance from this source review.

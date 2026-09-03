@@ -1,0 +1,17 @@
+---
+description: TypeScript type-safety and exhaustive-union guidance.
+globs: "**/*.{ts,tsx}"
+alwaysApply: false
+---
+
+# TypeScript rules
+
+- The fix for a type error is NEVER `any`. Use `unknown` + narrowing, or write the real type.
+- Do not use `as SomeType` to silence an error. Write a type guard. (`as const` is fine.)
+- `catch (e)` is `unknown`. Narrow with `e instanceof Error` before using error properties.
+- Use `satisfies` on config objects so literal types survive.
+- Every union `switch` ends with `default: assertNever(x)`.
+
+References:
+- TypeScript `satisfies`: https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-9.html
+- TypeScript narrowing and exhaustiveness: https://www.typescriptlang.org/docs/handbook/2/narrowing.html

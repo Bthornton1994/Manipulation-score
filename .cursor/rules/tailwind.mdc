@@ -1,0 +1,20 @@
+---
+description: Tailwind CSS v4 CSS-first imports, tokens, and responsive guidance.
+globs: "**/*.css,tailwind.config.*,postcss.config.*"
+alwaysApply: false
+---
+
+# Tailwind CSS v4 rules
+
+Apply this rule only when the repository uses Tailwind CSS v4 or the `@tailwindcss/postcss` integration. Do not apply it to Tailwind v3 or non-Tailwind CSS.
+
+- Entry CSS is `@import "tailwindcss";` — NOT the v3 `@tailwind base/components/utilities` trio.
+- Do not add the v3 `autoprefixer` or `postcss-nested` setup. Tailwind v4’s Lightning CSS pipeline handles the needed transforms.
+- Design tokens live in a `@theme { }` block in CSS, not in `tailwind.config.js`.
+- Use tokens, not arbitrary values: `bg-brand-500`, not `bg-[#3b82f6]`, unless a one-off value is genuinely required and documented.
+- Container queries are built in (`@container`, `@sm:`). Do not install the container-queries plugin.
+
+References:
+- Tailwind CSS v4 upgrade guide: https://tailwindcss.com/docs/upgrade-guide
+- Tailwind theme variables: https://tailwindcss.com/docs/theme
+- Tailwind responsive and container queries: https://tailwindcss.com/docs/responsive-design

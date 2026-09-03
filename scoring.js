@@ -12,7 +12,7 @@ export const SCORE_BANDS = [
     min: 0,
     max: 30,
     headline: 'Low pressure patterns',
-    summary: 'Few or mild language patterns. The message may still feel difficult—context matters more than the rating.'
+    summary: 'Few or mild language patterns. The message may still feel difficult, context matters more than the rating.'
   },
   {
     id: 'moderate',
@@ -28,7 +28,7 @@ export const SCORE_BANDS = [
     min: 61,
     max: 100,
     headline: 'High pressure patterns',
-    summary: 'Multiple clear pressure functions appear together—language that can significantly compress your room to pause, refuse, or seek support.'
+    summary: 'Multiple clear pressure functions appear together, language that can significantly compress your room to pause, refuse, or seek support.'
   }
 ];
 
@@ -36,7 +36,7 @@ const SIGNALS = [
   {
     id: 'guilt',
     label: 'Guilt leverage',
-    function: 'Uses care, loyalty, or past effort as currency—making a boundary or delay feel like proof you do not care enough.',
+    function: 'Uses care, loyalty, or past effort as currency, making a boundary or delay feel like proof you do not care enough.',
     weight: 20,
     pattern: /if you (?:really )?(?:cared|loved|loved me)|after (?:all|everything) i(?:'ve| have) done|you owe me|\bungrateful\b|\bselfish\b|how could you/gi,
     education: 'Guilt framing ties affection or loyalty to a specific action. A normal boundary can be reframed as betrayal.'
@@ -52,7 +52,7 @@ const SIGNALS = [
   {
     id: 'threat',
     label: 'Conditional threat',
-    function: 'Links cooperation to a stated or implied penalty—making honesty or refusal feel risky.',
+    function: 'Links cooperation to a stated or implied penalty, making honesty or refusal feel risky.',
     weight: 26,
     pattern: /or else|you(?:'ll| will) regret|if you don(?:'t|’t| not)|i(?:'ll| will) leave|never (?:speak|talk) to you|you(?:'ll| will) be sorry/gi,
     education: 'Conditional threats connect compliance to punishment or withdrawal. Safety and honesty can feel costly.'
@@ -60,10 +60,10 @@ const SIGNALS = [
   {
     id: 'isolation',
     label: 'Isolation pressure',
-    function: 'Discourages outside perspective—positioning support networks as threats to the relationship or secrecy as required.',
+    function: 'Discourages outside perspective, positioning support networks as threats to the relationship or secrecy as required.',
     weight: 22,
     pattern: /(?:do\s+not|don(?:'t|’t))\s+tell (?:them|anyone)|they(?:'re| are) against you|only one who understands|your friends don(?:'t|’t) care|just between us/gi,
-    education: 'Isolation language discourages checking with others. Outside perspective is often healthy—not a threat.'
+    education: 'Isolation language discourages checking with others. Outside perspective is often healthy, not a threat.'
   },
   {
     id: 'dismissal',
@@ -76,7 +76,7 @@ const SIGNALS = [
   {
     id: 'absolutes',
     label: 'All-or-nothing framing',
-    function: 'Turns a single moment into a permanent character verdict—making nuance or partial agreement feel impossible.',
+    function: 'Turns a single moment into a permanent character verdict, making nuance or partial agreement feel impossible.',
     weight: 10,
     pattern: /\b(?:always|never|everyone|nobody|everything|nothing)\b/gi,
     education: 'Words like “always” and “never” flatten specifics into permanent patterns. One event rarely proves a rule.'
@@ -84,7 +84,7 @@ const SIGNALS = [
   {
     id: 'obligation',
     label: 'Assigned obligation',
-    function: 'Reframes a request as duty or requirement—so compliance feels mandatory rather than chosen.',
+    function: 'Reframes a request as duty or requirement, so compliance feels mandatory rather than chosen.',
     weight: 14,
     pattern: /you (?:should|must|have to|need to)|after everything|it(?:'s| is) your (?:job|duty|responsibility)/gi,
     education: 'Obligation pressure assigns responsibility to you. You can care about someone without accepting assigned duties.'
@@ -92,7 +92,7 @@ const SIGNALS = [
   {
     id: 'minimization',
     label: 'Reaction minimization',
-    function: 'Shrinks or ridicules your response to close the topic—implying the problem is your reaction, not the issue.',
+    function: 'Shrinks or ridicules your response to close the topic, implying the problem is your reaction, not the issue.',
     weight: 12,
     pattern: /you(?:'re| are) being dramatic|not that bad|calm down|stop being so|you(?:'re| are) too much/gi,
     education: 'Minimization shrinks your reaction to end the conversation. Response size does not prove you are wrong.'
@@ -100,7 +100,7 @@ const SIGNALS = [
   {
     id: 'resigned_withdrawal',
     label: 'Resigned withdrawal',
-    function: 'Signals pulling back or giving up while leaving the rupture unresolved—often inviting you to chase or repair.',
+    function: 'Signals pulling back or giving up while leaving the rupture unresolved, often inviting you to chase or repair.',
     weight: 18,
     pattern: /fine,?\s*forget it|i'm done(?: trying)?|whatever\.?$|i guess so|forget about it/gi,
     education: 'Resigned withdrawal ends engagement abruptly. The unfinished tension can pressure you to re-open the conversation.'
@@ -108,7 +108,7 @@ const SIGNALS = [
   {
     id: 'implied_rejection',
     label: 'Implied rejection',
-    function: 'Draws a negative conclusion about your value or place in the relationship without stating it directly—inviting you to disprove it.',
+    function: 'Draws a negative conclusion about your value or place in the relationship without stating it directly, inviting you to disprove it.',
     weight: 22,
     pattern: /i guess i know where i stand|know where i stand|how little i matter|obviously don'?t care|not important (?:to you|enough)|clear where i stand/gi,
     education: 'Implied rejection states a hurtful conclusion indirectly. You may feel pushed to prove you do care or value them.'
@@ -116,7 +116,7 @@ const SIGNALS = [
   {
     id: 'conditional_access',
     label: 'Conditional access',
-    function: 'Offers or withholds connection based on your behavior—making attention feel like a reward you must earn or chase.',
+    function: 'Offers or withholds connection based on your behavior, making attention feel like a reward you must earn or chase.',
     weight: 20,
     pattern:
       /don'?t bother (?:reaching out|contacting|calling|texting|messaging)|if you can'?t make time|unless you\s+(?:do|apologize|prove|agree|stop|care|love|commit|what i asked)|don'?t expect me to reach out|when you have time for me|(?:won'?t|will not)\s+(?:speak|talk|see|call|contact)\s+(?:to\s+)?you\s+unless|(?:do not|don't)\s+get\s+to\s+see\s+me\s+unless/gi,
@@ -125,10 +125,10 @@ const SIGNALS = [
   {
     id: 'responsibility_shift',
     label: 'Responsibility shifting',
-    function: 'Frames your limits (time, energy, boundaries) as the cause of the speaker’s hurt—moving accountability onto you.',
+    function: 'Frames your limits (time, energy, boundaries) as the cause of the speaker’s hurt, moving accountability onto you.',
     weight: 19,
     pattern: /if you can'?t make time|if you don'?t have time|you don'?t (?:care|prioritize)|too busy for me|can'?t be bothered|make time for me/gi,
-    education: 'Responsibility shifting converts your boundaries into evidence of neglect. Their feelings are valid—but not always your assignment to fix.'
+    education: 'Responsibility shifting converts your boundaries into evidence of neglect. Their feelings are valid, but not always your assignment to fix.'
   }
 ];
 
@@ -267,7 +267,7 @@ const LEVERAGE_CLUSTERS = [
     id: 'withdrawal_leverage',
     label: 'Emotional leverage via withdrawal',
     function:
-      'The message withdraws warmth, access, or effort while implying you caused it—pressuring you to chase, apologize, or rearrange priorities to restore connection.',
+      'The message withdraws warmth, access, or effort while implying you caused it, pressuring you to chase, apologize, or rearrange priorities to restore connection.',
     indicators: ['resigned_withdrawal', 'implied_rejection', 'conditional_access', 'responsibility_shift', 'guilt'],
     minIndicators: 2
   },
@@ -275,14 +275,14 @@ const LEVERAGE_CLUSTERS = [
     id: 'pressure_stack',
     label: 'Stacked pressure tactics',
     function:
-      'Several distinct pressure functions appear together—narrowing room to pause, question, seek support, or respond at your own pace.',
+      'Several distinct pressure functions appear together, narrowing room to pause, question, seek support, or respond at your own pace.',
     minDistinctSignals: 3
   },
   {
     id: 'urgency_consequence',
     label: 'Deadline with consequence',
     function:
-      'Urgency is paired with a threat or withdrawal—raising the cost of taking time to think before you answer.',
+      'Urgency is paired with a threat or withdrawal, raising the cost of taking time to think before you answer.',
     required: ['urgency', 'threat'],
     scoreBonus: 10
   },
@@ -290,7 +290,7 @@ const LEVERAGE_CLUSTERS = [
     id: 'guilt_obligation',
     label: 'Guilt plus assigned duty',
     function:
-      'Care or loyalty is weaponized alongside assigned responsibility—so refusing feels like both uncaring and disobedient.',
+      'Care or loyalty is weaponized alongside assigned responsibility, so refusing feels like both uncaring and disobedient.',
     required: ['guilt', 'obligation'],
     scoreBonus: 8
   }
@@ -791,7 +791,7 @@ function buildThreadResult(normalized, segmentAnalyses) {
     methodologyVersion: METHODOLOGY_VERSION,
     experimentalScreening: true,
     segments: segmentAnalyses,
-    threadSummary: `Highest band in this thread: ${primary.analysis.level} (${highCount} High, ${moderateCount} Moderate of ${segmentAnalyses.length} messages). Each message is screened separately—the overall line is not a verdict on the whole conversation.`
+    threadSummary: `Highest band in this thread: ${primary.analysis.level} (${highCount} High, ${moderateCount} Moderate of ${segmentAnalyses.length} messages). Each message is screened separately, the overall line is not a verdict on the whole conversation.`
   };
 }
 

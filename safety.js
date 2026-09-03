@@ -7,7 +7,7 @@ import { normalizeAnalysisText, normalizeForMatching, splitMessageBlocks } from 
 
 export const SAFETY_NOTICE = {
   id: 'conditional_harm_language',
-  headline: 'Safety notice — not a safety assessment',
+  headline: 'Safety notice | not a safety assessment',
   summary:
     'This message includes language about harm, violence, or coercion. Clarity cannot determine whether you are in danger. If you feel unsafe, contact local emergency services or a trusted crisis resource.',
   resourcesAnchor: '#resources'

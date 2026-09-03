@@ -1,0 +1,28 @@
+---
+description: Motion interaction, liquid UI boundaries, performance, and reduced-motion guidance.
+globs: "**/*.{css,js,jsx,ts,tsx}"
+alwaysApply: false
+---
+
+# Motion and liquid UI rules
+
+This is a design reference, not permission to add a dependency or make every surface playful. Read the repository’s `VISION.md`, `AGENTS.md`, and existing design guidance before changing motion.
+
+- Use spring-like motion for interruptible spatial state changes such as opening, closing, dragging, or moving a selection indicator. Use simple opacity or color transitions for passive reveals and status changes.
+- Tune a small, interaction-specific set of parameters. Do not apply global bounce, overshoot, cursor trails, or liquid effects by default.
+- Prefer transform and opacity, or CSS transitions on compositor-friendly properties. Avoid measuring and rewriting layout on every frame when a transform is sufficient. Stop work while an interaction is idle.
+- Keep motion interruptible and cancelable. Visual state, content, input, keyboard behavior, and focus must remain synchronized throughout the transition.
+- Honor `prefers-reduced-motion: reduce` by collapsing motion to immediate or near-immediate state changes. Never hide essential content or feedback when motion is reduced.
+- If a liquid treatment is ever used, isolate its filtered decorative silhouette from the real DOM content. Keep text, icons, images, focus rings, hit targets, and ARIA semantics crisp and interactive.
+- Do not copy code from these references or install `liquid-gooey` based on this rule alone. A dependency requires a component-specific design decision, license review, bundle and performance review, Safari/mobile verification, and updated tests.
+
+References:
+- Kinetics spring-motion gallery: https://kinetics.colorion.co/
+- Kinetics source repository: https://github.com/ckissi/kinetics
+- Liquid Gooey demo: https://gooey.jakubantalik.com/
+- Liquid Gooey source and package README: https://github.com/Jakubantalik/Libraries/tree/main/packages/liquid-gooey
+
+## Manipulation Score application boundary
+
+This is reference-only under the current release posture. Do not add a motion library or alter scoring, methodology, message handling, privacy, history, or safety behavior as part of this guidance.
+Any future motion work requires a separately scoped UI task and must keep the artifact-first, no-diagnosis, local-only, and reduced-motion boundaries intact.

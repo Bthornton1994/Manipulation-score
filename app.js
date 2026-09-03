@@ -36,7 +36,7 @@ let hasDisplayedAnalysis = false;
 const EXAMPLES = [
   {
     label: 'Guilt & isolation',
-    text: "If you really cared about me, you'd answer right now. Don't tell anyone—I'm the only one who understands you."
+    text: "If you really cared about me, you'd answer right now. Don't tell anyone, I'm the only one who understands you."
   },
   {
     label: 'Urgency & pressure',
@@ -198,7 +198,7 @@ function createIntensityLegend() {
     ['Strong', 'High intensity or central to the pressure']
   ].forEach(([tag, description]) => {
     const li = element('li', '');
-    li.append(element('strong', '', tag), document.createTextNode(` — ${description}`));
+    li.append(element('strong', '', tag), document.createTextNode(` | ${description}`));
     list.append(li);
   });
   details.append(list);
@@ -284,7 +284,7 @@ function createScoreSection(analysis) {
         element(
           'p',
           'assessment-index',
-          `Experimental pattern band: ${analysis.level}${versionNote} — evidence-linked findings, not proof of intent, character, or safety.`
+          `Experimental pattern band: ${analysis.level}${versionNote} | evidence-linked findings, not proof of intent, character, or safety.`
         )
       );
       children.push(pilotContext);
@@ -310,7 +310,7 @@ function createScoreSection(analysis) {
         element(
           'p',
           'assessment-index',
-          `Experimental pattern screening ${analysis.score}/100${versionNote} — not proof of intent, character, or safety.`
+          `Experimental pattern screening ${analysis.score}/100${versionNote} | not proof of intent, character, or safety.`
         )
       );
       children.push(context);
@@ -323,9 +323,9 @@ function createScoreSection(analysis) {
     scaleBody.append(element('p', 'score-scale-title', 'Screening bands (experimental)'));
     const bands = element('ul', 'score-bands');
     [
-      { label: 'Low', range: '0–30', note: 'Mild or ambiguous patterns only' },
-      { label: 'Moderate', range: '31–60', note: 'Clear pressure language present' },
-      { label: 'High', range: '61–100', note: 'Multiple clear pressure functions' }
+      { label: 'Low', range: '0-30', note: 'Mild or ambiguous patterns only' },
+      { label: 'Moderate', range: '31-60', note: 'Clear pressure language present' },
+      { label: 'High', range: '61-100', note: 'Multiple clear pressure functions' }
     ].forEach((item) => {
       const li = element('li', item.label.toLowerCase() === analysis.level?.toLowerCase() ? 'active' : '');
       li.append(element('strong', '', `${item.label} (${item.range})`), element('span', '', item.note));
@@ -336,7 +336,7 @@ function createScoreSection(analysis) {
       element(
         'p',
         'score-note',
-        'This screening supports reflection—it does not measure intent, character, or whether you should stay in a relationship. See limitations for methodology status.'
+        'This screening supports reflection, it does not measure intent, character, or whether you should stay in a relationship. See limitations for methodology status.'
       )
     );
     scale.append(scaleBody);
@@ -431,7 +431,7 @@ function createLeverageInsightsSection(insights) {
     element(
       'p',
       'leverage-insights-note',
-      'These readings describe how the language may function—not labels for intent or diagnosis.'
+      'These readings describe how the language may function, not labels for intent or diagnosis.'
     )
   );
 
@@ -682,7 +682,7 @@ function renderHistory() {
   }
 
   if (!items.length) {
-    historyList.append(element('p', 'history-empty', 'No saved analyses yet—stored only on this device until you delete them.'));
+    historyList.append(element('p', 'history-empty', 'No saved analyses yet, stored only on this device until you delete them.'));
     return;
   }
 
@@ -690,7 +690,7 @@ function renderHistory() {
     const row = element('div', 'history-item-row');
     const button = element('button', 'history-item', '');
     button.type = 'button';
-    const scoreLabel = item.score == null ? '—' : String(item.score);
+    const scoreLabel = item.score == null ? '-' : String(item.score);
     button.append(
       element(
         'span',

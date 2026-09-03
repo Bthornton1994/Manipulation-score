@@ -1,0 +1,25 @@
+---
+description: Prisma client lifetime, query safety, payload shape, batching, and migration guidance.
+globs: "prisma/**/*,**/*.prisma,**/*prisma*.{ts,tsx,js,mjs}"
+alwaysApply: false
+---
+
+# Prisma rules
+
+Apply this rule only when the repository intentionally uses Prisma and has a Prisma schema or client dependency. If Prisma is not present, leave this rule dormant and do not introduce it implicitly.
+
+- Use one PrismaClient per process via a `globalThis` singleton. Never create one per request.
+- Prefer `select` over `include` — `include` loads whole rows and bloats the typed payload.
+- Raw SQL only as a tagged template. For example:
+  ```ts
+  db.$queryRaw`SELECT ... WHERE email = ${email}`
+  ```
+- Never `$queryRawUnsafe` with a built-up string. That is SQL injection.
+- `db push` is prototype-only. Use `migrate dev` locally, `migrate deploy` in CI.
+- Batch with `where: { id: { in: ids } }`. Never query inside a `for` loop.
+
+References:
+- Prisma Client setup: https://www.prisma.io/docs/orm/prisma-client/setup-and-configuration/instantiate-prisma-client
+- Prisma raw queries: https://www.prisma.io/docs/orm/prisma-client/using-raw-sql/raw-queries
+- Prisma development and production migrations: https://www.prisma.io/docs/orm/prisma-migrate/workflows/development-and-production
+- Prisma select fields: https://www.prisma.io/docs/orm/prisma-client/queries/select-fields

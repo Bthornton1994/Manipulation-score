@@ -7,7 +7,7 @@
     <meta name="description" content="How Clarity screens language patterns, constructs experimental scores, applies abstention and safety notices, and what validation has been completed." />
     <link rel="canonical" href="https://manipulationscore.com/methodology.html" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
-    <title>Methodology — Clarity | Manipulation Score</title>
+    <title>Methodology | Clarity | Manipulation Score</title>
     <link rel="stylesheet" href="fonts.css" />
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -21,33 +21,33 @@
       <p class="legal-updated">Last updated: August 17, 2026</p>
 
       <h2>What Clarity measures</h2>
-      <p>Clarity screens observable <strong>language functions</strong> in a pasted message—patterns that may compress informed, voluntary choice. Examples include guilt leverage, forced urgency, isolation framing, conditional access, and similar pressure functions described in the taxonomy below.</p>
+      <p>Clarity screens observable <strong>language functions</strong> in a pasted message, patterns that may compress informed, voluntary choice. Examples include guilt leverage, forced urgency, isolation framing, conditional access, and similar pressure functions described in the taxonomy below.</p>
       <p>Clarity does <strong>not</strong> measure intent, personality, diagnosis, truth, relationship safety, or whether a person is “manipulative.” It highlights language that <em>may</em> narrow reflection space. Context, history, and tone always matter more than any score.</p>
 
       <h2>Language-function taxonomy (screening v0.3.3)</h2>
       <p>Twelve pattern families are evaluated in the current Controlled Beta:</p>
       <ul>
-        <li><strong>Guilt leverage</strong> — care or loyalty used as currency for compliance.</li>
-        <li><strong>Forced urgency</strong> — compressed decision windows.</li>
-        <li><strong>Conditional threat</strong> — cooperation linked to penalties.</li>
-        <li><strong>Isolation</strong> — secrecy or discouraging outside input.</li>
-        <li><strong>Dismissal</strong> — feelings or concerns minimized.</li>
-        <li><strong>Misleading absolutes</strong> — rigid always/never framing.</li>
-        <li><strong>Assigned obligation</strong> — duties imposed without mutual agreement.</li>
-        <li><strong>Minimization</strong> — impact of concerns downplayed.</li>
-        <li><strong>Resigned withdrawal</strong> — cooperation withdrawn to create pressure.</li>
-        <li><strong>Implied rejection</strong> — connection threatened indirectly.</li>
-        <li><strong>Conditional access</strong> — affection, contact, or access withheld for compliance.</li>
-        <li><strong>Responsibility shift</strong> — blame placed on the recipient for the sender’s state.</li>
+        <li><strong>Guilt leverage</strong> | care or loyalty used as currency for compliance.</li>
+        <li><strong>Forced urgency</strong> | compressed decision windows.</li>
+        <li><strong>Conditional threat</strong> | cooperation linked to penalties.</li>
+        <li><strong>Isolation</strong> | secrecy or discouraging outside input.</li>
+        <li><strong>Dismissal</strong> | feelings or concerns minimized.</li>
+        <li><strong>Misleading absolutes</strong> | rigid always/never framing.</li>
+        <li><strong>Assigned obligation</strong> | duties imposed without mutual agreement.</li>
+        <li><strong>Minimization</strong> | impact of concerns downplayed.</li>
+        <li><strong>Resigned withdrawal</strong> | cooperation withdrawn to create pressure.</li>
+        <li><strong>Implied rejection</strong> | connection threatened indirectly.</li>
+        <li><strong>Conditional access</strong> | affection, contact, or access withheld for compliance.</li>
+        <li><strong>Responsibility shift</strong> | blame placed on the recipient for the sender’s state.</li>
       </ul>
       <p>When multiple functions appear together, a small cluster bonus may raise the overall screening score. Response prompts are generated per detected function.</p>
 
       <h2>How the experimental score is constructed</h2>
       <p>Each detected function contributes weighted points based on severity tags (mild, clear, strong). The overall score maps to three bands:</p>
       <ul>
-        <li><strong>Low (0–30):</strong> few or mild patterns.</li>
-        <li><strong>Moderate (31–60):</strong> clear functions that may narrow reflection space.</li>
-        <li><strong>High (61–100):</strong> multiple strong pressure functions together.</li>
+        <li><strong>Low (0-30):</strong> few or mild patterns.</li>
+        <li><strong>Moderate (31-60):</strong> clear functions that may narrow reflection space.</li>
+        <li><strong>High (61-100):</strong> multiple strong pressure functions together.</li>
       </ul>
       <p>Scores are <strong>screening outputs</strong>, not probability estimates or clinical measures. They summarize matched language in the pasted text only.</p>
 
@@ -61,11 +61,11 @@
       <h2>Context handling</h2>
       <p>Attribution and context rules are applied locally to quotations and clauses:</p>
       <ul>
-        <li><strong>Training, fiction, and news quotations</strong> — attributed violence or stalking language in examples is excluded from safety escalation.</li>
-        <li><strong>Mixed messages</strong> — a real first-person threat in a separate sentence or clause after an attributed quote still triggers a safety notice.</li>
-        <li><strong>Negation</strong> — local negation (e.g. “would never hurt you”) can exclude a matched phrase unless a later clause contains a real threat.</li>
-        <li><strong>Consent and invitations</strong> — benign consent phrases (invitations, requested deliveries, permission boundaries) reduce false positives on location language.</li>
-        <li><strong>Refusal violations</strong> — phrases such as “told me to stop,” “asked me to leave,” or “told me to go away” pair with stalking behaviors to trigger notices.</li>
+        <li><strong>Training, fiction, and news quotations</strong> | attributed violence or stalking language in examples is excluded from safety escalation.</li>
+        <li><strong>Mixed messages</strong> | a real first-person threat in a separate sentence or clause after an attributed quote still triggers a safety notice.</li>
+        <li><strong>Negation</strong> | local negation (e.g. “would never hurt you”) can exclude a matched phrase unless a later clause contains a real threat.</li>
+        <li><strong>Consent and invitations</strong> | benign consent phrases (invitations, requested deliveries, permission boundaries) reduce false positives on location language.</li>
+        <li><strong>Refusal violations</strong> | phrases such as “told me to stop,” “asked me to leave,” or “told me to go away” pair with stalking behaviors to trigger notices.</li>
       </ul>
 
       <h2>Current version and evaluation status</h2>

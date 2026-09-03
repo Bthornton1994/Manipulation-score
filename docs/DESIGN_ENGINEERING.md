@@ -73,7 +73,7 @@ This repository vendors a focused subset of Leonxlnx's `taste-skill` collection 
 
 ### Project application map
 
-- Design read: preserve-mode private literacy experience for people reading difficult messages, with calm cream, teal, coral semantic signals, and readable display type.
+- Design read: greenfield Clarity brand experience for people reading difficult messages, with an ink and warm-paper field, one signal-lime accent, and readable display type.
 - Review dials: DESIGN_VARIANCE 3, MOTION_INTENSITY 2, VISUAL_DENSITY 4 on public literacy routes. These describe the current surface and guide proportionate review; they are not permission to replace the product language or layout.
 - Scope: Apply taste guidance to the public landing, Learn, limitations, methodology, privacy, and trust pages. Analyzer results remain governed by the methodology and safety boundaries; do not apply a marketing aesthetic to scoring evidence.
 - Guardrails: Preserve no-account operation, history off by default, local-only message handling, uncertainty, evidence-linked language, safety notices, and non-diagnostic framing. Do not change scoring, signal definitions, methodology, or message handling.

@@ -84,10 +84,10 @@ test('readme documents apex and www hostnames', async () => {
   assert.match(readme, /www\.manipulationscore\.com/);
 });
 
-test('logo shows Manipulation Score as brand and Clarity as product', async () => {
+test('logo shows Clarity with Manipulation Score as endorser', async () => {
   const html = await readFile('index.html', 'utf8');
-  assert.match(html, /class="brand-name">Manipulation Score</);
-  assert.match(html, /class="brand-sub">Clarity</);
+  assert.match(html, /class="brand-name">Clarity</);
+  assert.match(html, /class="brand-sub">by Manipulation Score</);
   assert.doesNotMatch(html, /uses/i);
 });
 

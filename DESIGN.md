@@ -4,11 +4,15 @@ This file is the compact, agent-readable entry point for interface work in this 
 
 ## Product intent
 
-Manipulation Score is a calm, private literacy and analyzer experience. Preserve evidence-linked explanations, uncertainty, alternative explanations, verification questions, safety notices, and non-diagnostic framing.
+Clarity is a calm, private communication literacy and analyzer experience by Manipulation Score. Preserve evidence-linked explanations, uncertainty, alternative explanations, verification questions, safety notices, and non-diagnostic framing.
+
+## Current brand direction
+
+The public product leads with Clarity and uses Manipulation Score as the endorser. The current visual system is the pause field: ink, warm paper evidence surfaces, and one signal-lime accent. See `BRAND.md` for the positioning, voice, tokens, and experience architecture.
 
 ## Design principles
 
-- Start with the existing product surface, tokens, primitives, and information architecture. Remove or correct the highest-impact supported problem before adding visual novelty.
+- Start with the Clarity brand system, existing product surface, tokens, primitives, and information architecture. Remove or correct the highest-impact supported problem before adding novelty.
 - Keep one coherent visual idea per surface. Do not import a generic AI aesthetic, a copied brand system, or a fixed visual preset.
 - Make hierarchy, interaction state, and next action legible through spacing, type, semantic color, and composition.
 - Keep visible copy direct, specific, and truthful. Do not add invented proof, metrics, testimonials, partners, outcomes, or urgency.

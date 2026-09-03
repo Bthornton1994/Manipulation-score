@@ -1,11 +1,11 @@
 {
-  "name": "Manipulation Score — Clarity",
+  "name": "Clarity by Manipulation Score",
   "short_name": "Clarity",
-  "description": "Private, on-device language pattern analysis for difficult messages.",
+  "description": "Private communication literacy and on-device language pattern screening for difficult messages.",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#fffdf8",
-  "theme_color": "#103c37",
+  "background_color": "#0D1210",
+  "theme_color": "#0D1210",
   "icons": [
     {
       "src": "icon.svg",

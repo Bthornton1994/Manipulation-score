@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Clarity logo">
-  <rect width="512" height="512" rx="128" fill="#103c37"/>
-  <circle cx="256" cy="256" r="142" fill="none" stroke="#d6eee7" stroke-width="28"/>
-  <path d="M335 177c-23-21-48-31-77-31-66 0-112 48-112 111 0 64 46 111 112 111 31 0 58-11 80-34" fill="none" stroke="#fffdf8" stroke-linecap="round" stroke-width="42"/>
-  <circle cx="354" cy="332" r="20" fill="#dd7962"/>
+  <rect width="512" height="512" rx="112" fill="#0D1210"/>
+  <rect x="164" y="132" width="58" height="248" rx="29" fill="#D7FF54"/>
+  <rect x="290" y="132" width="58" height="248" rx="29" fill="#F4F1E8"/>
+  <path d="M98 96h316M98 416h316" fill="none" stroke="#25332B" stroke-width="10" stroke-linecap="round"/>
 </svg>

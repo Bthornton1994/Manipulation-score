@@ -1,8 +1,8 @@
-# Manipulation Score — Clarity
+# Clarity by Manipulation Score
 
-**Manipulation Score** is a private literacy platform. **Clarity** is the on-device message screener—it helps people inspect potentially pressuring language, understand the functions behind an experimental band, and choose a grounded response.
+**Clarity** is private communication literacy by **Manipulation Score**. It helps people inspect potentially pressuring language, understand the functions behind an experimental band, and choose a grounded response.
 
-Clarity runs entirely in your browser. No accounts, no uploads, no analytics.
+Clarity runs entirely in your browser. No accounts, no uploads, no analytics for the core experience.
 
 ## Features
 

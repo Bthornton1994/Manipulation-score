@@ -36,3 +36,18 @@ This source is a repository discovery list, not a UI brief. The existing vendore
 ## Verification and authority
 
 This file records source review only. It does not authorize installing dependencies, enabling model calls, persisting user context, connecting external services, changing product claims, changing scoring or methodology, merging, deploying, publishing, or taking external actions.
+
+
+## Printing Press and generated-tool reference
+
+This [X post](https://x.com/exm7777/status/2095256458107773331) was reviewed on 2026-09-03. It presents a workflow for exposing many services through CLIs, using a ready-made CLI where one exists and generating a CLI from a website or API where one does not.
+
+The linked [CLI Printing Press generator](https://github.com/mvanhorn/cli-printing-press) and [published CLI library](https://github.com/mvanhorn/printing-press-library) are reference sources only. Their documented agent-oriented patterns are useful design hypotheses: concise machine-readable output, compact field selection, structured exit codes/errors, dry-run behavior, local/offline data where appropriate, and explicit live/local source selection.
+
+The source post does not provide an end-to-end benchmark proving that CLIs always use a fraction of MCP tokens. Replies correctly identify discovery/help parsing, tool errors, and generated-tool side effects as part of the comparison. Treat that performance claim as unverified until measured on the actual workload.
+
+Disposition:
+
+- No Printing Press binary, generated CLI, MCP server, prompt library, credential, external connector, or website-derived code is enabled by this record.
+- Any future adoption requires a capability-specific architecture decision, source and revision pin, license and dependency review, side-effect and secret-flow review, sandboxed read-only smoke test, measured comparison, and existing project approval gates.
+- Generated tools remain replaceable implementations. They cannot become product truth, authoritative state, verification authority, or permission to perform external actions.

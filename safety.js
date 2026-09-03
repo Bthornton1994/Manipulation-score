@@ -228,6 +228,46 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+hit\s+you\b(?!\s+up)/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+hit\s+you\b(?!\s+up)/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\bwill\s+hit\s+you\b(?!\s+up)/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+slap\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+slap\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\bwill\s+slap\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+make\s+you\s+disappear\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+make\s+you\s+disappear\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+end\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+end\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
     pattern: /\byou\s+are\s+dead\s+when\b/gi
   },
   {
@@ -485,7 +525,7 @@ function findStalkingBehaviors(text) {
 }
 
 function extractHarmVerb(matchText) {
-  const verb = matchText.match(/\b(kill|hurt|harm|murder|shoot|stab)\b/i);
+  const verb = matchText.match(/\b(kill|hurt|harm|murder|shoot|stab|hit|slap|end)\b/i);
   return verb ? verb[1].toLowerCase() : null;
 }
 
@@ -601,7 +641,7 @@ function isFirstPersonThreatMatch(clauseText, matchStart, matchText) {
   if (/\b(?:i\s+will|i'll|i'?ll)\b/i.test(local)) return true;
   if (/\b(?:i'?m|i am)\s+going\s+to\b/i.test(local)) return true;
   const window = clauseText.slice(Math.max(0, matchStart - 8), matchStart + matchText.length);
-  return /\b(?:i\s+will|i'll|i'?ll|i'?m|i am)\s+(?:going\s+to\s+)?(?:kill|hurt|harm|shoot|stab|murder)\b/i.test(
+  return /\b(?:i\s+will|i'll|i'?ll|i'?m|i am)\s+(?:going\s+to\s+)?(?:kill|hurt|harm|shoot|stab|murder|hit|slap|end)\b/i.test(
     window
   );
 }

@@ -143,6 +143,18 @@ test('app moves focus to main when skip link is activated', async () => {
   assert.match(app, /mainContent\.focus/);
 });
 
+test('safety crisis resources link targets homepage anchor from analyze', async () => {
+  const safety = await readFile('safety.js', 'utf8');
+  const app = await readFile('app.js', 'utf8');
+  const analyze = await readFile('analyze.html', 'utf8');
+  const index = await readFile('index.html', 'utf8');
+
+  assert.match(safety, /resourcesAnchor:\s*'index\.html#resources'/);
+  assert.match(app, /index\.html#resources/);
+  assert.doesNotMatch(analyze, /id="resources"/);
+  assert.match(index, /id="resources"/);
+});
+
 test('ocr module and vendor assets exist locally', async () => {
   await access('ocr.js');
   await access('vendor/tesseract/tesseract.esm.min.js');

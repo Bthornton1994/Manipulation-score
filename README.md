@@ -29,6 +29,17 @@ Open http://localhost:4173.
 node --test tests/*.test.js
 ```
 
+CI runs the same command on every push and pull request to `main`.
+
+Key suites:
+
+- **Gold harness** (`tests/gold-report.test.js`, `tests/gold/corpus.js`) — locked benign, autonomy, coercive, and hard-neutral slices
+- **Safety gate** (`tests/audit-v032-gate.test.js`) — 40 critical + 40 benign safety cases
+- **Beta readiness** (`tests/beta-readiness.test.js`) — calibration and safety smoke checks
+- **Project integrity** (`tests/project.test.js`) — self-hosted assets, CSP, service worker shell, history opt-in
+
+Regression counts verify software consistency before release; they are not a published accuracy study. See [methodology.html](methodology.html).
+
 ## Deploy
 
 GitHub Actions deploys to GitHub Pages on pushes to `main`. Enable Pages under repository Settings → Pages → Source: **GitHub Actions**.
@@ -79,12 +90,22 @@ Clarity by Manipulation Score is an educational aid—not a diagnosis, safety as
 
 ## Project structure
 
-| File | Purpose |
+| Path | Purpose |
 |------|---------|
 | `index.html` | Platform home (Learn or Analyze) |
 | `learn.html` | Twelve language functions and lookalikes |
 | `analyze.html` | Clarity analyzer UI |
-| `app.js` | UI logic (safe DOM rendering) |
-| `scoring.js` | Deterministic scoring engine |
-| `service-worker.js` | Offline caching |
-| `privacy.html`, `terms.html`, `limitations.html` | Legal and safety pages |
+| `app.js` | UI logic, history, stale-result handling |
+| `scoring.js` | Deterministic scoring engine (`METHODOLOGY_VERSION`, currently v0.3.3) |
+| `safety.js` | Safety notices (separate from manipulation scoring) |
+| `text-normalize.js` | Unicode normalization, clauses, English-only abstention |
+| `history-storage.js` | Opt-in `localStorage` keys and migration |
+| `ocr.js`, `ocr-clean.js` | On-device OCR (UI gate disabled; assets cached for future use) |
+| `service-worker.js` | Offline caching (`CACHE_NAME`, currently `clarity-v35`) |
+| `tests/` | Node test runner suites (gold harness, safety gate, regressions) |
+| `docs/ARCHITECTURE.md` | Contributor architecture, pipeline, and release notes |
+| `docs/HTTPS.md` | Production HTTPS enforcement |
+| `VISION.md`, `AGENTS.md` | Product vision and engineering guardrails |
+| `privacy.html`, `terms.html`, `limitations.html`, `methodology.html`, `contact.html`, `acceptable-use.html`, `accessibility.html`, `changelog.html` | Trust and legal pages |
+
+For pipeline detail, module boundaries, and release checklist, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

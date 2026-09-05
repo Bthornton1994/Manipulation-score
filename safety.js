@@ -148,6 +148,11 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'confinement',
+    pattern:
+      /\byou\s+(?:can(?:not|'t)|cannot)\s+(?:leave|go|out|escape)\b[^.!?]{0,70}\buntil\b/gi
+  },
+  {
+    id: 'confinement',
     pattern: /\b(?:i\s+)?blocked\s+the\s+exit\b[^.!?]{0,50}\byou\s+cannot\s+(?:go|leave|escape)\b/gi
   },
   {

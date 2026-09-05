@@ -811,11 +811,18 @@ export function analyzeMessage(text) {
 
   const segments = splitMessages(normalized);
   if (segments.length > 1) {
+    const safetyNotice = detectSafetyNotice(normalized);
     const segmentAnalyses = segments.map((segment, index) => ({
       index: index + 1,
       text: segment,
       analysis: analyzeSegment(segment)
     }));
+    if (safetyNotice) {
+      return {
+        ...createSafetyResult(safetyNotice, normalized),
+        segments: segmentAnalyses
+      };
+    }
     return buildThreadResult(normalized, segmentAnalyses);
   }
 

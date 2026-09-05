@@ -140,6 +140,15 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'confinement',
+    pattern:
+      /\byou\s+are\s+trapped\b[^.!?]{0,70}\b(?:cannot|can't|can\s+not)\s+(?:escape|leave|get\s+out|go)/gi
+  },
+  {
+    id: 'confinement',
+    pattern: /\bhave\s+you\s+trapped\b[^.!?]{0,70}\b(?:cannot|can't|can\s+not)\s+leave/gi
+  },
+  {
+    id: 'confinement',
     pattern: /\blocked\s+the\s+door\s+so\s+you\s+cannot\s+leave\b/gi
   },
   {

@@ -923,23 +923,48 @@ function detectSafetyInBlock(blockText, blockOffset, fullNormalized) {
     }
   }
 
-  const stalking = detectContextualStalking(sentences, normalized);
-  if (!stalking) return null;
+  return null;
+}
 
-  if (stalking.evidenceSpan) {
-    const localStart = stalking.evidenceSpan.start;
-    const localEnd = stalking.evidenceSpan.end;
-    return {
-      ...stalking,
-      evidenceSpan: {
-        start: blockOffset + localStart,
-        end: blockOffset + localEnd,
-        text: fullNormalized.slice(blockOffset + localStart, blockOffset + localEnd)
+function mapMatchingOffsetToNormalized(normalized, matching, offset) {
+  let normalizedIndex = 0;
+  let matchingIndex = 0;
+
+  while (matchingIndex < offset && normalizedIndex < normalized.length) {
+    if (normalized[normalizedIndex] === '\n' && matching[matchingIndex] === ' ') {
+      while (normalizedIndex < normalized.length && /[\s\n]/.test(normalized[normalizedIndex])) {
+        normalizedIndex += 1;
       }
-    };
+      matchingIndex += 1;
+      continue;
+    }
+
+    if (normalized[normalizedIndex] === matching[matchingIndex]) {
+      normalizedIndex += 1;
+      matchingIndex += 1;
+      continue;
+    }
+
+    normalizedIndex += 1;
   }
 
-  return stalking;
+  return normalizedIndex;
+}
+
+function mapStalkingEvidenceToNormalized(stalking, normalized, matching) {
+  if (!stalking?.evidenceSpan) return stalking;
+
+  const start = mapMatchingOffsetToNormalized(normalized, matching, stalking.evidenceSpan.start);
+  const end = mapMatchingOffsetToNormalized(normalized, matching, stalking.evidenceSpan.end);
+
+  return {
+    ...stalking,
+    evidenceSpan: {
+      start,
+      end,
+      text: normalized.slice(start, end)
+    }
+  };
 }
 
 /**
@@ -955,5 +980,8 @@ export function detectSafetyNotice(text) {
     if (notice) return notice;
   }
 
-  return null;
+  const matching = normalizeForMatching(normalized);
+  const sentences = splitSentences(matching);
+  const stalking = detectContextualStalking(sentences, matching);
+  return mapStalkingEvidenceToNormalized(stalking, normalized, matching);
 }

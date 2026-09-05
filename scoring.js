@@ -809,6 +809,11 @@ export function analyzeMessage(text) {
     ]);
   }
 
+  const safetyNotice = detectSafetyNotice(normalized);
+  if (safetyNotice) {
+    return createSafetyResult(safetyNotice, normalized);
+  }
+
   const segments = splitMessages(normalized);
   if (segments.length > 1) {
     const segmentAnalyses = segments.map((segment, index) => ({
@@ -817,11 +822,6 @@ export function analyzeMessage(text) {
       analysis: analyzeSegment(segment)
     }));
     return buildThreadResult(normalized, segmentAnalyses);
-  }
-
-  const safetyNotice = detectSafetyNotice(normalized);
-  if (safetyNotice) {
-    return createSafetyResult(safetyNotice, normalized);
   }
 
   const meaningfulWords = countMeaningfulWords(normalized);

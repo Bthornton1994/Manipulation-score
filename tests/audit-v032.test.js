@@ -50,6 +50,22 @@ test('cross-message threat is not suppressed by prior benign message', () => {
   assert.ok(notice, 'expected safety notice in second message block');
 });
 
+test('split direct-violence across blank lines still triggers safety', () => {
+  const text =
+    'I will kill\n\nyou tonight when you return home and everyone else has already left the building completely.';
+  assert.ok(detectSafetyNotice(text), 'expected safety notice when kill and you are in separate blocks');
+  const result = analyzeMessage(text);
+  assert.ok(result.safetyNotice, 'thread analysis must not return a score when threat spans blocks');
+  assert.equal(result.score, null);
+});
+
+test('instructor quote in same clause does not suppress first-person threat', () => {
+  const text = 'Instructor said "hello" and I will kill you if you leave me tonight.';
+  assert.ok(detectSafetyNotice(text));
+  const result = analyzeMessage(text);
+  assert.ok(result.safetyNotice);
+});
+
 test('zero-width character inside kill still triggers safety', () => {
   const text = 'I will k\u200Bill you tonight after everyone leaves the house.';
   assert.ok(detectSafetyNotice(text));

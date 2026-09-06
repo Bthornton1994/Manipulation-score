@@ -1,4 +1,4 @@
-const CACHE_NAME = 'clarity-v37';
+const CACHE_NAME = 'clarity-v38';
 const APP_SHELL = [
   './',
   './index.html',
@@ -43,6 +43,10 @@ const APP_SHELL = [
 const NETWORK_FIRST_PATTERN =
   /\/(index\.html|analyze\.html|learn\.html|privacy\.html|terms\.html|limitations\.html|methodology\.html|contact\.html|acceptable-use\.html|accessibility\.html|changelog\.html|styles\.css|fonts\.css|app\.js|scoring\.js|safety\.js|text-normalize\.js|history-storage\.js|service-worker\.js)$/;
 
+// HTML cache-busting (?v=) and Learn deep-links (?e=) must still hit APP_SHELL
+// entries that were cached without a query string.
+const CACHE_MATCH_OPTIONS = { ignoreSearch: true };
+
 function isNetworkFirstRequest(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
@@ -59,14 +63,14 @@ async function networkFirst(request) {
     }
     return response;
   } catch {
-    const cached = await caches.match(request);
+    const cached = await caches.match(request, CACHE_MATCH_OPTIONS);
     if (cached) return cached;
     throw new Error('network and cache miss');
   }
 }
 
 async function cacheFirst(request) {
-  const cached = await caches.match(request);
+  const cached = await caches.match(request, CACHE_MATCH_OPTIONS);
   if (cached) return cached;
   const response = await fetch(request);
   if (response.ok) {

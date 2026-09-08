@@ -4,7 +4,10 @@ import {
   migrateHistoryStorage,
   isHistoryOptIn as readHistoryOptIn,
   STORAGE_KEY,
-  OPT_IN_KEY
+  OPT_IN_KEY,
+  withHistoryLock,
+  applyHistoryMutation,
+  clearHistoryStorage
 } from './history-storage.js';
 
 migrateHistoryStorage(localStorage);
@@ -535,7 +538,7 @@ function scrollToAnalysisResults() {
   });
 }
 
-function renderAnalysis(analysis, sourceText) {
+async function renderAnalysis(analysis, sourceText) {
   const special = analysis.abstained || analysis.safetyNotice;
   const children = special
     ? [createScoreSection(analysis)]
@@ -556,7 +559,7 @@ function renderAnalysis(analysis, sourceText) {
       : 'Analysis results'
   );
   results.focus({ preventScroll: true });
-  saveHistory(sourceText, analysis);
+  await saveHistory(sourceText, analysis);
   renderHistory();
   scrollToAnalysisResults();
 }
@@ -598,30 +601,36 @@ function setHistoryOptIn(enabled) {
   updateHistoryControls();
 }
 
-function saveHistory(text, analysis) {
+async function saveHistory(text, analysis) {
   if (!isHistoryEnabledInThisTab()) return;
 
-  try {
-    const trimmed = text.trim();
-    const key = normalizeHistoryKey(trimmed);
-    if (!key) return;
+  const trimmed = text.trim();
+  const key = normalizeHistoryKey(trimmed);
+  if (!key) return;
 
-    const items = dedupeHistory(JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'));
-    const withoutDuplicate = items.filter(
-      (item) => normalizeHistoryKey(item.text || item.preview || '') !== key
-    );
-    withoutDuplicate.unshift({
-      id: Date.now(),
-      text: trimmed.slice(0, 2500),
-      preview: trimmed.slice(0, 100),
-      score:
-        PILOT_SUPPRESS_NUMERIC_SCORE || analysis.scoreSuppressed || analysis.abstained
-          ? null
-          : analysis.score,
-      level: analysis.level || (analysis.abstained ? 'Abstained' : analysis.safetyNotice ? 'Safety' : null),
-      timestamp: Date.now()
+  const entry = {
+    id: Date.now(),
+    text: trimmed.slice(0, 2500),
+    preview: trimmed.slice(0, 100),
+    score:
+      PILOT_SUPPRESS_NUMERIC_SCORE || analysis.scoreSuppressed || analysis.abstained
+        ? null
+        : analysis.score,
+    level: analysis.level || (analysis.abstained ? 'Abstained' : analysis.safetyNotice ? 'Safety' : null),
+    timestamp: Date.now()
+  };
+
+  try {
+    await withHistoryLock(() => {
+      applyHistoryMutation(localStorage, (items) => {
+        const deduped = dedupeHistory(items);
+        const withoutDuplicate = deduped.filter(
+          (item) => normalizeHistoryKey(item.text || item.preview || '') !== key
+        );
+        withoutDuplicate.unshift(entry);
+        return withoutDuplicate.slice(0, MAX_HISTORY);
+      });
     });
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(withoutDuplicate.slice(0, MAX_HISTORY)));
   } catch {
     /* localStorage unavailable */
   }
@@ -635,19 +644,22 @@ function loadHistory() {
   }
 }
 
-function deleteHistoryItem(id) {
+async function deleteHistoryItem(id) {
   try {
-    const items = loadHistory().filter((item) => item.id !== id);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    await withHistoryLock(() => {
+      applyHistoryMutation(localStorage, (items) =>
+        dedupeHistory(items).filter((item) => item.id !== id)
+      );
+    });
   } catch {
     /* localStorage unavailable */
   }
   renderHistory();
 }
 
-function deleteAllHistory() {
+async function deleteAllHistory() {
   try {
-    localStorage.removeItem(STORAGE_KEY);
+    await clearHistoryStorage(localStorage);
   } catch {
     /* localStorage unavailable */
   }
@@ -704,7 +716,7 @@ function renderHistory() {
     }
     button.addEventListener('click', () => {
       setMessageValue(item.text || item.preview, { invalidate: false });
-      renderAnalysis(analyzeMessage(message.value), message.value);
+      void renderAnalysis(analyzeMessage(message.value), message.value);
       message.focus();
     });
 
@@ -713,7 +725,7 @@ function renderHistory() {
     deleteBtn.setAttribute('aria-label', 'Delete this saved analysis');
     deleteBtn.addEventListener('click', (event) => {
       event.stopPropagation();
-      deleteHistoryItem(item.id);
+      void deleteHistoryItem(item.id);
     });
 
     row.append(button, deleteBtn);
@@ -876,7 +888,7 @@ document.addEventListener('keydown', (event) => {
 if (form && message) {
 form.addEventListener('submit', (event) => {
   event.preventDefault();
-  renderAnalysis(analyzeMessage(message.value), message.value);
+  void renderAnalysis(analyzeMessage(message.value), message.value);
 });
 }
 
@@ -901,7 +913,7 @@ if (historyOptIn) {
 
 if (historyDeleteAll) {
   historyDeleteAll.addEventListener('click', () => {
-    deleteAllHistory();
+    void deleteAllHistory();
   });
 }
 

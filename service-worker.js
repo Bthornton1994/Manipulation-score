@@ -12,7 +12,7 @@ const APP_SHELL = [
   './acceptable-use.html',
   './accessibility.html',
   './changelog.html',
-  './styles.css',
+  './styles.css?v=clarity-v37',
   './fonts.css',
   './app.js',
   './scoring.js',
@@ -50,6 +50,18 @@ function isNetworkFirstRequest(url) {
   return NETWORK_FIRST_PATTERN.test(path);
 }
 
+async function matchCached(request) {
+  const cached = await caches.match(request);
+  if (cached) return cached;
+
+  const { pathname } = new URL(request.url);
+  if (pathname.endsWith('/styles.css')) {
+    return caches.match(request, { ignoreSearch: true });
+  }
+
+  return undefined;
+}
+
 async function networkFirst(request) {
   try {
     const response = await fetch(request);
@@ -59,7 +71,7 @@ async function networkFirst(request) {
     }
     return response;
   } catch {
-    const cached = await caches.match(request);
+    const cached = await matchCached(request);
     if (cached) return cached;
     throw new Error('network and cache miss');
   }

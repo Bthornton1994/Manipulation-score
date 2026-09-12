@@ -119,6 +119,21 @@ const IMMEDIATE_RULES = [
     pattern: /\bpoint\s+(?:a\s+)?(?:gun|knife|weapon)\s+at\s+you/gi
   },
   {
+    id: 'weapon_threat',
+    pattern:
+      /\b(?:shoot|stab)\s+your\s+(?:head|face|neck|throat|skull|chest|back|stomach|gut)\b/gi
+  },
+  {
+    id: 'weapon_threat',
+    pattern:
+      /\b(?:gun|knife|weapon|pistol|rifle|machete)\s+(?:at|to|against)\s+your\s+(?:head|face|neck|throat|skull|chest|back)\b/gi
+  },
+  {
+    id: 'weapon_threat',
+    pattern:
+      /\b(?:put|point)\s+(?:a\s+|the\s+)?(?:gun|knife|weapon|pistol|rifle|machete)\s+(?:at|to|against)\s+your\s+(?:head|face|neck|throat|skull|chest)\b/gi
+  },
+  {
     id: 'confinement',
     pattern: /won'?t\s+let\s+you\s+(?:leave|go|out|escape)/gi
   },

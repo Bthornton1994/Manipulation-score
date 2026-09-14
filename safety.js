@@ -489,13 +489,41 @@ function extractHarmVerb(matchText) {
   return verb ? verb[1].toLowerCase() : null;
 }
 
+function isImmediatelyNegatedMatch(prefix) {
+  // Negation must govern the match itself ("will never point…", "will not lock…"),
+  // not a distant earlier negation in the same clause.
+  return (
+    /\b(?:(?:will|would|do|does|did|am|is|are|was|were|shall|should|could|i'?ll)\s+)?(?:never|not|no)\s+$/i.test(
+      prefix
+    ) || /\b(?:won'?t|can'?t|cannot|don'?t|doesn'?t|shouldn'?t|wouldn'?t)\s+$/i.test(prefix)
+  );
+}
+
+function isNegatedWeaponAct(prefix) {
+  // Matches often start at the weapon noun ("gun at you") after a negated verb
+  // ("never point a gun at you"). Keep the window tight so distant negation
+  // does not suppress a later asserted threat.
+  return /\b(?:never|not|no|won'?t|can'?t|cannot|don'?t|doesn'?t|shouldn'?t|wouldn'?t)\s+(?:\w+\s+){0,3}(?:point|pointing|aim|aiming|wave|waving|pull|pulling|brandish(?:ing)?)\b/i.test(
+    prefix.slice(-60)
+  );
+}
+
 function isNegatedForCandidate(clauseText, matchStart, matchText) {
   const harmVerb = extractHarmVerb(matchText);
-  if (!harmVerb) return false;
-
   const prefix = clauseText.slice(0, matchStart);
-  const escaped = harmVerb.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const candidatePhrase = clauseText.slice(matchStart, matchStart + matchText.length);
+
+  if (!harmVerb) {
+    // weapon_threat / confinement and similar matches lack kill|hurt|… tokens, so the
+    // harm-verb window never ran. Still honor immediate negation of the matched act.
+    if (isImmediatelyNegatedMatch(prefix)) return true;
+    if (/\b(?:gun|knife|weapon|pistol|rifle|machete)\b/i.test(matchText) && isNegatedWeaponAct(prefix)) {
+      return true;
+    }
+    return false;
+  }
+
+  const escaped = harmVerb.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   const negatedVerb = new RegExp(
     `\\b${NEGATION_WORD}(?:\\s+\\w+){0,8}\\s+${escaped}\\b`,
@@ -515,6 +543,12 @@ function isNegatedForCandidate(clauseText, matchStart, matchText) {
   }
 
   return false;
+}
+
+function isClinicalEmergencyAdvice(match) {
+  // "call 911 or you could/might/may die" is ordinary medical discharge advice, not coercion.
+  if (match.id !== 'emergency_coercion') return false;
+  return /\b(?:could|might|may)\s+die\b/i.test(match.text);
 }
 
 function isThirdPartyQuote(clauseText, matchStart, matchText) {
@@ -699,6 +733,7 @@ function isExcludedImmediateCandidate(clauseText, match) {
   if (isNegatedForCandidate(clauseText, match.start, match.text)) return true;
   if (isAttributedClause(clauseText, match.start)) return true;
   if (isMedicalReassurance(clauseText, match.start, match.text)) return true;
+  if (isClinicalEmergencyAdvice(match)) return true;
   return false;
 }
 

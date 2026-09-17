@@ -1,6 +1,10 @@
 const SMART_APOSTROPHE = /[\u2018\u2019\u02BC\u0060\u201B]/g;
 const SMART_QUOTE = /[\u201C\u201D\u201E\u2033\u2036]/g;
-const UNICODE_SPACES = /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g;
+// Include word joiner / invisible math separators / CGJ as spaces (not strip).
+// Stripping them would glue "kill\u2060you" → "killyou" and recreate the
+// between-word format-char safety bypass that ZWSP dual-path (#57) addresses.
+const UNICODE_SPACES =
+  /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000\u2060-\u2064\u034F]/g;
 const FORMAT_CHARS = /[\u200B-\u200D\uFEFF]/g;
 
 /**

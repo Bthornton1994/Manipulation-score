@@ -1,6 +1,13 @@
 const SMART_APOSTROPHE = /[\u2018\u2019\u02BC\u0060\u201B]/g;
 const SMART_QUOTE = /[\u201C\u201D\u201E\u2033\u2036]/g;
-const UNICODE_SPACES = /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g;
+// Map Unicode spaces plus NEL / bidi controls to ASCII spaces (do not strip).
+// U+0085 is White_Space but not matched by JS \s; bidi marks (U+200E/F,
+// U+202A–202E, U+2066–2069) are left intact by FORMAT_CHARS and break
+// \s+-based IMMEDIATE_RULES. Stripping them would glue "kill\u0085you" the
+// same way ZWSP strip-glue does (#57). Word joiners U+2060–2064 / CGJ are
+// tracked separately in #114.
+const UNICODE_SPACES =
+  /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000\u0085\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
 const FORMAT_CHARS = /[\u200B-\u200D\uFEFF]/g;
 
 /**

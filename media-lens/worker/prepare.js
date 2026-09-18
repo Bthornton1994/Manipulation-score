@@ -226,9 +226,10 @@ function extractMetadata(root) {
   const modifiedAt = metaByKey.get('article:modified_time') || jsonLd?.dateModified || null;
   const title = metaByKey.get('og:title') || null;
   const author = metaByKey.get('author') || jsonLd?.author?.name || null;
+  const siteName = metaByKey.get('og:site_name') || null;
   const isAccessibleForFree = jsonLd && 'isAccessibleForFree' in jsonLd ? Boolean(jsonLd.isAccessibleForFree) : null;
 
-  return { publishedAt, modifiedAt, title, author, canonical, isAccessibleForFree };
+  return { publishedAt, modifiedAt, title, author, siteName, canonical, isAccessibleForFree };
 }
 
 function timestampPrecision(iso) {
@@ -463,6 +464,7 @@ export function prepareFromHtml({ html, kind = 'article', sourceUrl = null, inpu
       canonicalUrl: meta.canonical || sourceUrl,
       title: meta.title || null,
       byline: meta.author || null,
+      publisherName: meta.siteName || null,
       publishedAt: meta.publishedAt || null,
       modifiedAt: meta.modifiedAt || null,
       timestampPrecision: timestampPrecision(meta.publishedAt),
@@ -511,6 +513,37 @@ export function prepareFromPastedText({ text, kind = 'other_public' }) {
       canonicalUrl: null,
       title: null,
       byline: null,
+      publisherName: null,
+      publishedAt: null,
+      modifiedAt: null,
+      timestampPrecision: 'none',
+      language: 'en'
+    }
+  };
+}
+
+/**
+ * A minimal, schema-shaped "prepared" stub for cases where preparation
+ * itself failed or was aborted (e.g. a live-mode URL fetch that timed out
+ * or was rejected) but the caller still needs to build a valid,
+ * abstention-only influence-graph.v1 document rather than a raw error.
+ */
+export function emptyPreparedArtifactStub({ inputMode, url = null, kind = 'article' }) {
+  return {
+    preparedText: '',
+    textSha256: createHash('sha256').update('', 'utf8').digest('hex'),
+    textLengthChars: 0,
+    spans: [],
+    claimCandidates: [],
+    paywallDetected: false,
+    artifact: {
+      kind,
+      inputMode,
+      url,
+      canonicalUrl: url,
+      title: null,
+      byline: null,
+      publisherName: null,
       publishedAt: null,
       modifiedAt: null,
       timestampPrecision: 'none',

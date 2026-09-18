@@ -13,7 +13,7 @@ function buildArtifactBlock({ prepared, paywallDetected, userAssertedPublic, con
     canonical_url: prepared.artifact.canonicalUrl,
     title: prepared.artifact.title,
     byline: prepared.artifact.byline,
-    publisher: { name: prepared.artifact.title ? canonicalDomain : null, domain: canonicalDomain },
+    publisher: { name: prepared.artifact.publisherName ?? null, domain: canonicalDomain },
     published_at: prepared.artifact.publishedAt,
     modified_at: prepared.artifact.modifiedAt,
     timestamp_precision: prepared.artifact.timestampPrecision,
@@ -37,7 +37,7 @@ function domainFromUrl(url) {
 function buildSourceContext({ prepared, canonicalDomain }) {
   return {
     shown_separately: true,
-    publisher: { name: null, domain: canonicalDomain },
+    publisher: { name: prepared.artifact.publisherName ?? null, domain: canonicalDomain },
     canonical_domain: canonicalDomain,
     metadata: {
       has_byline: Boolean(prepared.artifact.byline),
@@ -59,10 +59,13 @@ function evidenceSpanIds({ observations, claims }) {
 
 /**
  * Assemble a full internal influence-graph.v1 document (spans_included: "all").
- * This is what the worker validates and returns from /analyze; the browser
- * receives this same document today (v1 has no server-side history to keep
- * evidence-only-by-default separate from the live response). Export/download
- * paths should call toEvidenceOnlyExport() before persisting or downloading.
+ * server.js runs this document through schema/validate.js before ever
+ * sending it to a client; on failure it discards the result and serves an
+ * abstention-only graph instead (see server.js's /analyze handler). The
+ * browser receives this same document today (v1 has no server-side history
+ * to keep evidence-only-by-default separate from the live response).
+ * Export/download paths should call toEvidenceOnlyExport() before
+ * persisting or downloading.
  */
 export function assembleGraph({
   prepared,

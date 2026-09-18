@@ -14,7 +14,10 @@ export const DEFAULT_LIMITS = Object.freeze({
   maxSpans: 200,
   maxAnalysesPerMinute: 10,
   jevCallTimeoutMs: 8000,
-  perAnalysisTimeoutMs: 30000
+  perAnalysisTimeoutMs: 30000,
+  urlFetchTimeoutMs: 8000,
+  urlFetchMaxBytes: 2 * 1024 * 1024,
+  urlFetchMaxRedirects: 3
 });
 
 function readMode(env) {

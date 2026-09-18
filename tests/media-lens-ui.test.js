@@ -112,6 +112,65 @@ test('index.html discloses public-only scope and links to Clarity for private me
   assert.match(html, /href="\.\.\/analyze\.html"/);
 });
 
+test('M2: coverage freshness status and rationale are rendered, not silently discarded', async () => {
+  const js = await readFile('media-lens/media-lens.js', 'utf8');
+  assert.match(js, /freshness_gate\.computed_status/);
+  assert.match(js, /coverage-freshness-rationale/);
+  const html = await readFile('media-lens/index.html', 'utf8');
+  assert.match(html, /id="coverage-freshness-rationale"/);
+});
+
+test('L5: a quoted claim renders a "Quoted" chip distinguishing it from an authorial claim', async () => {
+  const js = await readFile('media-lens/media-lens.js', 'utf8');
+  assert.match(js, /claim\.attribution !== 'authorial'/);
+  assert.match(js, /'Quoted'/);
+});
+
+test('L7: the reduced-motion rule in media-lens.css only targets selectors that actually declare a transition', async () => {
+  const css = await readFile('media-lens/media-lens.css', 'utf8');
+  const reducedMotionBlock = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
+  const selectorsInReducedMotionBlock = [...reducedMotionBlock.matchAll(/^\s*(\.[\w-]+)/gm)].map((m) => m[1]);
+  assert.ok(selectorsInReducedMotionBlock.length > 0, 'expected at least one selector in the reduced-motion block');
+  for (const selector of selectorsInReducedMotionBlock) {
+    const baseRulePattern = new RegExp(`${selector.replace('.', '\\.')}[^{]*\\{[^}]*transition:`);
+    assert.match(css.slice(0, css.indexOf('@media (prefers-reduced-motion: reduce)')), baseRulePattern, `${selector} has no base transition to neutralize`);
+  }
+});
+
+test('Info: aria-live is scoped to a dedicated status line, not the whole results tree', async () => {
+  const html = await readFile('media-lens/index.html', 'utf8');
+  const resultsTag = html.match(/<div class="ml-results"[^>]*>/)[0];
+  assert.doesNotMatch(resultsTag, /aria-live/);
+  assert.match(html, /id="analyze-status-live"[^>]*aria-live="polite"/);
+  const js = await readFile('media-lens/media-lens.js', 'utf8');
+  assert.match(js, /analyze-status-live/);
+});
+
+test('L3: the browser sends the consent-checkbox timestamp, not just a boolean, as consent_at', async () => {
+  const js = await readFile('media-lens/media-lens.js', 'utf8');
+  assert.match(js, /consentCheckedAt/);
+  assert.match(js, /consent_at:\s*consentCheckedAt/);
+});
+
+test('L1: docs describe claim support as always not_checked, matching fusion.js (no operator-supplied-evidence path exists)', async () => {
+  const limitations = await readFile('limitations.html', 'utf8');
+  assert.doesNotMatch(limitations, /unless a fixture or an operator-supplied Newsjack artifact provides evidence/);
+  assert.match(limitations, /always "not checked" in this preview/);
+
+  const readme = await readFile('media-lens/README.md', 'utf8');
+  assert.doesNotMatch(readme, /claims are `not_checked` unless a fixture or artifact supplies evidence/);
+  assert.match(readme, /always `not_checked` in this preview/);
+
+  const methodology = await readFile('methodology.html', 'utf8');
+  assert.doesNotMatch(methodology, /support marked "not checked" unless evidence is supplied/);
+
+  const fusionSrc = await readFile('media-lens/worker/fusion.js', 'utf8');
+  assert.match(fusionSrc, /support:\s*'not_checked'/);
+  // Confirm fusion.js truly never sets any other support value (the claim
+  // the docs must stay synchronized with).
+  assert.doesNotMatch(fusionSrc, /support:\s*(?!'not_checked')['"]\w+['"]/);
+});
+
 test('index.html requires the consent checkbox before the submit button is usable', async () => {
   const html = await readFile('media-lens/index.html', 'utf8');
   assert.match(html, /id="consent-checkbox"/);

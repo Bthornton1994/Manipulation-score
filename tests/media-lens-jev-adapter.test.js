@@ -62,8 +62,7 @@ test('live mode: a 429 response is retried and eventually succeeds', async () =>
           model: 'jev-1.13.0',
           answers: {
             influence_signal: { choice: 'urgency', probabilities: { urgency: 0.8 }, confidence: 0.8 },
-            is_quoted_or_attributed: { noul: 0.2 },
-            is_checkable_claim: { noul: 0.1 }
+            is_quoted_or_attributed: { noul: 0.2 }
           }
         })
       );
@@ -76,6 +75,85 @@ test('live mode: a 429 response is retried and eventually succeeds', async () =>
       assert.ok(callCount >= 2, 'expected at least one retry after the 429');
     }
   );
+});
+
+// H1 + L2 regression tests -----------------------------------------------
+
+test('H1: an out-of-taxonomy influence_signal.choice is treated as a failure, never returned as an answer', async () => {
+  await withMockServer(
+    async (req, res) => {
+      await readJsonBody(req);
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          model: 'jev-1.13.0',
+          answers: {
+            influence_signal: { choice: 'outlet_is_untrustworthy_propaganda', probabilities: { outlet_is_untrustworthy_propaganda: 0.99 } },
+            is_quoted_or_attributed: { noul: 0.1 }
+          }
+        })
+      );
+    },
+    async (baseUrl) => {
+      const adapter = createJevAdapter({ mode: 'live', baseUrl, apiKey: 'test-key', concurrency: 1 });
+      const result = await adapter.analyzeSpans([SAMPLE_SPANS[0]], { kind: 'article', title: 't' });
+      assert.equal(result.failures, 1);
+      assert.ok(result.failedSpanIds.has('span-1'));
+      assert.equal(result.answersBySpanId.has('span-1'), false);
+    }
+  );
+});
+
+test('H1: an out-of-range probability value is treated as a failure', async () => {
+  await withMockServer(
+    async (req, res) => {
+      await readJsonBody(req);
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          model: 'jev-1.13.0',
+          answers: {
+            influence_signal: { choice: 'urgency', probabilities: { urgency: 1.5 } }, // out of [0,1]
+            is_quoted_or_attributed: { noul: 0.1 }
+          }
+        })
+      );
+    },
+    async (baseUrl) => {
+      const adapter = createJevAdapter({ mode: 'live', baseUrl, apiKey: 'test-key', concurrency: 1 });
+      const result = await adapter.analyzeSpans([SAMPLE_SPANS[0]], { kind: 'article', title: 't' });
+      assert.equal(result.failures, 1);
+    }
+  );
+});
+
+test('H1: "none" is still accepted as a valid choice', async () => {
+  await withMockServer(
+    async (req, res) => {
+      await readJsonBody(req);
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          model: 'jev-1.13.0',
+          answers: { influence_signal: { choice: 'none', probabilities: { none: 0.9 } }, is_quoted_or_attributed: { noul: 0.1 } }
+        })
+      );
+    },
+    async (baseUrl) => {
+      const adapter = createJevAdapter({ mode: 'live', baseUrl, apiKey: 'test-key', concurrency: 1 });
+      const result = await adapter.analyzeSpans([SAMPLE_SPANS[0]], { kind: 'article', title: 't' });
+      assert.equal(result.failures, 0);
+      assert.ok(result.answersBySpanId.has('span-1'));
+    }
+  );
+});
+
+test('L2: questions.v1.json no longer asks is_checkable_claim or claim_kind (nothing consumed them)', async () => {
+  const { questions } = await loadQuestionSet();
+  assert.equal('is_checkable_claim' in questions, false);
+  assert.equal('claim_kind' in questions, false);
+  assert.ok('influence_signal' in questions);
+  assert.ok('is_quoted_or_attributed' in questions);
 });
 
 test('live mode: a malformed answer body is treated as a failure', async () => {

@@ -21,15 +21,5 @@
     "type": "noul",
     "instructions": "Read the span text at state.span.text. Return a high value if the span text reads as a direct quotation or a paraphrase attributed to a named or described speaker, rather than the surrounding author's own narration. Return a low value if the span reads as the author's own statement.",
     "criteria": ["quoted or attributed to a speaker other than the narrating author"]
-  },
-  "is_checkable_claim": {
-    "type": "noul",
-    "instructions": "Read the span text at state.span.text. Return a high value if the span asserts a specific, checkable fact (a number, a date, a named event, a direct quotation of what someone said) rather than an opinion, question, or general description.",
-    "criteria": ["contains a specific, checkable factual assertion"]
-  },
-  "claim_kind": {
-    "type": "choice",
-    "instructions": "Only meaningful when is_checkable_claim is high. Read the span text at state.span.text and classify the kind of checkable claim it makes.",
-    "criteria": ["statistic", "event", "attribution", "prediction", "evaluation", "other"]
   }
 }

@@ -127,7 +127,13 @@
 
       <p class="ml-status" id="analyze-error" data-state="error" role="alert" hidden></p>
 
-      <div class="ml-results" id="results" hidden aria-live="polite">
+      <!-- Info fix: a small, dedicated live region announces a brief
+           summary on each update, instead of aria-live on the whole
+           results tree below (which would re-read every observation,
+           claim, and stat aloud every time anything changes). -->
+      <p class="ml-visually-hidden" id="analyze-status-live" role="status" aria-live="polite"></p>
+
+      <div class="ml-results" id="results" hidden>
         <section aria-labelledby="ml-language-heading" class="ml-dimension">
           <h2 id="ml-language-heading">Language</h2>
           <p class="ml-dimension-note">Span-tied observations of influence language, with evidence you can inspect.</p>
@@ -136,7 +142,7 @@
 
         <section aria-labelledby="ml-claims-heading" class="ml-dimension">
           <h2 id="ml-claims-heading">Claims</h2>
-          <p class="ml-dimension-note">Checkable-looking statements found in the text. Support is not checked by default in this preview.</p>
+          <p class="ml-dimension-note">Checkable-looking statements found in the text. Support is always "not checked" in this preview.</p>
           <ul class="ml-claim-list" id="claims-list"></ul>
         </section>
 
@@ -144,6 +150,7 @@
           <h2 id="ml-coverage-heading">Coverage</h2>
           <p class="ml-dimension-note">Origin, independent reporting, and duplication, when provenance data is available.</p>
           <dl class="ml-coverage-grid" id="coverage-stats"></dl>
+          <p class="ml-dimension-note" id="coverage-freshness-rationale"></p>
           <ul class="ml-observation-list" id="coverage-list"></ul>
         </section>
 

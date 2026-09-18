@@ -5,14 +5,16 @@
 // docs/media-lens-influence-graph-plan.md section 1.
 
 import http from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { loadConfig, publicConfig, assertLiveModeIsReady } from './config.js';
-import { prepareFromHtml, prepareFromPastedText } from './prepare.js';
+import { prepareFromHtml, prepareFromPastedText, emptyPreparedArtifactStub } from './prepare.js';
 import { createJevAdapter } from './adapters/jev.js';
 import { createNewsjackAdapter } from './adapters/newsjack.js';
-import { analyze } from './analyze.js';
+import { analyze, buildAbstentionOnlyGraph } from './analyze.js';
+import { fetchArticleSafely } from './safe-fetch.js';
+import { validate } from '../schema/validate.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const FIXTURES_DIR = join(__dirname, '..', 'fixtures');
@@ -24,6 +26,40 @@ export const FIXTURES_DIR = join(__dirname, '..', 'fixtures');
 // no credentialed requests, so it is safe to allow any loopback origin;
 // it never allows a non-loopback origin.
 const LOOPBACK_ORIGIN_PATTERN = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/;
+
+// M1: fixture_id comes straight from the request body and is used to build
+// file paths (fixtures/articles/<id>.html, fixtures/jev/<id>.answers.json,
+// fixtures/newsjack/<id>.json). A permissive check here is a path-traversal
+// vector (e.g. "../../../analyze"), so this is the single point every
+// fixture-mode request must pass through before any adapter or file read
+// ever sees the value.
+const FIXTURE_ID_PATTERN = /^[a-z0-9-]+$/;
+const ISO_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
+
+async function isKnownFixtureId(fixtureId) {
+  if (typeof fixtureId !== 'string' || !FIXTURE_ID_PATTERN.test(fixtureId)) return false;
+  let files;
+  try {
+    files = await readdir(join(FIXTURES_DIR, 'articles'));
+  } catch {
+    return false;
+  }
+  return files.includes(`${fixtureId}.html`);
+}
+
+/**
+ * L3: the plan wants the browser's consent-checkbox timestamp recorded,
+ * not just server time. Only accept a well-formed ISO-8601 UTC timestamp
+ * (the exact shape `Date.prototype.toISOString()` produces) from the
+ * client; anything else falls back to the server's own clock rather than
+ * being trusted verbatim.
+ */
+function resolveConsentAt(payloadConsentAt) {
+  if (typeof payloadConsentAt === 'string' && ISO_TIMESTAMP_PATTERN.test(payloadConsentAt) && !Number.isNaN(Date.parse(payloadConsentAt))) {
+    return { consentAt: payloadConsentAt, clientSupplied: true };
+  }
+  return { consentAt: new Date().toISOString(), clientSupplied: false };
+}
 
 function applyCors(req, res) {
   const origin = req.headers.origin;
@@ -86,7 +122,10 @@ async function buildAdapters({ config, payload }) {
     fixtureId: payload.fixture_id || null,
     fixtureDir: join(FIXTURES_DIR, 'jev'),
     baseUrl: config.jev.baseUrl,
-    apiKey: config.secrets.typesafeApiKey
+    apiKey: config.secrets.typesafeApiKey,
+    // H2: without this, the adapter silently falls back to its own
+    // hardcoded default and the advertised /health limit is dead.
+    timeoutMs: config.limits.jevCallTimeoutMs
   });
 
   let newsjackMode = 'fixture';
@@ -106,6 +145,11 @@ async function preparePayload({ payload, config }) {
     return prepareFromPastedText({ text: String(payload.text || ''), kind: payload.kind || 'other_public' });
   }
   if (payload.mode === 'fixture') {
+    if (!(await isKnownFixtureId(payload.fixture_id))) {
+      throw Object.assign(new Error('fixture_id must match ^[a-z0-9-]+$ and name an existing fixture article'), {
+        code: 'invalid_fixture_id'
+      });
+    }
     const articlePath = join(FIXTURES_DIR, 'articles', `${payload.fixture_id}.html`);
     const html = await readFile(articlePath, 'utf8');
     return prepareFromHtml({
@@ -119,11 +163,46 @@ async function preparePayload({ payload, config }) {
     if (config.mode !== 'live') {
       throw Object.assign(new Error('URL mode requires the worker to be running in live mode'), { code: 'URL_MODE_REQUIRES_LIVE' });
     }
-    const response = await fetch(payload.url);
-    const html = await response.text();
+    // H2: never call the bare global fetch on a user-supplied URL. This
+    // enforces http(s)-only, rejects loopback/private/link-local hosts
+    // (re-checked at every redirect hop), and bounds both time and bytes.
+    const { html } = await fetchArticleSafely(payload.url, {
+      timeoutMs: config.limits.urlFetchTimeoutMs,
+      maxBytes: config.limits.urlFetchMaxBytes,
+      maxRedirects: config.limits.urlFetchMaxRedirects
+    });
     return prepareFromHtml({ html, kind: payload.kind || 'article', sourceUrl: payload.url, inputMode: 'url' });
   }
   throw Object.assign(new Error(`Unknown analyze mode: ${payload.mode}`), { code: 'UNKNOWN_MODE' });
+}
+
+// Failures that mean "we could not safely/successfully fetch this right
+// now" become an abstention graph (HTTP 200) rather than a raw error,
+// matching how every other engine-unavailable condition is reported.
+// Failures that mean "this input is not allowed" are rejected outright.
+const PREPARE_FAILURE_AS_ABSTENTION = new Set(['TIMEOUT', 'FETCH_ERROR', 'TOO_MANY_REDIRECTS']);
+const PREPARE_FAILURE_STATUS = { TOO_LARGE: 413 };
+
+/**
+ * H1: the last-resort safety net before any graph reaches a client. If the
+ * pipeline ever produces a document that fails its own schema (e.g. a
+ * typed classifier answering outside our taxonomy despite the adapter and
+ * fusion checks, or any other pipeline bug), this discards it and returns
+ * a valid abstention-only graph instead. Exported so this behavior is
+ * directly unit-testable without needing a live Jev bug to reproduce it.
+ */
+export async function validateOrAbstain({ graph, prepared, config, consentAt }) {
+  const { valid, errors } = validate(graph);
+  if (valid) return graph;
+  console.error('Media Lens: discarding an invalid influence-graph.v1 document before sending it.', errors);
+  return buildAbstentionOnlyGraph({
+    prepared,
+    reason: 'engine_failure',
+    message: 'The analysis pipeline produced an invalid result and it was discarded rather than served.',
+    config,
+    userAssertedPublic: true,
+    consentAt
+  });
 }
 
 /**
@@ -148,6 +227,14 @@ export function createServer(config = loadConfig()) {
       }
 
       if (req.method === 'POST' && req.url === '/analyze') {
+        // L6: check the rate limit before spending any time/memory
+        // reading the request body, so an over-limit client is rejected
+        // immediately rather than after paying for a full body read.
+        if (!checkRateLimit()) {
+          sendJson(res, 429, { error: 'rate_limited', message: 'Too many analyses requested. Wait a minute and try again.' });
+          return;
+        }
+
         let rawBody;
         try {
           rawBody = await readBodyWithLimit(req, config.limits.maxRequestBodyBytes);
@@ -157,11 +244,6 @@ export function createServer(config = loadConfig()) {
             return;
           }
           throw err;
-        }
-
-        if (!checkRateLimit()) {
-          sendJson(res, 429, { error: 'rate_limited', message: 'Too many analyses requested. Wait a minute and try again.' });
-          return;
         }
 
         let payload;
@@ -180,25 +262,43 @@ export function createServer(config = loadConfig()) {
           return;
         }
 
+        const { consentAt } = resolveConsentAt(payload.consent_at);
+
         let prepared;
         try {
           prepared = await preparePayload({ payload, config });
         } catch (err) {
-          sendJson(res, 400, { error: err.code || 'prepare_failed', message: err.message });
+          if (PREPARE_FAILURE_AS_ABSTENTION.has(err.code)) {
+            const stub = emptyPreparedArtifactStub({ inputMode: payload.mode === 'url' ? 'url' : 'pasted_text', url: payload.url || null });
+            const fallback = await buildAbstentionOnlyGraph({
+              prepared: stub,
+              reason: 'engine_unavailable',
+              message: 'The article could not be fetched in time, so no analysis was performed.',
+              config,
+              userAssertedPublic: true,
+              consentAt
+            });
+            sendJson(res, 200, fallback);
+            return;
+          }
+          sendJson(res, PREPARE_FAILURE_STATUS[err.code] || 400, { error: err.code || 'prepare_failed', message: err.message });
           return;
         }
 
         const { jevAdapter, newsjackAdapter } = await buildAdapters({ config, payload });
 
-        const graph = await analyze({
+        const rawGraph = await analyze({
           prepared,
           config,
           jevAdapter,
           newsjackAdapter,
           userAssertedPublic: true,
-          consentAt: new Date().toISOString(),
+          consentAt,
           disclosureShown: true
         });
+
+        // H1: never serve a document that fails its own schema.
+        const graph = await validateOrAbstain({ graph: rawGraph, prepared, config, consentAt });
 
         sendJson(res, 200, graph);
         return;

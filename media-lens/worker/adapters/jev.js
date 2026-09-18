@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { canonicalStringify } from '../jev/canonical-json.js';
+import { TAXONOMY_IDS } from '../../schema/taxonomy.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const QUESTIONS_PATH = join(__dirname, '..', 'jev', 'questions.v1.json');
@@ -66,11 +67,34 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Jev is a typed classifier, not an authority: it may only answer with one
+// of *our* taxonomy ids (or "none"). Any other choice, or a non-numeric or
+// out-of-range probability/confidence/noul value, is treated as a failed
+// answer for that span rather than trusted and passed through to fusion.
+// This is the boundary check for untrusted model output (H1); fusion.js
+// also re-checks the taxonomy membership itself as defense in depth.
+const VALID_SIGNAL_CHOICES = new Set([...TAXONOMY_IDS, 'none']);
+
+function isValidUnitInterval(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
 function isPlausibleAnswers(answers) {
   if (!answers || typeof answers !== 'object') return false;
-  if (!answers.influence_signal || typeof answers.influence_signal.choice !== 'string') return false;
-  if (!answers.is_quoted_or_attributed || typeof answers.is_quoted_or_attributed.noul !== 'number') return false;
-  if (!answers.is_checkable_claim || typeof answers.is_checkable_claim.noul !== 'number') return false;
+
+  const signal = answers.influence_signal;
+  if (!signal || typeof signal.choice !== 'string' || !VALID_SIGNAL_CHOICES.has(signal.choice)) return false;
+  if (signal.probabilities !== undefined) {
+    if (typeof signal.probabilities !== 'object' || signal.probabilities === null || Array.isArray(signal.probabilities)) return false;
+    for (const [choiceId, probability] of Object.entries(signal.probabilities)) {
+      if (!VALID_SIGNAL_CHOICES.has(choiceId)) return false;
+      if (!isValidUnitInterval(probability)) return false;
+    }
+  }
+  if (signal.confidence !== undefined && !isValidUnitInterval(signal.confidence)) return false;
+
+  if (!answers.is_quoted_or_attributed || !isValidUnitInterval(answers.is_quoted_or_attributed.noul)) return false;
+
   return true;
 }
 

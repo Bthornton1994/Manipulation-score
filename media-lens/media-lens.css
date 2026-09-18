@@ -233,6 +233,29 @@
   border: 1px solid var(--line-dark);
   border-radius: var(--radius-control);
   background: var(--ink-soft);
+  /* Real, meaningful transition (not a no-op): the border/background
+     highlight below on hover/focus fades in and out via this property. */
+  transition: border-color var(--motion-fast) var(--ease-ui-out), background-color var(--motion-fast) var(--ease-ui-out);
+}
+
+.ml-observation:hover,
+.ml-observation:focus-within,
+.ml-claim:hover,
+.ml-claim:focus-within {
+  border-color: var(--accent);
+  background: var(--surface-raised);
+}
+
+.ml-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .ml-observation-head {
@@ -353,8 +376,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ml-status-dot,
-  .ml-chip,
+  /* These selectors are the only ones with a transition declared above
+     (.ml-observation/.ml-claim border+background fade on hover/focus);
+     this rule collapses that fade to an immediate state change. */
   .ml-observation,
   .ml-claim {
     transition: none;

@@ -387,6 +387,51 @@ test('claim referencing an unknown span id is rejected', () => {
   assert.ok(errors.some((e) => e.includes('claims[0].span_ids references unknown span id')));
 });
 
+test('L8: invariant 6 also requires a model_mismatch abstention, not just needs_review on observations', () => {
+  const graph = baseGraph();
+  graph.engine.jev.model_match = false;
+  graph.engine.jev.model_reported = 'jev-1.10.0';
+  graph.observations[0].review_status = 'needs_review';
+  graph.observations[1].review_status = 'needs_review';
+  // Deliberately omit the model_mismatch abstention that the earlier
+  // invariant-6 test includes.
+  const { valid, errors } = validate(graph);
+  assert.equal(valid, false);
+  assert.ok(errors.some((e) => e.includes('no abstention with reason "model_mismatch"')));
+});
+
+test('L8: engine.jev.question_set_sha256 must never be null', () => {
+  const graph = baseGraph();
+  graph.engine.jev.question_set_sha256 = null;
+  const { valid, errors } = validate(graph);
+  assert.equal(valid, false);
+  assert.ok(errors.some((e) => e.includes('question_set_sha256')));
+});
+
+test('L8: engine.jev.question_set_sha256 must be a 64-character hex string', () => {
+  const graph = baseGraph();
+  graph.engine.jev.question_set_sha256 = 'not-a-real-hash';
+  const { valid, errors } = validate(graph);
+  assert.equal(valid, false);
+  assert.ok(errors.some((e) => e.includes('question_set_sha256')));
+});
+
+test('L8: observation top_probability must be within [0, 1]', () => {
+  const graph = baseGraph();
+  graph.observations[0].evidence.top_probability = 1.5;
+  const { valid, errors } = validate(graph);
+  assert.equal(valid, false);
+  assert.ok(errors.some((e) => e.includes('top_probability')));
+});
+
+test('L8: observation top_probability of null is still valid (unlocalized/rule-based observations)', () => {
+  const graph = baseGraph();
+  graph.observations[0].evidence.top_probability = null;
+  const { valid, errors } = validate(graph);
+  assert.deepEqual(errors, []);
+  assert.equal(valid, true);
+});
+
 test('clone helper produces an independent copy for mutation-based tests', () => {
   const a = baseGraph();
   const b = clone(a);

@@ -155,11 +155,41 @@ test('failure rate above the threshold marks the Language dimension unreviewed',
   assert.ok(result.abstentions.some((a) => a.scope === 'dimension' && a.target === 'language'));
 });
 
+test('L4: artifact.publisher.name is null when the source article has no og:site_name (never falls back to the domain)', async () => {
+  const graph = await runFixture('synthetic-01-quoted-vs-authorial');
+  assert.equal(graph.artifact.publisher.name, null);
+  assert.equal(graph.artifact.publisher.domain, 'fictional-daily.example');
+  assert.equal(graph.source_context.publisher.name, null);
+});
+
 test('duplicate/syndicated cluster members are not counted as independent sources', async () => {
   const graph = await runFixture('synthetic-02-syndicated-cluster');
   assert.equal(graph.coverage.cluster.member_count, 5);
   assert.equal(graph.coverage.cluster.independent_sources_estimate, 2);
   assert.equal(graph.coverage.cluster.duplicate_or_syndicated_count, 3);
+});
+
+test('H1: fusion never produces an observation for an out-of-taxonomy jev answer, even if fed one directly', () => {
+  const spans = [
+    { id: 'span-1', start: 0, end: 10, text: 'Officials said the plan would proceed as scheduled.', paragraph_index: 0, role: 'authorial', attribution: { speaker: null, cue: null }, role_basis: 'default' }
+  ];
+  // Simulate what a buggy or future adapter could pass through, bypassing
+  // adapters/jev.js#isPlausibleAnswers entirely: fusion must not trust it.
+  const jevAnswersBySpanId = new Map([
+    ['span-1', { influence_signal: { choice: 'outlet_is_untrustworthy_propaganda', probabilities: { outlet_is_untrustworthy_propaganda: 0.99 } }, is_quoted_or_attributed: { noul: 0.1 } }]
+  ]);
+  const result = fuse({
+    spans,
+    claimCandidates: [],
+    artifactHasUrl: false,
+    jevAnswersBySpanId,
+    jevFailedSpanIds: new Set(),
+    jevCalls: 1,
+    jevMode: 'fixture',
+    jevModelMatch: true,
+    newsjackResult: null
+  });
+  assert.deepEqual(result.observations, []);
 });
 
 test('fusion thresholds match the schema documented constants', () => {

@@ -192,6 +192,14 @@ function validateObservations(observations, spanIds, spanById, errors) {
     req(errors, inEnum(obs.authorial_attribution, ATTRIBUTIONS), `${p}.authorial_attribution invalid`);
     req(errors, inEnum(obs.review_status, REVIEW_STATUSES), `${p}.review_status invalid`);
     req(errors, ALLOWED_UI_PHRASES.includes(obs.ui_phrase), `${p}.ui_phrase "${obs.ui_phrase}" is not an allowed UI phrase`);
+    if (isPlainObject(obs.evidence)) {
+      const topProbability = obs.evidence.top_probability;
+      req(
+        errors,
+        topProbability === null || (typeof topProbability === 'number' && Number.isFinite(topProbability) && topProbability >= 0 && topProbability <= 1),
+        `${p}.evidence.top_probability must be null or a number in [0, 1]`
+      );
+    }
 
     // Invariant 1: span-localized observations reference existing spans and
     // are non-empty; unlocalized observations have empty span_ids and must
@@ -356,6 +364,15 @@ function validateEngine(engine, observations, errors) {
       engine.jev.model_match === null || typeof engine.jev.model_match === 'boolean',
       `${p}.jev.model_match must be boolean or null`
     );
+    // The pinned question-set hash must always be recorded, even when Jev
+    // was not called for this analysis (disabled/oversized/etc.): it
+    // documents which question set this build would use, not only which
+    // one was actually invoked, so it is never allowed to be null.
+    req(
+      errors,
+      typeof engine.jev.question_set_sha256 === 'string' && /^[0-9a-f]{64}$/.test(engine.jev.question_set_sha256),
+      `${p}.jev.question_set_sha256 must be a 64-character hex sha256 string, never null`
+    );
 
     // Invariant 6
     if (engine.jev.model_match === false) {
@@ -423,6 +440,16 @@ export function validate(graph) {
       errors,
       isPlainObject(graph.coverage) && graph.coverage.confidence === 'low',
       'artifact.timestamp_precision is "none" but coverage.confidence is not "low"'
+    );
+  }
+
+  // Invariant 6 (abstention half): a model mismatch must also be visible
+  // as an abstention, not just as needs_review on individual observations.
+  if (isPlainObject(graph.engine) && isPlainObject(graph.engine.jev) && graph.engine.jev.model_match === false) {
+    req(
+      errors,
+      abstentions.some((a) => a?.reason === 'model_mismatch'),
+      'engine.jev.model_match is false but no abstention with reason "model_mismatch" is present'
     );
   }
 

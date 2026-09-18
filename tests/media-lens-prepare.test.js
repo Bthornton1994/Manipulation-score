@@ -100,6 +100,29 @@ test('claim candidates are proposed for numerals, dates, and attribution cues', 
   assert.ok(prepared.claimCandidates.some((c) => c.kind === 'statistic'));
 });
 
+test('L4: publisher name comes from og:site_name, not the domain', async () => {
+  const html = `<!doctype html><html><head>
+    <meta property="og:site_name" content="Fictional Daily" />
+    <meta property="og:title" content="Some headline" />
+    <link rel="canonical" href="https://fictional-daily.example/articles/x" />
+  </head><body><article><h1>Some headline</h1><p>Enough authorial text to be analyzable in this test case.</p></article></body></html>`;
+  const prepared = prepareFromHtml({ html, kind: 'article', sourceUrl: 'https://fictional-daily.example/articles/x', inputMode: 'fixture' });
+  assert.equal(prepared.artifact.publisherName, 'Fictional Daily');
+});
+
+test('L4: publisher name is null when no og:site_name meta tag is present', async () => {
+  const html = `<!doctype html><html><head>
+    <meta property="og:title" content="Some headline" />
+  </head><body><article><h1>Some headline</h1><p>Enough authorial text to be analyzable in this test case.</p></article></body></html>`;
+  const prepared = prepareFromHtml({ html, kind: 'article', sourceUrl: 'https://fictional-daily.example/articles/x', inputMode: 'fixture' });
+  assert.equal(prepared.artifact.publisherName, null);
+});
+
+test('L4: pasted text has no publisher name (no metadata available)', () => {
+  const prepared = prepareFromPastedText({ text: 'Some plain pasted paragraph of text.' });
+  assert.equal(prepared.artifact.publisherName, null);
+});
+
 test('text_sha256 is deterministic for identical prepared text', async () => {
   const html = await readFile('media-lens/fixtures/articles/synthetic-01-quoted-vs-authorial.html', 'utf8');
   const first = prepareFromHtml({ html, kind: 'article', sourceUrl: 'x', inputMode: 'fixture' });

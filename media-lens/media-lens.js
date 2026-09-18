@@ -16,6 +16,10 @@ const ALLOWED_UI_PHRASES = new Set([
 ]);
 
 let currentGraph = null;
+// L3: capture the moment the consent checkbox is actually checked, so the
+// worker can record *that* timestamp as artifact.authorization.consent_at
+// instead of only ever seeing server-receive time.
+let consentCheckedAt = null;
 
 function byId(id) {
   return document.getElementById(id);
@@ -43,6 +47,7 @@ function updateSubmitEnabled() {
   const consent = byId('consent-checkbox');
   const submit = byId('analyze-submit');
   submit.disabled = !consent.checked;
+  consentCheckedAt = consent.checked ? new Date().toISOString() : null;
 }
 
 function setupInputModeToggle() {
@@ -103,9 +108,16 @@ function renderObservation(graph, obs) {
 
 function renderClaim(graph, claim) {
   const supportLabel = claim.support === 'not_checked' ? 'Not checked' : claim.support.replace(/_/g, ' ');
+  // L5: a quoted claim is someone else's words, not the author's own
+  // assertion — show that distinction instead of rendering it identically
+  // to an authorial claim.
+  const isQuoted = claim.attribution !== 'authorial';
   return `
     <li class="ml-claim">
-      <div class="ml-observation-head">${chip(supportLabel)}</div>
+      <div class="ml-observation-head">
+        ${chip(supportLabel)}
+        ${isQuoted ? chip('Quoted', { 'data-attribution': 'quoted' }) : ''}
+      </div>
       <p class="ml-observation-quote">${escapeHtml(claim.text)}</p>
     </li>
   `;
@@ -120,6 +132,12 @@ function renderCoverageStats(coverage) {
   if (coverage.cluster) {
     stats.push(['Independent sources', String(coverage.cluster.independent_sources_estimate)]);
     stats.push(['Duplicate or syndicated', String(coverage.cluster.duplicate_or_syndicated_count)]);
+  }
+  // M2: freshness_gate.computed_status and its rationale (e.g. "Origin not
+  // yet corroborated") were computed by fusion but never shown; without
+  // this row a user has no way to see why a story is or isn't "fresh".
+  if (coverage.freshness_gate) {
+    stats.push(['Freshness', coverage.freshness_gate.computed_status.replace(/_/g, ' ')]);
   }
   stats.push(['Coverage confidence', coverage.confidence]);
   stats.push(['Provenance', coverage.provenance.replace(/_/g, ' ')]);
@@ -150,6 +168,7 @@ function renderGraph(graph) {
     graph.claims.map((c) => renderClaim(graph, c)).join('') || '<li class="ml-empty-state">No checkable-looking claims were found.</li>';
 
   byId('coverage-stats').innerHTML = renderCoverageStats(graph.coverage);
+  byId('coverage-freshness-rationale').textContent = graph.coverage.freshness_gate?.rationale || '';
   byId('coverage-list').innerHTML = coverageObservations.map((o) => renderObservation(graph, o)).join('');
 
   byId('source-context-stats').innerHTML = renderSourceContextStats(graph.source_context);
@@ -157,6 +176,17 @@ function renderGraph(graph) {
   byId('abstention-list').innerHTML = graph.abstentions.map(renderAbstention).join('');
 
   byId('results').hidden = false;
+
+  // Info: announce a short summary through the dedicated status line
+  // instead of aria-live on the whole results tree, which would re-read
+  // every observation, claim, and stat aloud on every update.
+  announceStatus(
+    `Analysis complete: ${languageObservations.length} language observation${languageObservations.length === 1 ? '' : 's'}, ${graph.claims.length} claim${graph.claims.length === 1 ? '' : 's'} found.`
+  );
+}
+
+function announceStatus(message) {
+  byId('analyze-status-live').textContent = message;
 }
 
 function evidenceOnlySpanIds(graph) {
@@ -194,6 +224,7 @@ function showError(message) {
   const el = byId('analyze-error');
   el.hidden = false;
   el.textContent = message;
+  announceStatus(message);
 }
 
 function clearError() {
@@ -211,7 +242,7 @@ async function handleSubmit(event) {
   }
 
   const mode = document.querySelector('input[name="input-mode"]:checked')?.value || 'fixture';
-  const payload = { user_asserted_public: true, mode };
+  const payload = { user_asserted_public: true, mode, consent_at: consentCheckedAt };
 
   if (mode === 'fixture') {
     payload.fixture_id = byId('fixture-select').value;

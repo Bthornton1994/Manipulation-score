@@ -149,6 +149,55 @@ test('CORS: a non-loopback Origin is never granted access', async () => {
   }
 });
 
+test('L3: a well-formed client-supplied consent_at is echoed back in artifact.authorization.consent_at', async () => {
+  const config = loadConfig({ MEDIA_LENS_MODE: 'fixture' });
+  const server = await listen(createServer(config));
+  try {
+    const clientConsentAt = '2026-05-01T12:34:56.000Z';
+    const res = await requestJson(server, {
+      method: 'POST',
+      path: '/analyze',
+      body: {
+        user_asserted_public: true,
+        mode: 'fixture',
+        fixture_id: 'synthetic-01-quoted-vs-authorial',
+        consent_at: clientConsentAt
+      }
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.artifact.authorization.consent_at, clientConsentAt);
+  } finally {
+    server.close();
+  }
+});
+
+test('L3: a missing or malformed consent_at falls back to a valid server-generated timestamp instead of being trusted verbatim', async () => {
+  const config = loadConfig({ MEDIA_LENS_MODE: 'fixture' });
+  const server = await listen(createServer(config));
+  try {
+    const before = Date.now();
+    const res = await requestJson(server, {
+      method: 'POST',
+      path: '/analyze',
+      body: {
+        user_asserted_public: true,
+        mode: 'fixture',
+        fixture_id: 'synthetic-01-quoted-vs-authorial',
+        consent_at: 'not-a-real-timestamp'
+      }
+    });
+    const after = Date.now();
+    assert.equal(res.status, 200);
+    const consentAt = res.body.artifact.authorization.consent_at;
+    assert.notEqual(consentAt, 'not-a-real-timestamp');
+    const consentAtMs = Date.parse(consentAt);
+    assert.ok(!Number.isNaN(consentAtMs));
+    assert.ok(consentAtMs >= before - 1000 && consentAtMs <= after + 1000, 'fallback should be close to server-receive time');
+  } finally {
+    server.close();
+  }
+});
+
 test('unknown routes return 404', async () => {
   const config = loadConfig({ MEDIA_LENS_MODE: 'fixture' });
   const server = await listen(createServer(config));

@@ -10,6 +10,7 @@
 
 import { normalizedURLKey } from './url-key.js';
 import { randomUUID } from 'node:crypto';
+import { TAXONOMY_IDS } from '../schema/taxonomy.js';
 
 export const THRESHOLDS = Object.freeze({
   observed_min_probability: 0.6,
@@ -113,6 +114,12 @@ function buildJevLanguageObservations({ resolvedSpans, jevAnswersBySpanId, engin
 
     const choice = answers.influence_signal?.choice;
     if (!choice || choice === 'none') continue;
+    // Defense in depth: the Jev adapter already rejects out-of-taxonomy
+    // choices as a failure (see adapters/jev.js#isPlausibleAnswers), but
+    // fusion is also called directly (e.g. from tests, or a future caller)
+    // with a hand-built jevAnswersBySpanId map, so never trust `choice`
+    // to be a real taxonomy id without checking it here too (H1).
+    if (!TAXONOMY_IDS.includes(choice)) continue;
 
     const probabilities = answers.influence_signal?.probabilities || {};
     const topProbability = typeof probabilities[choice] === 'number' ? probabilities[choice] : answers.influence_signal?.confidence ?? null;

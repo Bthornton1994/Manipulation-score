@@ -2,20 +2,40 @@
   "model_reported": "jev-1.13.0",
   "answers": {
     "span-1": {
-      "influence_signal": { "choice": "none", "probabilities": { "none": 0.9 }, "confidence": 0.9 },
-      "is_quoted_or_attributed": { "noul": 0.05 },
-      "is_checkable_claim": { "noul": 0.1 }
+      "influence_signal": {
+        "choice": "none",
+        "probabilities": {
+          "none": 0.9
+        },
+        "confidence": 0.9
+      },
+      "is_quoted_or_attributed": {
+        "noul": 0.05
+      }
     },
     "span-3": {
-      "influence_signal": { "choice": "none", "probabilities": { "none": 0.85 }, "confidence": 0.85 },
-      "is_quoted_or_attributed": { "noul": 0.05 },
-      "is_checkable_claim": { "noul": 0.3 }
+      "influence_signal": {
+        "choice": "none",
+        "probabilities": {
+          "none": 0.85
+        },
+        "confidence": 0.85
+      },
+      "is_quoted_or_attributed": {
+        "noul": 0.05
+      }
     },
     "span-4": {
-      "influence_signal": { "choice": "none", "probabilities": { "none": 0.8 }, "confidence": 0.8 },
-      "is_quoted_or_attributed": { "noul": 0.1 },
-      "is_checkable_claim": { "noul": 0.6 },
-      "claim_kind": { "choice": "attribution", "probabilities": { "attribution": 0.6 }, "confidence": 0.6 }
+      "influence_signal": {
+        "choice": "none",
+        "probabilities": {
+          "none": 0.8
+        },
+        "confidence": 0.8
+      },
+      "is_quoted_or_attributed": {
+        "noul": 0.1
+      }
     }
   }
 }

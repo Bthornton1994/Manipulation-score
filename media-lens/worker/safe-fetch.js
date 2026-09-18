@@ -51,24 +51,6 @@ function isBlockedIPv4(ip) {
   return BLOCKED_IPV4_RANGES.some(([base, prefix]) => inCidr(intIp, base, prefix));
 }
 
-function isBlockedIPv6(ip) {
-  const lower = ip.toLowerCase();
-  if (lower === '::1' || lower === '::') return true; // loopback / unspecified
-  if (lower.startsWith('fe80:') || lower.startsWith('fe8') || lower.startsWith('fe9') || lower.startsWith('fea') || lower.startsWith('feb')) {
-    return true; // link-local (fe80::/10)
-  }
-  if (/^f[cd][0-9a-f]{2}:/.test(lower)) return true; // unique local (fc00::/7)
-  if (lower.startsWith('::ffff:')) {
-    const mapped = lower.slice('::ffff:'.length);
-    if (mapped.includes('.')) return isBlockedIPv4(mapped);
-  }
-  return false;
-}
-
-function isBlockedIp(ip) {
-  return ip.includes(':') ? isBlockedIPv6(ip) : isBlockedIPv4(ip);
-}
-
 // N3: `new URL('http://[::1]/x').hostname` is the literal string "[::1]",
 // brackets included (per the WHATWG URL spec, which uses brackets to
 // delimit an IPv6 host in a URL). Passed straight through, dns.lookup
@@ -81,6 +63,44 @@ function stripIPv6Brackets(hostname) {
     return hostname.slice(1, -1);
   }
   return hostname;
+}
+
+// R1: WHATWG URL serialization rewrites dotted IPv4-mapped IPv6
+// (`::ffff:127.0.0.1`) to hexadecimal (`::ffff:7f00:1`). Expanded forms
+// such as `0:0:0:0:0:ffff:7f00:1` canonicalize the same way. Route every
+// equivalent mapped representation through the IPv4 blocked-range policy.
+// Unparsable addresses fail closed.
+function canonicalizeIPv6Literal(ip) {
+  try {
+    return stripIPv6Brackets(new URL(`http://[${stripIPv6Brackets(ip)}]/`).hostname).toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function mappedIPv4FromIPv6(canonical) {
+  const match = canonical.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (!match) return null;
+  const hi = Number.parseInt(match[1], 16);
+  const lo = Number.parseInt(match[2], 16);
+  return `${(hi >> 8) & 255}.${hi & 255}.${(lo >> 8) & 255}.${lo & 255}`;
+}
+
+function isBlockedIPv6(ip) {
+  const canonical = canonicalizeIPv6Literal(ip);
+  if (canonical === null) return true; // fail closed on anything unparsable
+  if (canonical === '::1' || canonical === '::') return true; // loopback / unspecified
+  if (canonical.startsWith('fe80:') || canonical.startsWith('fe8') || canonical.startsWith('fe9') || canonical.startsWith('fea') || canonical.startsWith('feb')) {
+    return true; // link-local (fe80::/10)
+  }
+  if (/^f[cd][0-9a-f]{2}:/.test(canonical)) return true; // unique local (fc00::/7)
+  const mapped = mappedIPv4FromIPv6(canonical);
+  if (mapped !== null) return isBlockedIPv4(mapped);
+  return false;
+}
+
+function isBlockedIp(ip) {
+  return ip.includes(':') ? isBlockedIPv6(ip) : isBlockedIPv4(ip);
 }
 
 /**

@@ -39,7 +39,7 @@ Environment variables (read only by `worker/config.js`, never logged, never retu
 
 512 KB request body; 60,000 char prepared text; 200 spans; 10 analyses/minute/worker; 8 s per Jev call; 30 s per analysis. Exceeding a limit returns HTTP 413/429 and a graph with a single abstention, never a partial result.
 
-`worker/safe-fetch.js` rejects loopback/private/link-local hosts (including IPv6 literals and via redirect) before fetching a live-mode URL, resolving the hostname once via DNS at request time. A residual risk in any such check is DNS rebinding: the resolved address could change between that lookup and the underlying TCP connection. This is a known limitation, not a gap specific to Media Lens's implementation.
+`worker/safe-fetch.js` rejects loopback/private/link-local hosts (including IPv6 literals, IPv4-mapped IPv6 in dotted and hexadecimal forms, and via redirect) before fetching a live-mode URL, resolving the hostname once via DNS at request time. A residual risk in any such check is DNS rebinding: the resolved address could change between that lookup and the underlying TCP connection. Other IPv4-embedded IPv6 prefixes (for example NAT64 `64:ff9b::/96` and SIIT `::ffff:0:0:0/96`) are not classified as IPv4. Live URL mode is still not production-ready.
 
 ## Consent and disclosure
 

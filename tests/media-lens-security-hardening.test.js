@@ -1,6 +1,7 @@
 // Regression tests for the independent acceptance review of PR #117
-// (findings H1, H2, M1, L6) and the follow-up re-verification round
-// (findings N1, N2, N3). See also tests/media-lens-jev-adapter.test.js
+// (findings H1, H2, M1, L6), the follow-up re-verification round
+// (findings N1, N2, N3), and R1 (IPv4-mapped IPv6 hex forms). See also
+// tests/media-lens-jev-adapter.test.js
 // (H1 adapter-level check), tests/media-lens-fusion.test.js (H1 fusion
 // defense-in-depth check), and tests/media-lens-schema.test.js /
 // tests/media-lens-privacy.test.js (L8 validator gaps).
@@ -566,4 +567,56 @@ test('N3: media-lens/README.md documents the residual DNS-rebinding risk', async
   const { readFile } = await import('node:fs/promises');
   const readme = await readFile('media-lens/README.md', 'utf8');
   assert.match(readme, /DNS rebinding/i);
+});
+
+// ---------------------------------------------------------------------------
+// R1: IPv4-mapped IPv6 must go through the IPv4 blocked-range policy in
+// every equivalent representation. The previous guard only inspected a
+// dotted suffix after `::ffff:`, so hexadecimal mapped forms such as
+// `::ffff:7f00:1` — which is what WHATWG URL serialization produces from
+// `[::ffff:127.0.0.1]` — were treated as public and fetched in live URL
+// mode. Unparsable mapped addresses must fail closed.
+// ---------------------------------------------------------------------------
+
+test('R1: assertHostIsPublic rejects IPv4-mapped IPv6 loopback in bracketed, bare, and hex forms', async () => {
+  await assert.rejects(() => assertHostIsPublic('[::ffff:127.0.0.1]'), hasCode('BLOCKED_HOST'));
+  await assert.rejects(() => assertHostIsPublic('::ffff:127.0.0.1'), hasCode('BLOCKED_HOST'));
+  await assert.rejects(() => assertHostIsPublic('::ffff:7f00:1'), hasCode('BLOCKED_HOST'));
+  await assert.rejects(() => assertHostIsPublic('[::ffff:7f00:1]'), hasCode('BLOCKED_HOST'));
+});
+
+test('R1: assertHostIsPublic rejects IPv4-mapped private and link-local addresses, dotted and hex', async () => {
+  await assert.rejects(() => assertHostIsPublic('::ffff:169.254.169.254'), hasCode('BLOCKED_HOST'));
+  await assert.rejects(() => assertHostIsPublic('::ffff:a9fe:a9fe'), hasCode('BLOCKED_HOST'));
+  await assert.rejects(() => assertHostIsPublic('[::ffff:a9fe:a9fe]'), hasCode('BLOCKED_HOST'));
+  await assert.rejects(() => assertHostIsPublic('::ffff:10.0.0.5'), hasCode('BLOCKED_HOST'));
+  await assert.rejects(() => assertHostIsPublic('::ffff:a00:5'), hasCode('BLOCKED_HOST'));
+  await assert.rejects(() => assertHostIsPublic('0:0:0:0:0:ffff:7f00:1'), hasCode('BLOCKED_HOST'));
+});
+
+test('R1: fetchArticleSafely rejects hex-mapped loopback URLs as BLOCKED_HOST after WHATWG re-serialization', async () => {
+  // Dotted mapped input is re-serialized by `new URL` to [::ffff:7f00:1]
+  // before the host check; that hex form is the live-mode bypass.
+  await assert.rejects(
+    () => fetchArticleSafely('http://[::ffff:127.0.0.1]:9/secret', { timeoutMs: 1000, maxBytes: 1000 }),
+    hasCode('BLOCKED_HOST')
+  );
+  await assert.rejects(
+    () => fetchArticleSafely('http://[::ffff:7f00:1]:9/secret', { timeoutMs: 1000, maxBytes: 1000 }),
+    hasCode('BLOCKED_HOST')
+  );
+  await assert.rejects(
+    () => fetchArticleSafely('http://[::ffff:169.254.169.254]/latest/meta-data', { timeoutMs: 1000, maxBytes: 1000 }),
+    hasCode('BLOCKED_HOST')
+  );
+});
+
+test('R1: a mapped public TEST-NET address is still allowed (IPv4 policy, not a blanket mapped ban)', async () => {
+  await assert.doesNotReject(() => assertHostIsPublic('::ffff:203.0.113.7'));
+  await assert.doesNotReject(() => assertHostIsPublic('::ffff:cb00:7107'));
+});
+
+test('R1: unparsable IPv4-mapped addresses fail closed as BLOCKED_HOST', async () => {
+  const lookupImpl = async () => [{ address: '::ffff:not-valid', family: 6 }];
+  await assert.rejects(() => assertHostIsPublic('example.invalid', { lookupImpl }), hasCode('BLOCKED_HOST'));
 });

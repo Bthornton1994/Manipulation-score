@@ -63,8 +63,20 @@ function isRetryableStatus(status) {
   return status === 429 || status >= 500;
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function sleep(ms, signal) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    if (signal) {
+      signal.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timer);
+          resolve(); // resolve early; the caller re-checks signal.aborted immediately after
+        },
+        { once: true }
+      );
+    }
+  });
 }
 
 // Jev is a typed classifier, not an authority: it may only answer with one
@@ -98,11 +110,21 @@ function isPlausibleAnswers(answers) {
   return true;
 }
 
-async function callLive({ baseUrl, apiKey, fetchImpl, timeoutMs, state, questions }) {
+// N2: outerSignal is the caller's per-analysis abort signal (see
+// analyze.js). When it fires mid-retry, every remaining attempt (and any
+// in-flight request) must stop immediately instead of continuing through
+// its own backoff/timeout schedule after the caller has already moved on
+// and served an abstention graph.
+async function callLive({ baseUrl, apiKey, fetchImpl, timeoutMs, state, questions, outerSignal }) {
   let lastError = null;
   for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
+    if (outerSignal?.aborted) {
+      return { ok: false, error: 'aborted' };
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const onOuterAbort = () => controller.abort();
+    outerSignal?.addEventListener('abort', onOuterAbort, { once: true });
     try {
       const response = await fetchImpl(`${baseUrl}/v1/systemone`, {
         method: 'POST',
@@ -115,18 +137,22 @@ async function callLive({ baseUrl, apiKey, fetchImpl, timeoutMs, state, question
         const body = await response.json();
         return { ok: true, body };
       }
+      if (outerSignal?.aborted) return { ok: false, error: 'aborted' };
       if (isRetryableStatus(response.status) && attempt < MAX_RETRY_ATTEMPTS - 1) {
-        await sleep(RETRY_BASE_DELAY_MS * 2 ** attempt);
+        await sleep(RETRY_BASE_DELAY_MS * 2 ** attempt, outerSignal);
         continue;
       }
       return { ok: false, error: `http_${response.status}` };
     } catch (err) {
       clearTimeout(timer);
       lastError = err;
+      if (outerSignal?.aborted) return { ok: false, error: 'aborted' };
       if (attempt < MAX_RETRY_ATTEMPTS - 1) {
-        await sleep(RETRY_BASE_DELAY_MS * 2 ** attempt);
+        await sleep(RETRY_BASE_DELAY_MS * 2 ** attempt, outerSignal);
         continue;
       }
+    } finally {
+      outerSignal?.removeEventListener('abort', onOuterAbort);
     }
   }
   return { ok: false, error: lastError ? `transport_error:${lastError.message}` : 'unknown_error' };
@@ -161,7 +187,7 @@ export function createJevAdapter({
   timeoutMs = DEFAULT_TIMEOUT_MS,
   concurrency = DEFAULT_CONCURRENCY
 }) {
-  async function analyzeSpans(spans, artifact) {
+  async function analyzeSpans(spans, artifact, { signal } = {}) {
     const startedAt = Date.now();
     if (mode === 'disabled') {
       return { answersBySpanId: new Map(), failedSpanIds: new Set(), calls: 0, failures: 0, elapsedMs: 0, modelReported: null, modelMatch: null };
@@ -206,11 +232,16 @@ export function createJevAdapter({
       let modelReported = null;
 
       await runWithConcurrency(spans, concurrency, async (span, index) => {
+        // N2: once aborted, never start a span that hasn't been attempted
+        // yet at all (not even counted as a call/failure — the whole
+        // result is about to be discarded by the caller in favor of an
+        // abstention graph, so there is nothing useful to record for it).
+        if (signal?.aborted) return;
         calls++;
         const before = spans[index - 1]?.text || null;
         const after = spans[index + 1]?.text || null;
         const state = buildRequestState({ artifact, span, before, after });
-        const result = await callLive({ baseUrl, apiKey, fetchImpl, timeoutMs, state, questions });
+        const result = await callLive({ baseUrl, apiKey, fetchImpl, timeoutMs, state, questions, outerSignal: signal });
         if (!result.ok) {
           failedSpanIds.add(span.id);
           return;

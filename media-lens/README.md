@@ -39,6 +39,8 @@ Environment variables (read only by `worker/config.js`, never logged, never retu
 
 512 KB request body; 60,000 char prepared text; 200 spans; 10 analyses/minute/worker; 8 s per Jev call; 30 s per analysis. Exceeding a limit returns HTTP 413/429 and a graph with a single abstention, never a partial result.
 
+`worker/safe-fetch.js` rejects loopback/private/link-local hosts (including IPv6 literals and via redirect) before fetching a live-mode URL, resolving the hostname once via DNS at request time. A residual risk in any such check is DNS rebinding: the resolved address could change between that lookup and the underlying TCP connection. This is a known limitation, not a gap specific to Media Lens's implementation.
+
 ## Consent and disclosure
 
 The UI shows a persistent, non-dismissable notice describing what Media Lens analyzes, that a local worker performs any processing, what happens in live mode, and that private messages belong in Clarity instead. A per-session "This is public material I am allowed to analyze" checkbox gates the submit button; the worker rejects `/analyze` requests without `user_asserted_public: true`.

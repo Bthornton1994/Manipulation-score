@@ -69,6 +69,20 @@ function isBlockedIp(ip) {
   return ip.includes(':') ? isBlockedIPv6(ip) : isBlockedIPv4(ip);
 }
 
+// N3: `new URL('http://[::1]/x').hostname` is the literal string "[::1]",
+// brackets included (per the WHATWG URL spec, which uses brackets to
+// delimit an IPv6 host in a URL). Passed straight through, dns.lookup
+// cannot parse "[::1]" as an address, so it falls through to a real (and
+// here, failing) DNS query and surfaces as DNS_ERROR instead of being
+// recognized as the loopback literal it is. Stripping the brackets first
+// means isBlockedIPv6 actually gets a chance to run against IPv6 literals.
+function stripIPv6Brackets(hostname) {
+  if (hostname.startsWith('[') && hostname.endsWith(']')) {
+    return hostname.slice(1, -1);
+  }
+  return hostname;
+}
+
 /**
  * Resolve a hostname (or IP literal) and throw if any resolved address is
  * loopback/private/link-local. This runs on every hop, including after a
@@ -76,12 +90,13 @@ function isBlockedIp(ip) {
  * address is still caught.
  */
 export async function assertHostIsPublic(hostname, { lookupImpl = dnsLookup } = {}) {
-  if (hostname.toLowerCase() === 'localhost') {
+  const bareHostname = stripIPv6Brackets(hostname);
+  if (bareHostname.toLowerCase() === 'localhost') {
     throw taggedError(`Blocked host: ${hostname} resolves to a loopback address`, 'BLOCKED_HOST');
   }
   let results;
   try {
-    results = await lookupImpl(hostname, { all: true, verbatim: true });
+    results = await lookupImpl(bareHostname, { all: true, verbatim: true });
   } catch (err) {
     throw taggedError(`Could not resolve host: ${hostname}`, 'DNS_ERROR');
   }

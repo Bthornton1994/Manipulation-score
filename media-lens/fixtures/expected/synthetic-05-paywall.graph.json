@@ -22,7 +22,7 @@
     "paywall_detected": true,
     "authorization": {
       "user_asserted_public": true,
-      "consent_at": null
+      "consent_at": "2026-09-18T00:00:00.000Z"
     }
   },
   "spans": [],

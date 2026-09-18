@@ -75,12 +75,17 @@ async function buildAbstentionOnlyGraph({ prepared, reason, message, config, use
  * @param {boolean} args.disclosureShown
  */
 export async function analyze({ prepared, config, jevAdapter, newsjackAdapter, userAssertedPublic, consentAt, disclosureShown = true }) {
+  // N1: these early-abstention paths must record the same
+  // userAssertedPublic/consentAt as every other graph, not silently drop
+  // them back to the buildAbstentionOnlyGraph defaults (true / null).
   if (prepared.textLengthChars < config.limits.minAnalyzableChars) {
     return buildAbstentionOnlyGraph({
       prepared,
       reason: 'insufficient_text',
       message: 'This excerpt is too short to analyze reliably, so no signals are shown.',
-      config
+      config,
+      userAssertedPublic,
+      consentAt
     });
   }
   if (prepared.textLengthChars > config.limits.maxPreparedTextChars) {
@@ -88,7 +93,9 @@ export async function analyze({ prepared, config, jevAdapter, newsjackAdapter, u
       prepared,
       reason: 'oversized_input',
       message: 'This article is longer than the analysis limit, so it was not processed. Try a shorter excerpt.',
-      config
+      config,
+      userAssertedPublic,
+      consentAt
     });
   }
   if (prepared.spans.length > config.limits.maxSpans) {
@@ -96,18 +103,26 @@ export async function analyze({ prepared, config, jevAdapter, newsjackAdapter, u
       prepared,
       reason: 'oversized_input',
       message: 'This article has more sections than the analysis limit allows, so it was not processed.',
-      config
+      config,
+      userAssertedPublic,
+      consentAt
     });
   }
 
   const startedAt = new Date().toISOString();
+  // N2: this signal is aborted the instant the per-analysis timeout below
+  // fires, so an in-flight (and any not-yet-started) Jev call/retry stops
+  // immediately rather than continuing to run and retry in the background
+  // after the caller has already been served an abstention graph.
+  const pipelineAbortController = new AbortController();
 
   async function runPipeline() {
     const spansForJev = prepared.spans.filter((s) => !SPAN_ROLES_EXCLUDED_FROM_JEV.has(s.role));
-    const jevResult = await jevAdapter.analyzeSpans(spansForJev, {
-      kind: prepared.artifact.kind,
-      title: prepared.artifact.title
-    });
+    const jevResult = await jevAdapter.analyzeSpans(
+      spansForJev,
+      { kind: prepared.artifact.kind, title: prepared.artifact.title },
+      { signal: pipelineAbortController.signal }
+    );
 
     const newsjackResult = await newsjackAdapter.getStoryContext({
       url: prepared.artifact.url,
@@ -193,6 +208,7 @@ export async function analyze({ prepared, config, jevAdapter, newsjackAdapter, u
   try {
     const result = await Promise.race([runPipeline(), timeoutPromise]);
     if (result === TIMED_OUT) {
+      pipelineAbortController.abort();
       return buildAbstentionOnlyGraph({
         prepared,
         reason: 'engine_unavailable',

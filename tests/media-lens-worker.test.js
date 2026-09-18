@@ -198,6 +198,30 @@ test('L3: a missing or malformed consent_at falls back to a valid server-generat
   }
 });
 
+test('N1: consent_at and user_asserted_public survive the insufficient_text abstention-only path (fixture 06)', async () => {
+  const config = loadConfig({ MEDIA_LENS_MODE: 'fixture' });
+  const server = await listen(createServer(config));
+  try {
+    const suppliedConsentAt = '2026-06-15T09:30:00.000Z';
+    const res = await requestJson(server, {
+      method: 'POST',
+      path: '/analyze',
+      body: {
+        user_asserted_public: true,
+        mode: 'fixture',
+        fixture_id: 'synthetic-06-short-excerpt',
+        consent_at: suppliedConsentAt
+      }
+    });
+    assert.equal(res.status, 200);
+    assert.ok(res.body.abstentions.some((a) => a.reason === 'insufficient_text'), 'expected the insufficient_text abstention path');
+    assert.equal(res.body.artifact.authorization.consent_at, suppliedConsentAt, 'consent_at must not be dropped on this early-return path');
+    assert.equal(res.body.artifact.authorization.user_asserted_public, true, 'user_asserted_public must not be dropped on this early-return path');
+  } finally {
+    server.close();
+  }
+});
+
 test('unknown routes return 404', async () => {
   const config = loadConfig({ MEDIA_LENS_MODE: 'fixture' });
   const server = await listen(createServer(config));

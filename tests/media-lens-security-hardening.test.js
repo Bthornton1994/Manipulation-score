@@ -1,5 +1,6 @@
 // Regression tests for the independent acceptance review of PR #117
-// (findings H1, H2, M1, L6). See also tests/media-lens-jev-adapter.test.js
+// (findings H1, H2, M1, L6) and the follow-up re-verification round
+// (findings N1, N2, N3). See also tests/media-lens-jev-adapter.test.js
 // (H1 adapter-level check), tests/media-lens-fusion.test.js (H1 fusion
 // defense-in-depth check), and tests/media-lens-schema.test.js /
 // tests/media-lens-privacy.test.js (L8 validator gaps).
@@ -13,6 +14,7 @@ import { validate } from '../media-lens/schema/validate.js';
 import { runFixture } from '../media-lens/worker/analyze-fixture.js';
 import { fetchArticleSafely, assertHostIsPublic } from '../media-lens/worker/safe-fetch.js';
 import { createNewsjackAdapter } from '../media-lens/worker/adapters/newsjack.js';
+import { createJevAdapter } from '../media-lens/worker/adapters/jev.js';
 import { analyze } from '../media-lens/worker/analyze.js';
 import { prepareFromPastedText, emptyPreparedArtifactStub } from '../media-lens/worker/prepare.js';
 
@@ -419,4 +421,149 @@ test('L6: once the rate limit is exhausted, an oversized body still gets 429 (ra
   } finally {
     server.close();
   }
+});
+
+// ---------------------------------------------------------------------------
+// N1: consent_at/user_asserted_public must survive every abstention-only
+// early-return path in analyze(), not just the per-analysis-timeout one.
+// (The fixture-06/insufficient_text case, matching the review's exact
+// repro, is covered end to end through the real server in
+// tests/media-lens-worker.test.js.)
+// ---------------------------------------------------------------------------
+
+test('N1: consent_at and user_asserted_public survive the oversized_input (too many spans) abstention path', async () => {
+  const config = loadConfig({ MEDIA_LENS_MODE: 'fixture' });
+  config.limits = { ...config.limits, maxSpans: 1 };
+
+  const prepared = prepareFromPastedText({
+    text: Array.from({ length: 5 }, (_, i) => `This is paragraph number ${i + 1} with enough words to be its own span.`).join('\n\n')
+  });
+  assert.ok(prepared.spans.length > config.limits.maxSpans, 'sanity check: this input must actually exceed maxSpans');
+
+  const suppliedConsentAt = '2026-07-04T00:00:00.000Z';
+  const graph = await analyze({
+    prepared,
+    config,
+    jevAdapter: createJevAdapter({ mode: 'disabled' }),
+    newsjackAdapter: createNewsjackAdapter({ mode: 'disabled' }),
+    userAssertedPublic: true,
+    consentAt: suppliedConsentAt
+  });
+
+  assert.equal(validate(graph).valid, true);
+  assert.ok(graph.abstentions.some((a) => a.reason === 'oversized_input'));
+  assert.equal(graph.artifact.authorization.consent_at, suppliedConsentAt);
+  assert.equal(graph.artifact.authorization.user_asserted_public, true);
+});
+
+test('N1: consent_at and user_asserted_public survive the oversized_input (too much text) abstention path', async () => {
+  const config = loadConfig({ MEDIA_LENS_MODE: 'fixture' });
+  config.limits = { ...config.limits, maxPreparedTextChars: 100 };
+
+  const prepared = prepareFromPastedText({ text: 'A '.repeat(200) + 'sentence that is long enough to exceed the tiny configured limit above.' });
+  assert.ok(prepared.textLengthChars > config.limits.maxPreparedTextChars, 'sanity check: this input must actually exceed maxPreparedTextChars');
+
+  const suppliedConsentAt = '2026-07-04T00:00:00.000Z';
+  const graph = await analyze({
+    prepared,
+    config,
+    jevAdapter: createJevAdapter({ mode: 'disabled' }),
+    newsjackAdapter: createNewsjackAdapter({ mode: 'disabled' }),
+    userAssertedPublic: true,
+    consentAt: suppliedConsentAt
+  });
+
+  assert.equal(validate(graph).valid, true);
+  assert.ok(graph.abstentions.some((a) => a.reason === 'oversized_input'));
+  assert.equal(graph.artifact.authorization.consent_at, suppliedConsentAt);
+  assert.equal(graph.artifact.authorization.user_asserted_public, true);
+});
+
+// ---------------------------------------------------------------------------
+// N2: the losing pipeline must actually stop (abort) once the per-analysis
+// timeout fires, instead of continuing to retry in the background after
+// the caller has already been served an abstention graph.
+// ---------------------------------------------------------------------------
+
+test('N2: no further Jev requests are made once the per-analysis timeout has fired and the abstention is served', async () => {
+  let requestCount = 0;
+  const mockJev = await withMockJevServer((req, res) => {
+    requestCount += 1;
+    req.on('data', () => {});
+    req.on('end', () => {
+      // Deliberately never responds: only an explicit abort should ever
+      // end this connection from the client side.
+    });
+  });
+  const mockJevAddress = mockJev.address();
+
+  try {
+    const config = loadConfig({
+      MEDIA_LENS_MODE: 'live',
+      MEDIA_LENS_TYPESAFE_API_KEY: 'test-key',
+      MEDIA_LENS_TYPESAFE_BASE_URL: `http://127.0.0.1:${mockJevAddress.port}`
+    });
+    // The per-analysis timeout (50ms) fires well before the per-call
+    // timeout (200ms). This is deliberate: if the outer abort were *not*
+    // wired through, the first attempt would keep running until its own
+    // 200ms timer fired, then retry after a ~250ms backoff -- a second
+    // request would land well within this test's wait window below. With
+    // the fix, the outer abort stops everything at ~50ms and no amount of
+    // extra waiting produces a second request.
+    config.limits = { ...config.limits, perAnalysisTimeoutMs: 50, jevCallTimeoutMs: 200 };
+
+    const prepared = prepareFromPastedText({ text: 'A '.repeat(150) + 'sentence that is long enough to analyze in this test.' });
+    const jevAdapter = createJevAdapter({
+      mode: 'live',
+      baseUrl: config.jev.baseUrl,
+      apiKey: 'test-key',
+      timeoutMs: config.limits.jevCallTimeoutMs,
+      concurrency: 4
+    });
+    const newsjackAdapter = createNewsjackAdapter({ mode: 'disabled' });
+
+    const graph = await analyze({
+      prepared,
+      config,
+      jevAdapter,
+      newsjackAdapter,
+      userAssertedPublic: true,
+      consentAt: '2026-07-04T00:00:00.000Z'
+    });
+    assert.ok(graph.abstentions.some((a) => a.reason === 'engine_unavailable'));
+
+    const requestCountAtReturn = requestCount;
+    assert.ok(requestCountAtReturn >= 1, 'expected at least the initial in-flight request(s) to have been sent');
+
+    // If the outer abort were not wired through, the 4-attempt retry/backoff
+    // shape (each with its own 5s timeout that would never even fire here,
+    // since the mock never responds and ignores the abort only if we failed
+    // to wire it) would keep sending requests well past this point. Wait
+    // comfortably longer than a single retry backoff and confirm nothing
+    // new arrived.
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    assert.equal(requestCount, requestCountAtReturn, 'no further Jev requests should be made after the abstention was already served');
+  } finally {
+    mockJev.close();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// N3: IPv6 literal URLs must be recognized and rejected as BLOCKED_HOST,
+// not fall through to DNS_ERROR because the brackets were left in place.
+// ---------------------------------------------------------------------------
+
+test('N3: assertHostIsPublic strips brackets from an IPv6 literal and rejects it as BLOCKED_HOST', async () => {
+  await assert.rejects(() => assertHostIsPublic('[::1]'), hasCode('BLOCKED_HOST'));
+  await assert.rejects(() => assertHostIsPublic('::1'), hasCode('BLOCKED_HOST'));
+});
+
+test('N3: fetchArticleSafely rejects an IPv6 loopback literal URL as BLOCKED_HOST, not DNS_ERROR', async () => {
+  await assert.rejects(() => fetchArticleSafely('http://[::1]:9/secret', { timeoutMs: 1000, maxBytes: 1000 }), hasCode('BLOCKED_HOST'));
+});
+
+test('N3: media-lens/README.md documents the residual DNS-rebinding risk', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const readme = await readFile('media-lens/README.md', 'utf8');
+  assert.match(readme, /DNS rebinding/i);
 });

@@ -1,0 +1,26 @@
+{
+  "model_reported": "jev-1.13.0",
+  "answers": {
+    "span-1": {
+      "influence_signal": { "choice": "none", "probabilities": { "none": 0.88 }, "confidence": 0.88 },
+      "is_quoted_or_attributed": { "noul": 0.05 },
+      "is_checkable_claim": { "noul": 0.15 }
+    },
+    "span-3": {
+      "influence_signal": { "choice": "none", "probabilities": { "none": 0.8 }, "confidence": 0.8 },
+      "is_quoted_or_attributed": { "noul": 0.05 },
+      "is_checkable_claim": { "noul": 0.75 },
+      "claim_kind": { "choice": "statistic", "probabilities": { "statistic": 0.75 }, "confidence": 0.75 }
+    },
+    "span-4": {
+      "influence_signal": { "choice": "anecdote_generalization", "probabilities": { "anecdote_generalization": 0.5, "none": 0.3 }, "confidence": 0.5 },
+      "is_quoted_or_attributed": { "noul": 0.2 },
+      "is_checkable_claim": { "noul": 0.2 }
+    },
+    "span-5": {
+      "influence_signal": { "choice": "none", "probabilities": { "none": 0.7 }, "confidence": 0.7 },
+      "is_quoted_or_attributed": { "noul": 0.3 },
+      "is_checkable_claim": { "noul": 0.3 }
+    }
+  }
+}

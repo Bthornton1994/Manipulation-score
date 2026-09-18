@@ -1,0 +1,72 @@
+{
+  "story_origin": {
+    "same_story_assessment": "same_story",
+    "surfaced_article_published_at": "2026-09-16T09:00:00.000Z",
+    "first_public_at": "2026-09-16T08:30:00.000Z",
+    "original_url": "https://wire-source.example/stories/transit-fare-increase",
+    "original_source": "Wire Source",
+    "canonical_coverage_url": "https://fictional-daily.example/articles/synthetic-02-syndicated-cluster",
+    "canonical_coverage_source": "Fictional Daily",
+    "canonical_coverage_published_at": "2026-09-16T09:00:00.000Z",
+    "canonical_coverage_basis": "first_independent_report",
+    "same_story_basis": "headline_wording",
+    "new_development": false,
+    "new_development_at": null,
+    "confidence": "medium",
+    "timestamp_evidence": [
+      { "url_key": "https://fictional-daily.example/articles/synthetic-02-syndicated-cluster", "published_at": "2026-09-16T09:00:00.000Z" },
+      { "url_key": "https://second-outlet.example/news/transit-fare-increase", "published_at": "2026-09-16T09:15:00.000Z" }
+    ],
+    "evidence_urls": [
+      "https://fictional-daily.example/articles/synthetic-02-syndicated-cluster",
+      "https://second-outlet.example/news/transit-fare-increase"
+    ],
+    "rationale": "Two independently operated outlets published within 45 minutes of each other."
+  },
+  "freshness_gate": {
+    "computed_status": "fresh",
+    "basis_field": "first_public_at",
+    "basis_value": "2026-09-16T08:30:00.000Z",
+    "rationale": "Published within the freshness window with two corroborating independent sources."
+  },
+  "cluster": {
+    "member_count": 5,
+    "members": [
+      {
+        "url": "https://fictional-daily.example/articles/synthetic-02-syndicated-cluster",
+        "url_key": "https://fictional-daily.example/articles/synthetic-02-syndicated-cluster",
+        "source": "Fictional Daily",
+        "published_at": "2026-09-16T09:00:00.000Z",
+        "relation": "surfaced"
+      },
+      {
+        "url": "https://second-outlet.example/news/transit-fare-increase",
+        "url_key": "https://second-outlet.example/news/transit-fare-increase",
+        "source": "Second Outlet",
+        "published_at": "2026-09-16T09:15:00.000Z",
+        "relation": "same_story"
+      },
+      {
+        "url": "https://fictional-daily.example/wire/transit-fare-increase-copy",
+        "url_key": "https://fictional-daily.example/wire/transit-fare-increase-copy",
+        "source": "Fictional Daily Wire Feed",
+        "published_at": "2026-09-16T09:05:00.000Z",
+        "relation": "syndicated"
+      },
+      {
+        "url": "https://third-outlet.example/syndicated/transit-fare-increase",
+        "url_key": "https://third-outlet.example/syndicated/transit-fare-increase",
+        "source": "Third Outlet (syndicated feed)",
+        "published_at": "2026-09-16T09:20:00.000Z",
+        "relation": "syndicated"
+      },
+      {
+        "url": "https://www.prnewswire.com/news-releases/transit-agency-applauds-board-vote",
+        "url_key": "https://www.prnewswire.com/news-releases/transit-agency-applauds-board-vote",
+        "source": "PR Newswire",
+        "published_at": "2026-09-16T08:00:00.000Z",
+        "relation": "same_story"
+      }
+    ]
+  }
+}

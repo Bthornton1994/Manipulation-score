@@ -44,6 +44,7 @@ jobs:
             --exclude '.cursor' \
             --exclude 'tests' \
             --exclude '_site' \
+            --exclude 'media-lens' \
             ./ _site/
       - uses: actions/upload-pages-artifact@v3
         with:

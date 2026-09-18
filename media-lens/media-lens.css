@@ -1,0 +1,362 @@
+/* Media Lens additions only. Reuses tokens and base rules from
+   ../styles.css (colors, type, .button, .skip-link, focus ring). This file
+   adds only what Media Lens needs beyond the shared Clarity stylesheet. */
+
+.media-lens-page {
+  min-height: 100vh;
+}
+
+.ml-main {
+  max-width: 960px;
+  margin-inline: auto;
+  padding: clamp(48px, 6vw, 88px) clamp(20px, 5vw, 40px) 100px;
+}
+
+.ml-main h1 {
+  margin: 0 0 10px;
+  font: 700 clamp(2.4rem, 6vw, 3.4rem) / 1.05 Manrope, sans-serif;
+  letter-spacing: -0.03em;
+}
+
+.ml-lede {
+  color: var(--text-muted);
+  max-width: 62ch;
+}
+
+.ml-disclosure {
+  margin-top: 28px;
+  padding: 18px 20px;
+  border: 1px solid var(--line-dark);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+}
+
+.ml-disclosure h2 {
+  margin: 0 0 8px;
+  font: 700 15px Manrope, sans-serif;
+}
+
+.ml-disclosure p {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.ml-disclosure p:last-child {
+  margin-bottom: 0;
+}
+
+.ml-disclosure a {
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 3px;
+}
+
+.ml-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-dark);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.ml-status[data-state='ready'] {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.ml-status[data-state='error'] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.ml-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.ml-form {
+  margin-top: 32px;
+  padding: 24px;
+  border: 1px solid var(--line-dark);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+}
+
+.ml-form fieldset {
+  margin: 0 0 20px;
+  border: 0;
+  padding: 0;
+}
+
+.ml-form legend {
+  margin-bottom: 10px;
+  font: 700 13px Manrope, sans-serif;
+  color: var(--text-muted);
+}
+
+.ml-input-mode-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ml-input-mode-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--line-dark);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+
+.ml-input-mode-row input[type='radio']:focus-visible + span,
+.ml-input-mode-row:has(input:checked) {
+  border-color: var(--accent);
+}
+
+.ml-form label.ml-field-label {
+  display: block;
+  margin: 18px 0 8px;
+  font: 700 13px Manrope, sans-serif;
+}
+
+.ml-form select,
+.ml-form textarea,
+.ml-form input[type='url'] {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-dark);
+  border-radius: var(--radius-control);
+  background: var(--ink-soft);
+  color: var(--text);
+  font-size: 15px;
+}
+
+.ml-form textarea {
+  min-height: 160px;
+  resize: vertical;
+}
+
+.ml-consent-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 14px;
+  border: 1px solid var(--line-dark);
+  border-radius: var(--radius-control);
+}
+
+.ml-consent-row input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  flex: 0 0 auto;
+}
+
+.ml-consent-row label {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.ml-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.ml-form-note {
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
+.ml-results {
+  margin-top: 40px;
+}
+
+.ml-results[hidden] {
+  display: none;
+}
+
+.ml-empty-state {
+  padding: 40px 24px;
+  border: 1px dashed var(--line-dark);
+  border-radius: var(--radius-panel);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.ml-dimension {
+  margin-bottom: 28px;
+  padding: 22px;
+  border: 1px solid var(--line-dark);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+}
+
+.ml-dimension h2 {
+  margin: 0 0 4px;
+  font: 700 18px Manrope, sans-serif;
+}
+
+.ml-dimension-note {
+  margin: 0 0 16px;
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
+.ml-observation-list,
+.ml-claim-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.ml-observation,
+.ml-claim {
+  padding: 14px 16px;
+  border: 1px solid var(--line-dark);
+  border-radius: var(--radius-control);
+  background: var(--ink-soft);
+}
+
+.ml-observation-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.ml-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-dark);
+  font: 700 11px Manrope, sans-serif;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ml-chip[data-strength='observed'] {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.ml-chip[data-review='needs_review'] {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.ml-observation-quote {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.ml-observation-explain {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.ml-abstention-list {
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.ml-abstention {
+  padding: 10px 14px;
+  border-radius: var(--radius-control);
+  background: rgba(255, 213, 138, 0.1);
+  border: 1px solid var(--warning);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.ml-coverage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.ml-coverage-stat {
+  padding: 12px 14px;
+  border: 1px solid var(--line-dark);
+  border-radius: var(--radius-control);
+}
+
+.ml-coverage-stat dt {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.ml-coverage-stat dd {
+  margin: 4px 0 0;
+  font: 700 20px Manrope, sans-serif;
+}
+
+.ml-export-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.ml-footer-note {
+  margin-top: 48px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line-dark);
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
+@media (max-width: 768px) {
+  .ml-main {
+    padding-inline: 18px;
+  }
+
+  .ml-coverage-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ml-form-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ml-export-row {
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ml-status-dot,
+  .ml-chip,
+  .ml-observation,
+  .ml-claim {
+    transition: none;
+  }
+}

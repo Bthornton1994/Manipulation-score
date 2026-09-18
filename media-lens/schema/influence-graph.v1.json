@@ -1,0 +1,261 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://manipulationscore.com/media-lens/schema/influence-graph.v1.json",
+  "title": "influence-graph.v1",
+  "description": "Documentation schema for Media Lens influence-graph.v1. This file is descriptive; schema/validate.js is the authoritative, hand-written validator (including cross-field invariants this format cannot express) and is what tests and the worker actually run.",
+  "type": "object",
+  "required": [
+    "schema",
+    "graph_id",
+    "generated_at",
+    "artifact",
+    "spans",
+    "observations",
+    "claims",
+    "coverage",
+    "source_context",
+    "abstentions",
+    "engine",
+    "privacy"
+  ],
+  "properties": {
+    "schema": { "const": "influence-graph.v1" },
+    "graph_id": { "type": "string" },
+    "generated_at": { "type": "string" },
+    "artifact": {
+      "type": "object",
+      "required": [
+        "kind",
+        "input_mode",
+        "url",
+        "canonical_url",
+        "title",
+        "byline",
+        "publisher",
+        "published_at",
+        "modified_at",
+        "timestamp_precision",
+        "language",
+        "text_sha256",
+        "text_length_chars",
+        "paywall_detected",
+        "authorization"
+      ],
+      "properties": {
+        "kind": { "enum": ["article", "headline", "excerpt", "speech", "ad", "campaign", "other_public"] },
+        "input_mode": { "enum": ["url", "pasted_text", "fixture"] },
+        "url": { "type": ["string", "null"] },
+        "canonical_url": { "type": ["string", "null"] },
+        "title": { "type": ["string", "null"] },
+        "byline": { "type": ["string", "null"] },
+        "publisher": {
+          "type": "object",
+          "required": ["name", "domain"],
+          "properties": { "name": { "type": ["string", "null"] }, "domain": { "type": ["string", "null"] } }
+        },
+        "published_at": { "type": ["string", "null"] },
+        "modified_at": { "type": ["string", "null"] },
+        "timestamp_precision": { "enum": ["time", "date", "none"] },
+        "language": { "enum": ["en", "und"] },
+        "text_sha256": { "type": "string" },
+        "text_length_chars": { "type": "integer" },
+        "paywall_detected": { "type": "boolean" },
+        "authorization": {
+          "type": "object",
+          "required": ["user_asserted_public", "consent_at"],
+          "properties": {
+            "user_asserted_public": { "type": "boolean" },
+            "consent_at": { "type": ["string", "null"] }
+          }
+        }
+      }
+    },
+    "spans": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "start", "end", "text", "paragraph_index", "role", "attribution", "role_basis"],
+        "properties": {
+          "id": { "type": "string" },
+          "start": { "type": "integer" },
+          "end": { "type": "integer" },
+          "text": { "type": "string" },
+          "paragraph_index": { "type": "integer" },
+          "role": {
+            "enum": [
+              "headline",
+              "subhead",
+              "authorial",
+              "quoted",
+              "attributed_paraphrase",
+              "caption",
+              "byline_meta",
+              "boilerplate",
+              "uncertain"
+            ]
+          },
+          "attribution": {
+            "type": "object",
+            "required": ["speaker", "cue"],
+            "properties": { "speaker": { "type": ["string", "null"] }, "cue": { "type": ["string", "null"] } }
+          },
+          "role_basis": {
+            "enum": ["quote_marks", "blockquote", "attribution_cue", "html_structure", "default", "engine_disagreement"]
+          }
+        }
+      }
+    },
+    "observations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "dimension",
+          "signal",
+          "strength",
+          "localization",
+          "span_ids",
+          "authorial_attribution",
+          "evidence",
+          "review_status",
+          "ui_phrase"
+        ],
+        "properties": {
+          "dimension": { "enum": ["language", "coverage"] },
+          "strength": { "enum": ["observed", "candidate"] },
+          "localization": { "enum": ["span", "unlocalized"] },
+          "span_ids": { "type": "array", "items": { "type": "string" } },
+          "authorial_attribution": { "enum": ["authorial", "quoted", "mixed", "unknown"] },
+          "evidence": {
+            "type": "object",
+            "required": ["engine", "question_id", "top_probability", "answers_ref"],
+            "properties": {
+              "engine": { "enum": ["jev", "rule"] },
+              "question_id": { "type": ["string", "null"] },
+              "top_probability": { "type": ["number", "null"] },
+              "answers_ref": { "type": ["string", "null"] }
+            }
+          },
+          "review_status": { "enum": ["auto", "needs_review", "unreviewed"] }
+        }
+      }
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "span_ids", "text", "kind", "attribution", "support", "support_evidence", "review_status"],
+        "properties": {
+          "span_ids": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+          "kind": { "enum": ["statistic", "event", "attribution", "prediction", "evaluation", "other"] },
+          "attribution": { "enum": ["authorial", "quoted", "mixed", "unknown"] },
+          "support": { "enum": ["supported", "contradicted", "mixed", "unclear", "not_checked"] },
+          "support_evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["url", "source", "published_at", "note"],
+              "properties": {
+                "url": { "type": "string" },
+                "source": { "type": "string" },
+                "published_at": { "type": ["string", "null"] },
+                "note": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "required": ["status", "provenance", "story_origin", "freshness_gate", "cluster", "frames", "confidence"],
+      "properties": {
+        "status": { "enum": ["available", "insufficient", "not_requested"] },
+        "provenance": { "enum": ["fixture", "newsjack_artifacts", "newsjack_cli", "none"] },
+        "confidence": { "enum": ["high", "medium", "low"] }
+      }
+    },
+    "source_context": {
+      "type": "object",
+      "required": ["shown_separately", "publisher", "canonical_domain", "metadata", "third_party_ratings", "note"],
+      "properties": {
+        "shown_separately": { "const": true },
+        "third_party_ratings": { "type": "array", "maxItems": 0 }
+      }
+    },
+    "abstentions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "scope", "target", "reason", "message"],
+        "properties": {
+          "scope": { "enum": ["graph", "dimension", "span", "claim"] },
+          "reason": {
+            "enum": [
+              "insufficient_text",
+              "paywall",
+              "unsupported_language",
+              "oversized_input",
+              "engine_disabled",
+              "engine_unavailable",
+              "engine_failure",
+              "model_mismatch",
+              "low_confidence",
+              "no_timestamp",
+              "no_provenance",
+              "prompt_injection_suspected"
+            ]
+          }
+        }
+      }
+    },
+    "engine": {
+      "type": "object",
+      "required": ["pipeline_version", "preparation", "jev", "newsjack", "fusion", "timestamps"],
+      "properties": {
+        "pipeline_version": { "const": "media-lens-0.1.0" },
+        "jev": {
+          "type": "object",
+          "required": [
+            "mode",
+            "model_requested",
+            "model_reported",
+            "model_match",
+            "question_set",
+            "question_set_sha256",
+            "calls",
+            "failures",
+            "elapsed_ms"
+          ],
+          "properties": {
+            "mode": { "enum": ["fixture", "live", "disabled"] },
+            "model_requested": { "const": "jev-1.13.0" }
+          }
+        },
+        "newsjack": {
+          "type": "object",
+          "required": ["mode", "version", "artifacts"],
+          "properties": { "mode": { "enum": ["fixture", "artifacts", "cli", "disabled"] } }
+        }
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "required": [
+        "external_processing",
+        "clarity_isolation",
+        "full_text_persisted",
+        "spans_included",
+        "retention",
+        "disclosure_shown"
+      ],
+      "properties": {
+        "clarity_isolation": { "const": "no_private_message_path" },
+        "full_text_persisted": { "const": false },
+        "spans_included": { "enum": ["all", "evidence_only"] },
+        "retention": { "const": "none" }
+      }
+    }
+  }
+}

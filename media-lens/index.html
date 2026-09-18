@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self' http://127.0.0.1:8787 http://localhost:8787; base-uri 'self'; form-action 'none';"
+    />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta
+      name="description"
+      content="Media Lens (preview): evidence-linked language, claims, coverage, and source-context signals for public articles. Not deployed; requires a local worker."
+    />
+    <link rel="icon" href="../icon.svg" type="image/svg+xml" />
+    <title>Media Lens (preview) | Manipulation Score</title>
+    <link rel="stylesheet" href="../fonts.css" />
+    <link rel="stylesheet" href="../styles.css" />
+    <link rel="stylesheet" href="./media-lens.css" />
+  </head>
+  <body class="media-lens-page legal-page">
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="site-header site-header-static">
+      <a class="brand" href="../" aria-label="Manipulation Score home">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i></span>
+        <span class="brand-text">
+          <span class="brand-name">Media Lens</span>
+          <span class="brand-sub">preview, by Manipulation Score</span>
+        </span>
+      </a>
+      <nav class="legal-mini-nav" aria-label="Section">
+        <a href="../">Home</a>
+        <a href="../analyze.html">Clarity (private messages)</a>
+      </nav>
+    </header>
+
+    <main id="main" class="ml-main" tabindex="-1">
+      <p class="eyebrow"><span></span> Preview, not deployed</p>
+      <h1>Media Lens</h1>
+      <p class="ml-lede">
+        Media Lens looks at public articles, advertisements, speeches, and campaign material for evidence-linked language, claim,
+        coverage, and source-context signals. It never scores a person or outlet, and it never produces a single 0-100 score for an
+        article.
+      </p>
+
+      <section class="ml-disclosure" aria-labelledby="ml-disclosure-heading">
+        <h2 id="ml-disclosure-heading">Before you analyze anything</h2>
+        <p>
+          Media Lens is for <strong>public material you are allowed to analyze</strong>, such as a published article, ad, speech, or
+          campaign page. It is not the place for private messages or conversations; use
+          <a href="../analyze.html">Clarity</a> for those instead. Clarity never sends your text anywhere.
+        </p>
+        <p>
+          A local worker process that you or an operator run performs the analysis. In <strong>fixture mode</strong> (the default in
+          this preview), the worker reads pre-recorded example answers and makes no network calls at all. In <strong>live mode</strong>
+          (not enabled by default, and not used in automated testing), the worker may send prepared public text to a typed classifier
+          called Jev, run by TypeSafe. Newsjack provenance data, when used, comes from files an operator already has on this computer;
+          the worker never calls a Newsjack service.
+        </p>
+        <p>
+          Full article text is not stored by default. Nothing here is downloaded, uploaded, or exported unless you choose the export
+          action after results appear.
+        </p>
+      </section>
+
+      <p class="ml-status" id="worker-status" data-state="checking" role="status">
+        <span class="ml-status-dot" aria-hidden="true"></span>
+        <span id="worker-status-text">Checking for a local worker at 127.0.0.1:8787...</span>
+      </p>
+
+      <form class="ml-form" id="analyze-form">
+        <fieldset>
+          <legend>What do you want to analyze?</legend>
+          <div class="ml-input-mode-row" role="radiogroup" aria-label="Input mode">
+            <label>
+              <input type="radio" name="input-mode" value="fixture" checked />
+              <span>Try an example</span>
+            </label>
+            <label>
+              <input type="radio" name="input-mode" value="pasted_text" />
+              <span>Paste public text</span>
+            </label>
+            <label>
+              <input type="radio" name="input-mode" value="url" />
+              <span>Enter a URL (live mode only)</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <div id="fixture-field">
+          <label class="ml-field-label" for="fixture-select">Example article</label>
+          <select id="fixture-select" name="fixture_id">
+            <option value="synthetic-01-quoted-vs-authorial">Quoted vs. authorial language</option>
+            <option value="synthetic-02-syndicated-cluster">Syndicated coverage cluster</option>
+            <option value="synthetic-03-no-timestamp">Missing publish timestamp</option>
+            <option value="synthetic-04-injection">Embedded instruction-like text</option>
+            <option value="synthetic-05-paywall">Paywalled excerpt</option>
+            <option value="synthetic-06-short-excerpt">Very short excerpt</option>
+          </select>
+        </div>
+
+        <div id="pasted-text-field" hidden>
+          <label class="ml-field-label" for="pasted-text">Public text to analyze</label>
+          <textarea id="pasted-text" name="text" maxlength="60000" placeholder="Paste public article text..."></textarea>
+        </div>
+
+        <div id="url-field" hidden>
+          <label class="ml-field-label" for="article-url">Article URL</label>
+          <input type="url" id="article-url" name="url" placeholder="https://example.com/article" disabled />
+          <p class="ml-form-note">
+            URL analysis needs the worker running with <code>MEDIA_LENS_MODE=live</code> and an operator-configured key. It is
+            disabled in this fixture-mode preview.
+          </p>
+        </div>
+
+        <div class="ml-consent-row">
+          <input type="checkbox" id="consent-checkbox" required />
+          <label for="consent-checkbox">This is public material I am allowed to analyze.</label>
+        </div>
+
+        <div class="ml-form-actions">
+          <button class="button" type="submit" id="analyze-submit" disabled>Analyze</button>
+          <span class="ml-form-note">Nothing is sent until you check the box above and select Analyze.</span>
+        </div>
+      </form>
+
+      <p class="ml-status" id="analyze-error" data-state="error" role="alert" hidden></p>
+
+      <div class="ml-results" id="results" hidden aria-live="polite">
+        <section aria-labelledby="ml-language-heading" class="ml-dimension">
+          <h2 id="ml-language-heading">Language</h2>
+          <p class="ml-dimension-note">Span-tied observations of influence language, with evidence you can inspect.</p>
+          <ul class="ml-observation-list" id="language-list"></ul>
+        </section>
+
+        <section aria-labelledby="ml-claims-heading" class="ml-dimension">
+          <h2 id="ml-claims-heading">Claims</h2>
+          <p class="ml-dimension-note">Checkable-looking statements found in the text. Support is not checked by default in this preview.</p>
+          <ul class="ml-claim-list" id="claims-list"></ul>
+        </section>
+
+        <section aria-labelledby="ml-coverage-heading" class="ml-dimension">
+          <h2 id="ml-coverage-heading">Coverage</h2>
+          <p class="ml-dimension-note">Origin, independent reporting, and duplication, when provenance data is available.</p>
+          <dl class="ml-coverage-grid" id="coverage-stats"></dl>
+          <ul class="ml-observation-list" id="coverage-list"></ul>
+        </section>
+
+        <section aria-labelledby="ml-source-context-heading" class="ml-dimension">
+          <h2 id="ml-source-context-heading">Source context</h2>
+          <p class="ml-dimension-note">Source context is metadata, not a manipulation judgment.</p>
+          <dl class="ml-coverage-grid" id="source-context-stats"></dl>
+        </section>
+
+        <ul class="ml-abstention-list" id="abstention-list" aria-label="Abstentions and limits"></ul>
+
+        <div class="ml-export-row">
+          <button class="button button-secondary" type="button" id="export-json-btn">Export evidence-only JSON</button>
+          <span class="ml-form-note">Export omits the text of any span not tied to a shown observation or claim.</span>
+        </div>
+      </div>
+
+      <p class="ml-footer-note">
+        Media Lens is experimental and not deployed. It produces no overall score for an article, person, or outlet. See
+        <a href="../methodology.html">Methodology</a>, <a href="../limitations.html">Limitations</a>, and
+        <a href="../acceptable-use.html">Acceptable Use</a> for how this differs from Clarity.
+      </p>
+    </main>
+
+    <script type="module" src="./media-lens.js"></script>
+  </body>
+</html>

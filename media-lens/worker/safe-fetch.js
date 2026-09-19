@@ -41,14 +41,14 @@ export {
  * not allow_public. Mixed public+private answers fail closed. Used by
  * tests and as the policy half of pinning.
  */
-export async function pinHost(hostname, { lookupImpl = dnsLookup } = {}) {
+export async function pinHost(hostname, { lookupImpl = dnsLookup, classifyImpl = classifyIp } = {}) {
   const bareHostname = stripIPv6Brackets(hostname).toLowerCase();
   if (isDeniedSpecialHost(bareHostname)) {
     throw taggedError(`Blocked host: ${hostname} resolves to a loopback address`, 'BLOCKED_HOST');
   }
 
   if (bareHostname.includes(':') || isStrictIPv4(bareHostname)) {
-    const classified = classifyIp(bareHostname);
+    const classified = classifyImpl(bareHostname);
     if (classified.disposition !== 'allow_public') {
       throw taggedError(`Blocked host: ${hostname} resolves to a non-public address`, 'BLOCKED_HOST');
     }
@@ -65,7 +65,7 @@ export async function pinHost(hostname, { lookupImpl = dnsLookup } = {}) {
   if (addresses.length === 0) {
     throw taggedError(`Could not resolve host: ${hostname}`, 'DNS_ERROR');
   }
-  const classified = addresses.map((address) => classifyIp(address));
+  const classified = addresses.map((address) => classifyImpl(address));
   if (classified.some((entry) => entry.disposition !== 'allow_public')) {
     throw taggedError(`Blocked host: ${hostname} resolves to a non-public address`, 'BLOCKED_HOST');
   }
@@ -73,8 +73,8 @@ export async function pinHost(hostname, { lookupImpl = dnsLookup } = {}) {
   return { address: preferred.canonical, family: preferred.family, classified };
 }
 
-export async function assertHostIsPublic(hostname, { lookupImpl = dnsLookup } = {}) {
-  await pinHost(hostname, { lookupImpl });
+export async function assertHostIsPublic(hostname, { lookupImpl = dnsLookup, classifyImpl = classifyIp } = {}) {
+  await pinHost(hostname, { lookupImpl, classifyImpl });
 }
 
 function withTimeoutSignal(timeoutMs, outer) {
@@ -128,8 +128,14 @@ async function fetchArticleSafelyUnlocked(
     maxHeaderBytes = DEFAULT_MAX_HEADER_BYTES,
     parseTimeoutMs = DEFAULT_PARSE_TIMEOUT_MS,
     lookupImpl = dnsLookup,
+    // Test seams. Production callers omit these: classifyImpl stays
+    // classifyIp (loopback remains BLOCKED_HOST), tlsCa is unset so the
+    // default CA store applies, and createConnectionImpl/requestImpl are
+    // unset so net.connect / tls.connect run.
+    classifyImpl = classifyIp,
     requestImpl = null,
     createConnectionImpl = null,
+    tlsCa = null,
     signal: outerSignal = null
   } = {}
 ) {
@@ -144,7 +150,7 @@ async function fetchArticleSafelyUnlocked(
       throw taggedError('HTTPS to HTTP redirects are not allowed', 'REDIRECT_DOWNGRADE');
     }
 
-    const pin = await pinHost(parsed.hostname, { lookupImpl });
+    const pin = await pinHost(parsed.hostname, { lookupImpl, classifyImpl });
     const timeout = withTimeoutSignal(timeoutMs, outerSignal);
     try {
       let response;
@@ -159,7 +165,8 @@ async function fetchArticleSafelyUnlocked(
           connectTimeoutMs,
           maxHeaderBytes,
           maxBytes,
-          createConnectionImpl
+          createConnectionImpl,
+          tlsCa
         });
       } catch (err) {
         if (err?.code) throw err;

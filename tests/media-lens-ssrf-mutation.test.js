@@ -1,6 +1,12 @@
 // Mutation evidence for Issue #118 critical live-URL controls.
 // Each case patches a copy of the module, imports it, and shows the
 // mutated control would fail closed policy. The live modules keep the control.
+//
+// Pin/SNI/cert/re-pin mutants (M1, M6, M7, M10) are also run against the
+// real net.connect/tls.connect fixtures in tests/media-lens-ssrf-real-socket.test.js.
+// Those live tests fail if the pin, SNI, certificate identity, or redirect
+// re-pin is removed. The mutation cases below document the surviving-wrong
+// behavior those tests are designed to kill.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -9,6 +15,20 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { classifyIp } from '../media-lens/worker/address-policy.js';
+import {
+  FIXTURE_HTML,
+  SECRET_HTML,
+  PIN_HOST,
+  PRIVATE_REDIRECT_HOST,
+  WRONG_CERT_HOST,
+  lookupMap,
+  makeLocalCa,
+  makeHostCert,
+  startHttpFixture,
+  startHttpsFixture,
+  articleUrl,
+  realSocketFetchOptions
+} from './helpers/media-lens-real-socket-fixtures.js';
 
 async function loadMutatedAddressPolicy(mutate) {
   const original = await readFile('media-lens/worker/address-policy.js', 'utf8');
@@ -18,6 +38,20 @@ async function loadMutatedAddressPolicy(mutate) {
   const dest = join(dir, 'address-policy.js');
   await writeFile(dest, mutated);
   return import(pathToFileURL(dest).href);
+}
+
+async function loadMutatedFetchStack({ mutatePinned = (src) => src, mutateFetch = (src) => src } = {}) {
+  const policy = await readFile('media-lens/worker/address-policy.js', 'utf8');
+  const pinnedOriginal = await readFile('media-lens/worker/pinned-http.js', 'utf8');
+  const fetchOriginal = await readFile('media-lens/worker/safe-fetch.js', 'utf8');
+  const pinned = mutatePinned(pinnedOriginal);
+  const fetchSrc = mutateFetch(fetchOriginal);
+  assert.ok(pinned !== pinnedOriginal || fetchSrc !== fetchOriginal, 'mutator must change the fetch stack');
+  const dir = await mkdtemp(join(tmpdir(), 'media-lens-ssrf-fetch-mutation-'));
+  await writeFile(join(dir, 'address-policy.js'), policy);
+  await writeFile(join(dir, 'pinned-http.js'), pinned);
+  await writeFile(join(dir, 'safe-fetch.js'), fetchSrc);
+  return import(pathToFileURL(join(dir, 'safe-fetch.js')).href);
 }
 
 test('mutation: dropping well-known NAT64 extraction still blocks via unknown-NAT64 catch-all', async () => {
@@ -127,4 +161,193 @@ test('source: live URL gate, pin lookup, and no check-then-global-fetch', async 
   const configSrc = await readFile('media-lens/worker/config.js', 'utf8');
   assert.match(configSrc, /MEDIA_LENS_ENABLE_LIVE_URL/);
   assert.match(configSrc, /liveUrlEnabled/);
+});
+
+test('source: createConnection pins host, sends SNI, and rejects unauthorized certs', async () => {
+  const pinSrc = await readFile('media-lens/worker/pinned-http.js', 'utf8');
+  assert.match(pinSrc, /host: pin\.address/);
+  assert.match(pinSrc, /hostname: pin\.address/);
+  assert.match(pinSrc, /servername: isIpHostname\(requestHostname\) \? undefined : requestHostname/);
+  assert.match(pinSrc, /rejectUnauthorized: true/);
+  assert.match(pinSrc, /tls\.connect/);
+  assert.match(pinSrc, /net\.connect/);
+
+  const fetchSrc = await readFile('media-lens/worker/safe-fetch.js', 'utf8');
+  const pinCalls = fetchSrc.split('await pinHost(').length - 1;
+  assert.equal(pinCalls, 2, 'assertHostIsPublic plus one pinHost per redirect hop');
+  assert.match(fetchSrc, /const pin = await pinHost\(parsed\.hostname/);
+});
+
+test('mutation M1: removing the createConnection pin uses system DNS and fails the real-socket fetch', async () => {
+  const mutant = await loadMutatedFetchStack({
+    mutatePinned: (src) =>
+      src.replace(
+        `      const pinnedOptions = {
+        ...options,
+        host: pin.address,
+        hostname: pin.address,
+        family: pin.family,
+        lookup
+      };`,
+        `      const pinnedOptions = {
+        ...options
+      };
+      delete pinnedOptions.lookup;
+      delete pinnedOptions.servername;`
+      )
+  });
+  const fixture = await startHttpFixture({ host: '127.0.0.1' });
+  try {
+    await assert.rejects(
+      () =>
+        mutant.fetchArticleSafely(
+          articleUrl({ hostname: PIN_HOST, port: fixture.addr.port }),
+          realSocketFetchOptions({
+            lookupImpl: lookupMap({ [PIN_HOST]: [{ address: '127.0.0.1', family: 4 }] })
+          })
+        ),
+      (err) => err.code === 'FETCH_ERROR' || err.code === 'DNS_ERROR' || err.code === 'TIMEOUT'
+    );
+    assert.equal(fixture.seen.connections, 0, 'unpinned connect must not hit the loopback fixture via system DNS');
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('mutation M6: omitting SNI fails the real TLS fixture that requires the original hostname', async () => {
+  const mutant = await loadMutatedFetchStack({
+    mutatePinned: (src) =>
+      src
+        .replaceAll(
+          'servername: isIpHostname(requestHostname) ? undefined : requestHostname',
+          'servername: undefined'
+        )
+        .replace(
+          'options.servername = isIpHostname(requestHostname) ? undefined : requestHostname;',
+          'options.servername = undefined;'
+        )
+  });
+  const dir = await mkdtemp(join(tmpdir(), 'media-lens-mut-sni-'));
+  const ca = await makeLocalCa(dir);
+  const matching = await makeHostCert(dir, ca, PIN_HOST);
+  const wrong = await makeHostCert(dir, ca, WRONG_CERT_HOST);
+  const fixture = await startHttpsFixture({
+    host: '127.0.0.1',
+    defaultHost: WRONG_CERT_HOST,
+    contexts: { [PIN_HOST]: matching, [WRONG_CERT_HOST]: wrong },
+    missingSni: 'reject'
+  });
+  try {
+    await assert.rejects(
+      () =>
+        mutant.fetchArticleSafely(
+          articleUrl({ hostname: PIN_HOST, port: fixture.addr.port, https: true }),
+          realSocketFetchOptions({
+            lookupImpl: lookupMap({ [PIN_HOST]: [{ address: '127.0.0.1', family: 4 }] }),
+            tlsCa: ca.pem
+          })
+        ),
+      (err) => err.code === 'TLS_ERROR' || err.code === 'FETCH_ERROR'
+    );
+    assert.ok(fixture.seen.sni.every((name) => name == null), 'M6 mutant must not present the hostname as SNI');
+    assert.equal(fixture.seen.urls.length, 0);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('mutation M7: accept-any-cert would allow a wrong-hostname certificate', async () => {
+  const mutant = await loadMutatedFetchStack({
+    mutatePinned: (src) =>
+      src
+        .replaceAll('rejectUnauthorized: true', 'rejectUnauthorized: false')
+        .replace(
+          'checkServerIdentity: (name, cert) => tls.checkServerIdentity(isIpHostname(requestHostname) ? requestHostname : requestHostname, cert)',
+          'checkServerIdentity: () => undefined'
+        )
+        .replace(
+          `options.checkServerIdentity = (name, cert) => {
+        const identity = isIpHostname(requestHostname) ? requestHostname : requestHostname;
+        return tls.checkServerIdentity(identity, cert);
+      };`,
+          'options.checkServerIdentity = () => undefined;'
+        )
+  });
+  const dir = await mkdtemp(join(tmpdir(), 'media-lens-mut-cert-'));
+  const ca = await makeLocalCa(dir);
+  const matching = await makeHostCert(dir, ca, PIN_HOST);
+  const wrong = await makeHostCert(dir, ca, WRONG_CERT_HOST);
+  const fixture = await startHttpsFixture({
+    host: '127.0.0.1',
+    defaultHost: WRONG_CERT_HOST,
+    contexts: { [PIN_HOST]: wrong, [WRONG_CERT_HOST]: wrong, _: matching },
+    missingSni: WRONG_CERT_HOST
+  });
+  try {
+    const result = await mutant.fetchArticleSafely(
+      articleUrl({ hostname: PIN_HOST, port: fixture.addr.port, https: true }),
+      realSocketFetchOptions({
+        lookupImpl: lookupMap({ [PIN_HOST]: [{ address: '127.0.0.1', family: 4 }] }),
+        tlsCa: ca.pem
+      })
+    );
+    assert.equal(result.html, FIXTURE_HTML);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('mutation M10: reusing the first-hop pin follows a DNS redirect to a private name', async () => {
+  const mutant = await loadMutatedFetchStack({
+    mutateFetch: (src) =>
+      src
+        .replace(
+          'let currentUrl = targetUrl;\n  let previousScheme = null;\n  const request = requestImpl || defaultRequestImpl;',
+          'let currentUrl = targetUrl;\n  let previousScheme = null;\n  let firstPin = null;\n  const request = requestImpl || defaultRequestImpl;'
+        )
+        .replace(
+          'const pin = await pinHost(parsed.hostname, { lookupImpl, classifyImpl });',
+          'const pin = hop === 0 ? (firstPin = await pinHost(parsed.hostname, { lookupImpl, classifyImpl })) : firstPin;'
+        )
+  });
+  let secretHits = 0;
+  const fixture = await startHttpFixture({
+    host: '127.0.0.1',
+    onRequest(req, res) {
+      if (req.url === '/start') {
+        res.writeHead(302, {
+          Location: articleUrl({
+            hostname: PRIVATE_REDIRECT_HOST,
+            port: fixture.addr.port,
+            path: '/secret'
+          })
+        });
+        res.end();
+        return;
+      }
+      if (req.url === '/secret') {
+        secretHits += 1;
+        res.writeHead(200, { 'content-type': 'text/html' });
+        res.end(SECRET_HTML);
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    }
+  });
+  try {
+    const result = await mutant.fetchArticleSafely(
+      articleUrl({ hostname: PIN_HOST, port: fixture.addr.port, path: '/start' }),
+      realSocketFetchOptions({
+        lookupImpl: lookupMap({
+          [PIN_HOST]: [{ address: '127.0.0.1', family: 4 }],
+          [PRIVATE_REDIRECT_HOST]: [{ address: '169.254.169.254', family: 4 }]
+        })
+      })
+    );
+    assert.equal(result.html, SECRET_HTML);
+    assert.equal(secretHits, 1);
+  } finally {
+    await fixture.close();
+  }
 });

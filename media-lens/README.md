@@ -30,6 +30,13 @@ Environment variables (read only by `worker/config.js`, never logged, never retu
 | `MEDIA_LENS_MODE` | `fixture` (default) or `live` |
 | `MEDIA_LENS_ENABLE_LIVE` | explicit opt-in; must be the exact value `true` before live mode can start (default: unset/false) |
 | `MEDIA_LENS_ENABLE_LIVE_URL` | exact value `true` required **in addition** before `mode: "url"` may fetch; live Jev tests must not open article fetch (default: unset/false) |
+| `MEDIA_LENS_KILL_SWITCH` | exact value `true` forces live URL fetch and live Jev off regardless of the enable flags (default: unset/false) |
+| `MEDIA_LENS_KILL_SWITCH_FILE` | if set and the path exists, same as kill switch; re-checked per request so ops can `touch` the file |
+| `MEDIA_LENS_URL_ALLOWLIST` | optional comma-separated exact hostnames for canary; empty means public-address policy only |
+| `MEDIA_LENS_MAX_ANALYSES_PER_MINUTE` | per-process `/analyze` budget (default 10) |
+| `MEDIA_LENS_MAX_LIVE_URL_PER_MINUTE` | per-process live URL attempt budget (default 10) |
+| `MEDIA_LENS_MAX_LIVE_URL_PER_HOST_PER_MINUTE` | per-host live URL attempt budget (default 3) |
+| `MEDIA_LENS_MAX_CONCURRENT_LIVE_URL` | concurrent live URL fetches (default 1) |
 | `MEDIA_LENS_HOST` / `MEDIA_LENS_PORT` | worker bind address (default `127.0.0.1:8787`) |
 | `MEDIA_LENS_TYPESAFE_API_KEY` | Jev API key; required for `live` mode together with `MEDIA_LENS_ENABLE_LIVE=true` |
 | `MEDIA_LENS_TYPESAFE_BASE_URL` | Jev API base URL override (used by tests to point at a mock server) |
@@ -39,13 +46,19 @@ Environment variables (read only by `worker/config.js`, never logged, never retu
 
 ## Limits (enforced in `worker/config.js`, `worker/server.js`, `worker/prepare.js`)
 
-512 KB request body; 60,000 char prepared text; 200 spans; 10 analyses/minute/worker; 8 s per Jev call; 30 s per analysis. Exceeding a limit returns HTTP 413/429 and a graph with a single abstention, never a partial result.
+512 KB request body; 60,000 char prepared text; 200 spans; 10 analyses/minute/worker (operator-configurable); 10 live URL attempts/minute/worker and 3/host/minute when live URL is on; 1 concurrent live URL fetch; 8 s per Jev call; 30 s per analysis. Exceeding a limit returns HTTP 413/429 and a graph with a single abstention, never a partial result. `MEDIA_LENS_KILL_SWITCH=true` or a kill file returns `503 live_killed` for live `/analyze` and does not fetch or call Jev.
 
 `worker/safe-fetch.js` fetches live-mode article URLs with **connect-time destination pinning** (Issue #118): it classifies every A/AAAA, fails closed on mixed public+private DNS, and connects only to one pre-classified public IP via a custom `lookup` that never calls DNS again. IPv4-mapped `::ffff:0:0/96` (R1), SIIT `::ffff:0:0:0/96`, well-known NAT64 `64:ff9b::/96`, local-use NAT64 `64:ff9b:1::/48` (RFC 8215), deprecated IPv4-compatible `::/96`, and 6to4 extract IPv4 and apply the IPv4 table. Other addresses under `64:ff9b::/32` are blocked as unknown NAT64. Network-specific NAT64 prefixes outside `64:ff9b::/32` are not detected and may classify as native unicast (classifier limit). IPv6 benchmarking `2001:2::/48` is blocked and is not treated as native unicast. ORCHID `2001:10::/28`, ORCHIDv2 `2001:20::/28`, Teredo, and deprecated 6to4 anycast `192.88.99.0/24` fail closed. Exotic IPv4 literals (octal, hex, decimal, short) are accepted only after WHATWG canonicalization to dotted-decimal; IPv4 policy then applies (so `0177.0.0.1` is loopback, not a syntax error). Redirects are re-validated hop-by-hop with re-pin; HTTPS→HTTP is denied; `HTTP_PROXY` is ignored. DNS rebinding cannot retarget an established pinned socket. Residual risk: a public pinned IP can still serve hostile HTML (content risk, not SSRF). Real-socket tests against loopback fixtures (`127.0.0.1` / `::1`, local CA) cover pin, SNI, certificate identity, and DNS-name redirect re-pin. Live URL mode is still not production-ready.
 
 ## Consent and disclosure
 
 The UI shows a persistent, non-dismissable notice describing what Media Lens analyzes, that a local worker performs any processing, what happens in live mode, and that private messages belong in Clarity instead. A per-session "This is public material I am allowed to analyze" checkbox gates the submit button; the worker rejects `/analyze` requests without `user_asserted_public: true`.
+
+## Incidents and rollback
+
+Operator runbook: `docs/media-lens-ops-runbook-v2.md`. Architecture rollback and incident classes: `docs/media-lens-live-url-v2-architecture.md` §20.
+
+Do not paste API keys, article bodies, or URLs with credentials into tickets. To stop live URL and live Jev immediately: set `MEDIA_LENS_KILL_SWITCH=true` or `touch` the kill file, then confirm `/analyze` returns `503 live_killed` (live mode) or that fixture-only behavior continues. This is not a production-ready mode and is not hosted on GitHub Pages.
 
 ## Run it
 

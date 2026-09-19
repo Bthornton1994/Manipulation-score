@@ -68,6 +68,7 @@ test('building the Pages artifact copies only allowlisted paths and excludes gov
     'docs/media-lens-build-brief.md',
     'docs/media-lens-live-url-v2-architecture.md',
     'docs/media-lens-live-url-v2-implementation-plan.md',
+    'docs/media-lens-ops-runbook-v2.md',
     'docs/media-lens-jev-integration-v2.md',
     'media-lens/index.html',
     'media-lens/README.md',
@@ -88,6 +89,7 @@ test('building the Pages artifact copies only allowlisted paths and excludes gov
   await access('docs/NEWSJACK-LICENSE.md');
   await access('docs/media-lens-live-url-v2-architecture.md');
   await access('docs/media-lens-live-url-v2-implementation-plan.md');
+  await access('docs/media-lens-ops-runbook-v2.md');
   await access('media-lens/README.md');
   await access('README.md');
 });

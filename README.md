@@ -77,7 +77,7 @@ GitHub provisions TLS for both `manipulationscore.com` and `www.manipulationscor
 
 Media Lens is a separate, unreleased preview mode for public articles, advertisements, speeches, and campaign material — not for private messages. It is isolated from Clarity (no shared code, no shared network path) and is **not deployed**: it is excluded from the GitHub Pages build.
 
-Media Lens runs entirely through a local worker process. The default and only mode exercised in automated tests is `fixture` mode, which reads local example files and makes no network calls. A `live` mode exists as an adapter seam behind explicit operator configuration (`MEDIA_LENS_ENABLE_LIVE=true` and `MEDIA_LENS_TYPESAFE_API_KEY`, never committed) and is not used by default or in CI. Live pasted-text analysis is disabled. Live URL mode is experimental and not production-ready.
+Media Lens runs entirely through a local worker process. The default and only mode exercised in automated tests is `fixture` mode, which reads local example files and makes no network calls. A `live` mode exists as an adapter seam behind explicit operator configuration (`MEDIA_LENS_ENABLE_LIVE=true` and `MEDIA_LENS_TYPESAFE_API_KEY`, never committed) and is not used by default or in CI. Live pasted-text analysis is disabled. Live URL mode is experimental, disabled by default (`MEDIA_LENS_ENABLE_LIVE_URL` unset), and not production-ready. `MEDIA_LENS_KILL_SWITCH=true` forces live URL and live Jev off. Operator notes: `docs/media-lens-ops-runbook-v2.md`.
 
 ```bash
 node --test tests/*.test.js                                                          # full suite, including Media Lens tests
@@ -86,7 +86,7 @@ MEDIA_LENS_MODE=fixture node media-lens/worker/server.js                        
 python3 -m http.server 4173                                                          # then open http://localhost:4173/media-lens/
 ```
 
-See `media-lens/README.md` for the module layout, modes, and limits, and `docs/media-lens-build-brief.md` / `docs/media-lens-influence-graph-plan.md` for the product decisions and implementation plan this feature follows.
+See `media-lens/README.md` for the module layout, modes, and limits, `docs/media-lens-ops-runbook-v2.md` for kill switch / audit / rate limits, and `docs/media-lens-build-brief.md` / `docs/media-lens-influence-graph-plan.md` for the product decisions and implementation plan this feature follows.
 
 ## Important
 

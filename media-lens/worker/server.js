@@ -8,13 +8,23 @@ import http from 'node:http';
 import { readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { loadConfig, publicConfig, assertLiveModeIsReady } from './config.js';
+import {
+  loadConfig,
+  publicConfig,
+  assertLiveModeIsReady,
+  effectiveLiveFlags,
+  jevAdapterMode
+} from './config.js';
 import { prepareFromHtml, prepareFromPastedText, emptyPreparedArtifactStub } from './prepare.js';
 import { createJevAdapter } from './adapters/jev.js';
 import { createNewsjackAdapter } from './adapters/newsjack.js';
 import { analyze, buildAbstentionOnlyGraph } from './analyze.js';
 import { fetchArticleSafely } from './safe-fetch.js';
+import { parseArticleUrl } from './address-policy.js';
 import { validate } from '../schema/validate.js';
+import { createAuditLogger, AUDIT_EVENTS } from './audit.js';
+import { createFixedWindowLimiter, createKeyedFixedWindowLimiter, createConcurrencyGate } from './rate-limit.js';
+import { hostIsAllowlisted, rateLimitHostKeys, safeUrlAuditFields } from './host-key.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const FIXTURES_DIR = join(__dirname, '..', 'fixtures');
@@ -35,6 +45,7 @@ const LOOPBACK_ORIGIN_PATTERN = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/;
 // ever sees the value.
 const FIXTURE_ID_PATTERN = /^[a-z0-9-]+$/;
 const ISO_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
+const SSRF_ERROR_CODES = new Set(['BLOCKED_HOST', 'BAD_SCHEME', 'BAD_URL', 'REDIRECT_DOWNGRADE', 'PIN_MISMATCH']);
 
 async function isKnownFixtureId(fixtureId) {
   if (typeof fixtureId !== 'string' || !FIXTURE_ID_PATTERN.test(fixtureId)) return false;
@@ -101,22 +112,8 @@ function readBodyWithLimit(req, maxBytes) {
   });
 }
 
-function createRateLimiter(maxPerMinute) {
-  let windowStart = Date.now();
-  let count = 0;
-  return function checkAndIncrement() {
-    const now = Date.now();
-    if (now - windowStart >= 60000) {
-      windowStart = now;
-      count = 0;
-    }
-    count += 1;
-    return count <= maxPerMinute;
-  };
-}
-
 async function buildAdapters({ config, payload }) {
-  const jevMode = config.mode === 'live' ? 'live' : 'fixture';
+  const jevMode = jevAdapterMode(config);
   const jevAdapter = createJevAdapter({
     mode: jevMode,
     fixtureId: payload.fixture_id || null,
@@ -140,7 +137,7 @@ async function buildAdapters({ config, payload }) {
   return { jevAdapter, newsjackAdapter };
 }
 
-async function preparePayload({ payload, config }) {
+async function preparePayload({ payload, config, fetchArticle }) {
   if (config.mode === 'live' && payload.mode === 'pasted_text') {
     throw Object.assign(
       new Error('Live pasted-text analysis is disabled until a later privacy and security review.'),
@@ -169,16 +166,23 @@ async function preparePayload({ payload, config }) {
     if (config.mode !== 'live') {
       throw Object.assign(new Error('URL mode requires the worker to be running in live mode'), { code: 'URL_MODE_REQUIRES_LIVE' });
     }
+    const flags = effectiveLiveFlags(config);
+    if (flags.killSwitch) {
+      throw Object.assign(new Error('Live URL and live Jev are disabled by the operator kill switch.'), {
+        code: 'live_killed'
+      });
+    }
     // Issue #118: live Jev (MEDIA_LENS_ENABLE_LIVE) must not open article
-    // fetch. URL retrieval requires the separate exact flag.
-    if (config.liveUrlEnabled !== true) {
+    // fetch. URL retrieval requires the separate exact flag. Re-check per
+    // request so a flipped env stops the next fetch without a new binary.
+    if (flags.liveUrlEnabled !== true) {
       throw Object.assign(
         new Error('Live URL fetch is disabled until MEDIA_LENS_ENABLE_LIVE_URL=true is set. This is not a production-ready mode.'),
         { code: 'live_url_disabled' }
       );
     }
     // Connect-time pin: never call global fetch on a user-supplied URL.
-    const { html } = await fetchArticleSafely(payload.url, {
+    const { html } = await (fetchArticle || fetchArticleSafely)(payload.url, {
       timeoutMs: config.limits.urlFetchTimeoutMs,
       connectTimeoutMs: config.limits.urlFetchConnectTimeoutMs,
       maxBytes: config.limits.urlFetchMaxBytes,
@@ -196,7 +200,7 @@ async function preparePayload({ payload, config }) {
 // matching how every other engine-unavailable condition is reported.
 // Failures that mean "this input is not allowed" are rejected outright.
 const PREPARE_FAILURE_AS_ABSTENTION = new Set(['TIMEOUT', 'FETCH_ERROR', 'TOO_MANY_REDIRECTS', 'TLS_ERROR']);
-const PREPARE_FAILURE_STATUS = { TOO_LARGE: 413 };
+const PREPARE_FAILURE_STATUS = { TOO_LARGE: 413, live_killed: 503 };
 
 /**
  * H1: the last-resort safety net before any graph reaches a client. If the
@@ -227,16 +231,121 @@ function requireLiveModeReady(config) {
   }
 }
 
+function liveUrlGate({ payload, config, audit, consumeLiveUrl, consumeLiveUrlHost }) {
+  const flags = effectiveLiveFlags(config);
+  const urlFields = safeUrlAuditFields(payload.url);
+  // Fixture workers reject URL mode as URL_MODE_REQUIRES_LIVE before the
+  // kill switch, matching preparePayload. Kill switch 503 is live-mode only.
+  if (config.mode !== 'live') {
+    audit.emit(AUDIT_EVENTS.LIVE_URL_BLOCKED, {
+      mode: config.mode,
+      input_mode: 'url',
+      error: 'URL_MODE_REQUIRES_LIVE',
+      live_url_enabled: false,
+      ...urlFields
+    });
+    return { error: 'URL_MODE_REQUIRES_LIVE', status: 400, message: 'URL mode requires the worker to be running in live mode' };
+  }
+  if (flags.killSwitch) {
+    audit.emit(AUDIT_EVENTS.KILL_SWITCH, {
+      mode: config.mode,
+      input_mode: payload.mode,
+      error: 'live_killed',
+      kill_switch: true
+    });
+    return { error: 'live_killed', status: 503, message: 'Live URL and live Jev are disabled by the operator kill switch.' };
+  }
+  if (flags.liveUrlEnabled !== true) {
+    audit.emit(AUDIT_EVENTS.LIVE_URL_BLOCKED, {
+      mode: config.mode,
+      input_mode: 'url',
+      error: 'live_url_disabled',
+      live_enabled: flags.liveEnabled,
+      live_url_enabled: false,
+      ...urlFields
+    });
+    return {
+      error: 'live_url_disabled',
+      status: 400,
+      message: 'Live URL fetch is disabled until MEDIA_LENS_ENABLE_LIVE_URL=true is set. This is not a production-ready mode.'
+    };
+  }
+
+  if (!consumeLiveUrl()) {
+    audit.emit(AUDIT_EVENTS.RATE_LIMIT, {
+      mode: config.mode,
+      input_mode: 'url',
+      error: 'rate_limited',
+      limiter: 'live_url',
+      ...urlFields
+    });
+    return { error: 'rate_limited', status: 429, message: 'Too many live URL attempts. Wait a minute and try again.' };
+  }
+
+  let parsedHost = null;
+  try {
+    parsedHost = parseArticleUrl(payload.url).bareHost;
+  } catch (err) {
+    if (SSRF_ERROR_CODES.has(err.code)) {
+      audit.emit(AUDIT_EVENTS.SSRF_BLOCK, {
+        mode: config.mode,
+        input_mode: 'url',
+        error: err.code,
+        ...urlFields
+      });
+      return { error: err.code, status: 400, message: err.message };
+    }
+    throw err;
+  }
+
+  if (!hostIsAllowlisted(parsedHost, config.urlAllowlist)) {
+    audit.emit(AUDIT_EVENTS.LIVE_URL_BLOCKED, {
+      mode: config.mode,
+      input_mode: 'url',
+      error: 'live_url_not_allowlisted',
+      allowlist_configured: true,
+      ...urlFields
+    });
+    return { error: 'live_url_not_allowlisted', status: 400, message: 'This host is not on the operator URL allowlist.' };
+  }
+
+  const hostKeys = rateLimitHostKeys(parsedHost);
+  for (const key of hostKeys) {
+    if (!consumeLiveUrlHost(key)) {
+      audit.emit(AUDIT_EVENTS.RATE_LIMIT, {
+        mode: config.mode,
+        input_mode: 'url',
+        error: 'rate_limited',
+        limiter: 'live_url_host',
+        ...urlFields
+      });
+      return { error: 'rate_limited', status: 429, message: 'Too many live URL attempts for this host. Wait a minute and try again.' };
+    }
+  }
+
+  return { ok: true };
+}
+
 /**
  * Create (but do not start) the Media Lens worker HTTP server.
  * Live mode is refused here, not only in startServer(), so a direct
  * createServer(config).listen() cannot skip the opt-in + API-key gate.
+ *
+ * options.fetchArticle is a test/programmatic seam only. startServer()
+ * does not pass it; the CLI and operator path always use fetchArticleSafely.
  */
-export function createServer(config = loadConfig()) {
+export function createServer(config = loadConfig(), options = {}) {
   requireLiveModeReady(config);
-  const checkRateLimit = createRateLimiter(config.limits.maxAnalysesPerMinute);
+  const audit = options.auditLogger || createAuditLogger();
+  // Test/programmatic only. Unused by startServer() / the CLI.
+  const fetchArticle = options.fetchArticle || null;
+  const checkRateLimit = createFixedWindowLimiter(config.limits.maxAnalysesPerMinute);
+  const consumeLiveUrl = createFixedWindowLimiter(config.limits.maxLiveUrlPerMinute);
+  const consumeLiveUrlHost = createKeyedFixedWindowLimiter(config.limits.maxLiveUrlPerHostPerMinute);
+  const liveUrlConcurrency = createConcurrencyGate(config.limits.maxConcurrentLiveUrl);
 
   return http.createServer(async (req, res) => {
+    const startedAt = Date.now();
     try {
       applyCors(req, res);
 
@@ -256,7 +365,26 @@ export function createServer(config = loadConfig()) {
         // reading the request body, so an over-limit client is rejected
         // immediately rather than after paying for a full body read.
         if (!checkRateLimit()) {
+          audit.emit(AUDIT_EVENTS.RATE_LIMIT, {
+            mode: config.mode,
+            error: 'rate_limited',
+            limiter: 'analyze'
+          });
           sendJson(res, 429, { error: 'rate_limited', message: 'Too many analyses requested. Wait a minute and try again.' });
+          return;
+        }
+
+        const flagsBeforeBody = effectiveLiveFlags(config);
+        if (config.mode === 'live' && flagsBeforeBody.killSwitch) {
+          audit.emit(AUDIT_EVENTS.KILL_SWITCH, {
+            mode: config.mode,
+            error: 'live_killed',
+            kill_switch: true
+          });
+          sendJson(res, 503, {
+            error: 'live_killed',
+            message: 'Live URL and live Jev are disabled by the operator kill switch.'
+          });
           return;
         }
 
@@ -295,12 +423,77 @@ export function createServer(config = loadConfig()) {
           return;
         }
 
+        const flags = effectiveLiveFlags(config);
+        if (config.mode === 'live' && flags.killSwitch) {
+          audit.emit(AUDIT_EVENTS.KILL_SWITCH, {
+            mode: config.mode,
+            input_mode: payload.mode,
+            error: 'live_killed',
+            kill_switch: true
+          });
+          sendJson(res, 503, {
+            error: 'live_killed',
+            message: 'Live URL and live Jev are disabled by the operator kill switch.'
+          });
+          return;
+        }
+
+        if (payload.mode === 'url') {
+          const gate = liveUrlGate({ payload, config, audit, consumeLiveUrl, consumeLiveUrlHost });
+          if (!gate.ok) {
+            sendJson(res, gate.status, { error: gate.error, message: gate.message });
+            return;
+          }
+        }
+
         const { consentAt } = resolveConsentAt(payload.consent_at);
+
+        let heldLiveUrlSlot = false;
+        if (payload.mode === 'url') {
+          if (!liveUrlConcurrency.tryEnter()) {
+            audit.emit(AUDIT_EVENTS.RATE_LIMIT, {
+              mode: config.mode,
+              input_mode: 'url',
+              error: 'rate_limited',
+              limiter: 'live_url_concurrent',
+              ...safeUrlAuditFields(payload.url)
+            });
+            sendJson(res, 429, { error: 'rate_limited', message: 'A live URL fetch is already in progress on this worker.' });
+            return;
+          }
+          heldLiveUrlSlot = true;
+        }
 
         let prepared;
         try {
-          prepared = await preparePayload({ payload, config });
+          prepared = await preparePayload({ payload, config, fetchArticle });
         } catch (err) {
+          if (heldLiveUrlSlot) liveUrlConcurrency.exit();
+          if (SSRF_ERROR_CODES.has(err.code)) {
+            audit.emit(AUDIT_EVENTS.SSRF_BLOCK, {
+              mode: config.mode,
+              input_mode: payload.mode,
+              error: err.code,
+              ...safeUrlAuditFields(payload.url)
+            });
+          }
+          if (err.code === 'live_url_disabled' || err.code === 'URL_MODE_REQUIRES_LIVE') {
+            audit.emit(AUDIT_EVENTS.LIVE_URL_BLOCKED, {
+              mode: config.mode,
+              input_mode: payload.mode,
+              error: err.code,
+              live_url_enabled: false,
+              ...safeUrlAuditFields(payload.url)
+            });
+          }
+          if (err.code === 'live_killed') {
+            audit.emit(AUDIT_EVENTS.KILL_SWITCH, {
+              mode: config.mode,
+              input_mode: payload.mode,
+              error: 'live_killed',
+              kill_switch: true
+            });
+          }
           if (PREPARE_FAILURE_AS_ABSTENTION.has(err.code)) {
             const stub = emptyPreparedArtifactStub({ inputMode: payload.mode === 'url' ? 'url' : 'pasted_text', url: payload.url || null });
             const fallback = await buildAbstentionOnlyGraph({
@@ -311,6 +504,14 @@ export function createServer(config = loadConfig()) {
               userAssertedPublic: true,
               consentAt
             });
+            audit.emit(AUDIT_EVENTS.ANALYZE_COMPLETE, {
+              mode: config.mode,
+              input_mode: payload.mode,
+              status: 200,
+              duration_ms: Date.now() - startedAt,
+              abstention_reason: 'engine_unavailable',
+              abstention_count: 1
+            });
             sendJson(res, 200, fallback);
             return;
           }
@@ -318,23 +519,38 @@ export function createServer(config = loadConfig()) {
           return;
         }
 
-        const { jevAdapter, newsjackAdapter } = await buildAdapters({ config, payload });
+        try {
+          const { jevAdapter, newsjackAdapter } = await buildAdapters({ config, payload });
 
-        const rawGraph = await analyze({
-          prepared,
-          config,
-          jevAdapter,
-          newsjackAdapter,
-          userAssertedPublic: true,
-          consentAt,
-          disclosureShown: true
-        });
+          const rawGraph = await analyze({
+            prepared,
+            config,
+            jevAdapter,
+            newsjackAdapter,
+            userAssertedPublic: true,
+            consentAt,
+            disclosureShown: true
+          });
 
-        // H1: never serve a document that fails its own schema.
-        const graph = await validateOrAbstain({ graph: rawGraph, prepared, config, consentAt });
+          // H1: never serve a document that fails its own schema.
+          const graph = await validateOrAbstain({ graph: rawGraph, prepared, config, consentAt });
 
-        sendJson(res, 200, graph);
-        return;
+          audit.emit(AUDIT_EVENTS.ANALYZE_COMPLETE, {
+            mode: config.mode,
+            input_mode: payload.mode,
+            status: 200,
+            duration_ms: Date.now() - startedAt,
+            jev_calls: graph.engine?.jev?.calls ?? 0,
+            jev_failures: graph.engine?.jev?.failures ?? 0,
+            model_match: graph.engine?.jev?.model_match ?? null,
+            abstention_count: Array.isArray(graph.abstentions) ? graph.abstentions.length : 0
+          });
+
+          sendJson(res, 200, graph);
+          return;
+        } finally {
+          if (heldLiveUrlSlot) liveUrlConcurrency.exit();
+        }
       }
 
       sendJson(res, 404, { error: 'not_found' });
@@ -347,6 +563,8 @@ export function createServer(config = loadConfig()) {
 /**
  * Start the worker. Refuses to start in live mode unless
  * MEDIA_LENS_ENABLE_LIVE=true and the TypeSafe key are both present.
+ * Does not accept a fetchArticle override; that seam exists only on
+ * createServer() for tests.
  */
 export async function startServer(config = loadConfig()) {
   requireLiveModeReady(config);

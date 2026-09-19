@@ -111,6 +111,41 @@ const NAT64_ISATAP_TABLE = [
     embeddedIPv4: '203.0.113.7'
   },
   {
+    id: 'nat64-extra-nonzero-64-95-loopback',
+    ip: '2001:67c:27e4:64:ff:9b:7f00:1',
+    disposition: 'block',
+    reason: 'block_loopback_via_nat64_extra',
+    embeddedIPv4: '127.0.0.1'
+  },
+  {
+    id: 'nat64-extra-nonzero-64-95-imds',
+    ip: '2606:4700:4700:1:2:3:a9fe:a9fe',
+    disposition: 'block',
+    reason: 'block_link_local_via_nat64_extra',
+    embeddedIPv4: '169.254.169.254'
+  },
+  {
+    id: 'nat64-extra-nonzero-64-95-rfc1918-10',
+    ip: '2001:470:1:2:3:4:a00:1',
+    disposition: 'block',
+    reason: 'block_rfc1918_via_nat64_extra',
+    embeddedIPv4: '10.0.0.1'
+  },
+  {
+    id: 'nat64-extra-nonzero-64-95-rfc1918-192',
+    ip: '2a00:1450:4001:80e:1:2:c0a8:101',
+    disposition: 'block',
+    reason: 'block_rfc1918_via_nat64_extra',
+    embeddedIPv4: '192.168.1.1'
+  },
+  {
+    id: 'nat64-extra-nonzero-64-95-public',
+    ip: '2001:67c:27e4:64:ff:9b:cb00:7107',
+    disposition: 'block',
+    reason: 'block_nat64_extra',
+    embeddedIPv4: '203.0.113.7'
+  },
+  {
     id: 'isatap-loopback',
     ip: '2001:470:1:2:0:5efe:7f00:1',
     disposition: 'block',
@@ -170,6 +205,69 @@ test('NAT64/ISATAP disposition table matches architecture §6', () => {
   }
 });
 
+test('custom NAT64 /96 with non-zero bits 64–95 fail closed with lookups=0 and connects=0', async () => {
+  const residual = NAT64_ISATAP_TABLE.filter((row) => row.id.startsWith('nat64-extra-nonzero-64-95-'));
+  assert.equal(residual.length, 5);
+  for (const row of residual) {
+    const words = row.ip.split(':');
+    assert.ok(words.length === 8, row.ip);
+    assert.notEqual(Number.parseInt(words[4], 16), 0, `${row.ip} bits 64–79`);
+    assert.notEqual(Number.parseInt(words[5], 16), 0, `${row.ip} bits 80–95`);
+
+    let lookups = 0;
+    let connects = 0;
+    await assert.rejects(
+      () =>
+        fetchArticleSafely(`http://[${row.ip}]/article`, {
+          timeoutMs: 200,
+          maxBytes: 1000,
+          lookupImpl: async () => {
+            lookups += 1;
+            throw new Error(`must not lookup residual ${row.id}`);
+          },
+          requestImpl: async () => {
+            connects += 1;
+            throw new Error(`must not connect residual ${row.id}`);
+          }
+        }),
+      hasCode('BLOCKED_HOST'),
+      row.id
+    );
+    assert.equal(lookups, 0, `${row.id} lookups`);
+    assert.equal(connects, 0, `${row.id} connects`);
+  }
+});
+
+test('DNS answers that include custom NAT64 /96 with non-zero bits 64–95 fail closed with connects=0', async () => {
+  const residual = NAT64_ISATAP_TABLE.filter((row) => row.id.startsWith('nat64-extra-nonzero-64-95-'));
+  for (const row of residual) {
+    let lookups = 0;
+    let connects = 0;
+    await assert.rejects(
+      () =>
+        fetchArticleSafely('http://dual.example/x', {
+          timeoutMs: 500,
+          maxBytes: 1000,
+          lookupImpl: async () => {
+            lookups += 1;
+            return [
+              { address: '203.0.113.7', family: 4 },
+              { address: row.ip, family: 6 }
+            ];
+          },
+          requestImpl: async () => {
+            connects += 1;
+            throw new Error(`must not connect mixed residual ${row.id}`);
+          }
+        }),
+      hasCode('BLOCKED_HOST'),
+      row.id
+    );
+    assert.equal(lookups, 1, `${row.id} mixed DNS lookups`);
+    assert.equal(connects, 0, `${row.id} mixed DNS connects`);
+  }
+});
+
 test('native IPv6 unicast with a last-hextet form is not treated as extra NAT64', () => {
   for (const ip of NATIVE_UNICAST_STILL_PUBLIC) {
     const result = classifyIp(ip);
@@ -197,21 +295,27 @@ test('well-known mapped/SIIT/6to4/compat public embeddings remain allow_public',
 test('blocked NAT64/ISATAP literals fail closed before connect', async () => {
   const blocked = NAT64_ISATAP_TABLE.filter((row) => row.disposition === 'block');
   for (const row of blocked) {
-    let called = false;
+    let lookups = 0;
+    let connects = 0;
     await assert.rejects(
       () =>
         fetchArticleSafely(`http://[${row.ip}]/`, {
           timeoutMs: 200,
           maxBytes: 1000,
+          lookupImpl: async () => {
+            lookups += 1;
+            throw new Error(`must not lookup for ${row.id}`);
+          },
           requestImpl: async () => {
-            called = true;
+            connects += 1;
             throw new Error(`must not connect for ${row.id}`);
           }
         }),
       hasCode('BLOCKED_HOST'),
       row.id
     );
-    assert.equal(called, false, `${row.id} must not connect`);
+    assert.equal(lookups, 0, `${row.id} lookups`);
+    assert.equal(connects, 0, `${row.id} connects`);
     assert.throws(() => parseArticleUrl(`http://[${row.ip}]/article`), hasCode('BLOCKED_HOST'), row.id);
   }
 });
@@ -227,7 +331,12 @@ test('well-known public NAT64 may connect; extra/ISATAP public embeddings must n
   });
   assert.match(fetched.html, /Public article fixture/);
 
-  for (const ip of ['64:ff9b:1:cb00:71:700::', '2001:470:1::cb00:7107', '2001:470:1:2:0:5efe:cb00:7107']) {
+  for (const ip of [
+    '64:ff9b:1:cb00:71:700::',
+    '2001:470:1::cb00:7107',
+    '2001:470:1:2:0:5efe:cb00:7107',
+    '2001:67c:27e4:64:ff:9b:cb00:7107'
+  ]) {
     let called = false;
     await assert.rejects(
       () =>
@@ -254,15 +363,25 @@ test('redirects to NAT64 extra / ISATAP are BLOCKED_HOST before the second conne
     'http://[2001:470:1:2:200:5efe:a9fe:a9fe]/',
     'http://[2001:470:1::7f00:1]/',
     'http://[2001:470:1::cb00:7107]/',
-    'http://[64:ff9b:1:cb00:71:700::]/'
+    'http://[64:ff9b:1:cb00:71:700::]/',
+    'http://[2001:67c:27e4:64:ff:9b:7f00:1]/',
+    'http://[2606:4700:4700:1:2:3:a9fe:a9fe]/',
+    'http://[2001:470:1:2:3:4:a00:1]/',
+    'http://[2a00:1450:4001:80e:1:2:c0a8:101]/',
+    'http://[2001:67c:27e4:64:ff:9b:cb00:7107]/'
   ];
   for (const location of locations) {
+    let lookups = 0;
     let connects = 0;
     await assert.rejects(
       () =>
         fetchArticleSafely(start, {
           timeoutMs: 1000,
           maxBytes: 4000,
+          lookupImpl: async () => {
+            lookups += 1;
+            throw new Error(`must not lookup for ${location}`);
+          },
           requestImpl: async ({ parsed, pin }) => {
             connects += 1;
             if (parsed.pathname === '/start') return redirectResponse(pin, location);
@@ -272,6 +391,7 @@ test('redirects to NAT64 extra / ISATAP are BLOCKED_HOST before the second conne
       hasCode('BLOCKED_HOST'),
       location
     );
+    assert.equal(lookups, 0, `${location} lookups`);
     assert.equal(connects, 1, `${location} must stop after hop 1`);
   }
 

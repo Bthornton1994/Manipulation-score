@@ -147,6 +147,11 @@ test('IPv6 / embeddings policy table', async () => {
     ['64:ff9b:2::1', 'block_nat64_unknown'],
     ['2001:470:1::7f00:1', 'block_loopback_via_nat64_extra'],
     ['2001:470:1::cb00:7107', 'block_nat64_extra'],
+    ['2001:67c:27e4:64:ff:9b:7f00:1', 'block_loopback_via_nat64_extra'],
+    ['2606:4700:4700:1:2:3:a9fe:a9fe', 'block_link_local_via_nat64_extra'],
+    ['2001:470:1:2:3:4:a00:1', 'block_rfc1918_via_nat64_extra'],
+    ['2a00:1450:4001:80e:1:2:c0a8:101', 'block_rfc1918_via_nat64_extra'],
+    ['2001:67c:27e4:64:ff:9b:cb00:7107', 'block_nat64_extra'],
     ['2001:470:1:2:0:5efe:7f00:1', 'block_loopback_via_isatap'],
     ['2001:470:1:2:0:5efe:cb00:7107', 'block_isatap'],
     ['2001:470:1:2:200:5efe:a9fe:a9fe', 'block_link_local_via_isatap'],
@@ -248,6 +253,10 @@ test('mixed public+private DNS fails closed with no connect', async () => {
     async () => [
       { address: '203.0.113.7', family: 4 },
       { address: '2001:470:1::7f00:1', family: 6 }
+    ],
+    async () => [
+      { address: '203.0.113.7', family: 4 },
+      { address: '2001:67c:27e4:64:ff:9b:7f00:1', family: 6 }
     ]
   ];
   for (const lookupImpl of cases) {
@@ -315,6 +324,9 @@ test('redirects: private, loopback, mapped, NAT64, downgrade, relative, protocol
   await assert.rejects(() => follow('http://[2001:470:1:2:0:5efe:10.0.0.1]/'), hasCode('BLOCKED_HOST'));
   await assert.rejects(() => follow('http://[2001:470:1::7f00:1]/'), hasCode('BLOCKED_HOST'));
   await assert.rejects(() => follow('http://[2001:470:1::cb00:7107]/'), hasCode('BLOCKED_HOST'));
+  await assert.rejects(() => follow('http://[2001:67c:27e4:64:ff:9b:7f00:1]/'), hasCode('BLOCKED_HOST'));
+  await assert.rejects(() => follow('http://[2606:4700:4700:1:2:3:a9fe:a9fe]/'), hasCode('BLOCKED_HOST'));
+  await assert.rejects(() => follow('http://[2001:67c:27e4:64:ff:9b:cb00:7107]/'), hasCode('BLOCKED_HOST'));
   await assert.rejects(() => follow('http://0177.0.0.1/'), hasCode('BLOCKED_HOST'));
   await assert.rejects(
     () =>

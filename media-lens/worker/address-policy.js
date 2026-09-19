@@ -284,15 +284,12 @@ function classifyIPv6(ip) {
   if (isIsatapIid(words)) {
     return classifyFailClosedEmbedding(hextetToIPv4(words[6], words[7]), 6, canonical, 'isatap');
   }
-  // Sparse custom NAT64 /96: a non-zero prefix, bits 64–95 are 0, and bits
-  // 96–127 decode to an IPv4 whose first octet is not 0. Not the well-known
-  // prefix and not deprecated ::/96. Fail closed. First-octet-0 last-32-bit
+  // Custom NAT64 /96: bits 96–127 decode to an IPv4 whose first octet is
+  // not 0. Covers sparse (bits 64–95 zero) and the QA residual (bits 64–95
+  // non-zero). Fail closed when in doubt. Well-known 64:ff9b::/96, mapped,
+  // SIIT, and deprecated ::/96 already returned. First-octet-0 last-32-bit
   // forms (e.g. 2001:4860:4860::8888) stay native.
-  if (
-    words[4] === 0 &&
-    words[5] === 0 &&
-    (words[0] !== 0 || words[1] !== 0 || words[2] !== 0 || words[3] !== 0)
-  ) {
+  {
     const ipv4 = hextetToIPv4(words[6], words[7]);
     if (ipv4FirstOctet(ipv4) !== 0) {
       return classifyFailClosedEmbedding(ipv4, 6, canonical, 'nat64_extra');

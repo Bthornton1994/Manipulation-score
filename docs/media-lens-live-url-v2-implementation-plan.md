@@ -230,6 +230,11 @@ Each row: construct input, expect code, no connect to a blocked address (assert 
 | `nat64-local-public` | `64:ff9b:1:cb00:71:700::` | block (extra prefix) |
 | `nat64-extra-sparse-loopback` | `2001:470:1::7f00:1` | block |
 | `nat64-extra-sparse-public` | `2001:470:1::cb00:7107` | block |
+| `nat64-extra-nonzero-64-95-loopback` | `2001:67c:27e4:64:ff:9b:7f00:1` | block |
+| `nat64-extra-nonzero-64-95-imds` | `2606:4700:4700:1:2:3:a9fe:a9fe` | block |
+| `nat64-extra-nonzero-64-95-rfc1918-10` | `2001:470:1:2:3:4:a00:1` | block |
+| `nat64-extra-nonzero-64-95-rfc1918-192` | `2a00:1450:4001:80e:1:2:c0a8:101` | block |
+| `nat64-extra-nonzero-64-95-public` | `2001:67c:27e4:64:ff:9b:cb00:7107` | block |
 | `isatap-loopback` | `2001:470:1:2:0:5efe:7f00:1` | block |
 | `isatap-rfc1918-dotted` | `2001:470:1:2:0:5efe:10.0.0.1` | block |
 | `isatap-public` | `2001:470:1:2:0:5efe:cb00:7107` | block |
@@ -262,6 +267,7 @@ For `rebind-ttl`, the **normative** architecture is: one lookup, classify all, p
 | `redir-v6-loopback` | → `http://[::1]/` | `BLOCKED_HOST` |
 | `redir-nat64-private` | → `http://[64:ff9b::7f00:1]/` | `BLOCKED_HOST` |
 | `redir-nat64-extra` | → `http://[2001:470:1::7f00:1]/` | `BLOCKED_HOST` before second connect |
+| `redir-nat64-extra-nonzero-64-95` | → `http://[2001:67c:27e4:64:ff:9b:7f00:1]/` | `BLOCKED_HOST` before second connect; lookups=0 |
 | `redir-isatap` | → `http://[2001:470:1:2:0:5efe:7f00:1]/` | `BLOCKED_HOST` before second connect |
 | `redir-mapped-hex` | → `http://[::ffff:7f00:1]/` | `BLOCKED_HOST` |
 | `redir-downgrade` | `https://203.0.113.7/` → `http://203.0.113.8/` | `REDIRECT_DOWNGRADE` |

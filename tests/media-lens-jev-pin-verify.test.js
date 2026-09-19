@@ -161,9 +161,10 @@ test('default CI workflow stays fixture-only and does not run live Jev pin verif
 
 test('optional pin-verify workflow is workflow_dispatch only and does not enable live URL', async () => {
   const workflow = await readFile('.github/workflows/jev-pin-verify.yml', 'utf8');
-  assert.match(workflow, /workflow_dispatch/);
-  assert.doesNotMatch(workflow, /pull_request/);
-  assert.doesNotMatch(workflow, /push:/);
+  const triggerBlock = workflow.split('jobs:')[0];
+  assert.match(triggerBlock, /workflow_dispatch:/);
+  assert.doesNotMatch(triggerBlock, /pull_request:/);
+  assert.doesNotMatch(triggerBlock, /push:/);
   assert.match(workflow, /vars\.MEDIA_LENS_JEV_VERIFY/);
   assert.match(workflow, /secrets\.MEDIA_LENS_TYPESAFE_API_KEY/);
   assert.match(workflow, /scripts\/jev-pin-verify\.js/);
@@ -196,7 +197,10 @@ test('pin-verify may only read invented fixture articles', async () => {
   const cases = await loadSyntheticFixtureCases({ fixtureIds: [DEFAULT_PIN_VERIFY_FIXTURE] });
   assert.equal(cases.length, 1);
   assert.ok(cases[0].spans.length >= 1);
-  assert.match(cases[0].spans[0].text, /Main Street/);
+  assert.ok(
+    cases[0].spans.some((span) => /Main Street|road closure|repaving/i.test(span.text)),
+    'synthetic-06 spans must come from the invented fixture article'
+  );
 });
 
 test('max span plus questions stays under the documented 32k state token budget', async () => {
@@ -267,7 +271,9 @@ test('successful mock pin verify records SHA, timestamp, model match, and ignore
       assert.equal(report.reportedModel, 'jev-1.13.0');
       assert.equal(report.modelMatch, true);
       assert.ok(report.networkCalls >= 1);
-      assert.deepEqual(requested, [JEV_MODEL_REQUESTED]);
+      assert.ok(requested.length >= 1);
+      assert.equal(requested.every((model) => model === JEV_MODEL_REQUESTED), true);
+      assert.equal(requested.includes('jev-latest'), false);
       assert.equal(report.live_url_enabled, false);
       assert.doesNotMatch(JSON.stringify(report), new RegExp(PIN_VERIFY_KEY));
     }

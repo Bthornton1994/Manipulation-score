@@ -1,5 +1,5 @@
 # Isolated Jev jev-1.13.0 pin verification (Issue #118 Phase 4).
-# Not default CI. Does not run on pull_request or push.
+# Not default CI. Manual dispatch only.
 # Does not enable live URL or live pasted-text.
 # A recorded pass is pin evidence, not an accuracy claim, and not production-ready.
 

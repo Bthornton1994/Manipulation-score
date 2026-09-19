@@ -2,9 +2,23 @@ const SMART_APOSTROPHE = /[\u2018\u2019\u02BC\u0060\u201B]/g;
 const SMART_QUOTE = /[\u201C\u201D\u201E\u2033\u2036]/g;
 const UNICODE_SPACES = /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g;
 const FORMAT_CHARS = /[\u200B-\u200D\uFEFF]/g;
+/** Combining grapheme joiner — Mn, not Cf; same between-token joiner class as U+2060. */
+const COMBINING_GRAPHEME_JOINER = /\u034F/g;
+
+/**
+ * Map C0/C1 controls to spaces while preserving newline/CR for paragraph splits.
+ * JS `\s` does not treat most Cc (including NEL U+0085) as whitespace.
+ */
+function mapControlChars(ch) {
+  return ch === '\n' || ch === '\r' ? ch : ' ';
+}
 
 /**
  * Normalize text for scoring and safety matching while preserving paragraph breaks.
+ *
+ * Between-token Cc/Cf separators are space-mapped (not stripped) so patterns like
+ * `\bkill\s+you\b` still match. FORMAT_CHARS / soft hyphen remain strip-mode for
+ * mid-word repair; between-word strip-glue for those is tracked separately (#57).
  */
 export function normalizeAnalysisText(text) {
   return (text || '')
@@ -14,6 +28,9 @@ export function normalizeAnalysisText(text) {
     .replace(SMART_APOSTROPHE, "'")
     .replace(SMART_QUOTE, '"')
     .replace(UNICODE_SPACES, ' ')
+    .replace(/\p{Cc}/gu, mapControlChars)
+    .replace(/\p{Cf}/gu, ' ')
+    .replace(COMBINING_GRAPHEME_JOINER, ' ')
     .replace(/[ \t\f\v]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();

@@ -7,9 +7,10 @@ Status: **operational controls only**. Live URL remains **disabled by default**.
 | Workstream | [Issue #118](https://github.com/Bthornton1994/Manipulation-score/issues/118) |
 | Phase | Ops controls for Live URL v2 (kill switch, audit, rate limits, monitoring). Flags stay off. |
 | Architecture | `docs/media-lens-live-url-v2-architecture.md` §§16–20 |
+| Canary drill packet | `docs/media-lens-canary-drill-v1.md` (Issue #118 E). Operator-run rehearsal docs only. Defaults remain OFF. |
 | Public site | GitHub Pages remains Clarity-only. `docs/` and `media-lens/` stay off the Pages allowlist. |
 
-Issue #118 is not complete when these controls exist. Independent security review, canary evidence, public-claim review, and explicit owner authorization are still required before any live enablement.
+Issue #118 is not complete when these controls exist. Independent security review, canary evidence, public-claim review, and explicit owner authorization are still required before any live enablement. The drill packet is **DRILL_PACKET_ONLY**: it does not authorize live enablement and does **not** grant `READY_FOR_CANARY`.
 
 ---
 
@@ -36,7 +37,7 @@ Misspellings and `TRUE` / `1` / `yes` do not enable anything. They also do not a
 
 ## 2. Staging / canary / production configs
 
-These are operator-run worker configs. They are not GitHub Pages settings. Do not put API keys in git, tickets, or chat.
+These are operator-run worker configs. They are not GitHub Pages settings. Do not put API keys in git, tickets, or chat. Full rehearsal steps, hop-scoped allowlist checks, kill-file expectations, rollback, and the evidence template (commit SHA, flags used, allowlist, HTTP statuses, timestamps; no secrets) live in `docs/media-lens-canary-drill-v1.md`. That packet is not production-ready and does not authorize turning these flags on.
 
 ### Staging (isolated operator machine)
 
@@ -241,4 +242,21 @@ MEDIA_LENS_KILL_SWITCH=true
 ```
 
 Restart the worker. Confirm `/health` shows `classifierDev.effectiveEnabled: false` and that a mock or probe records zero network calls. This is not a production-ready path.
+
+---
+
+## 11. Canary + kill-switch drill packet (Issue #118 E)
+
+Packet: `docs/media-lens-canary-drill-v1.md`. Status: **DRILL_PACKET_ONLY**.
+
+Use that file when an owner authorizes an isolated rehearsal. It covers:
+
+- Staging / canary flag set documented as operator-run; repository defaults remain OFF
+- Allowlist hosts, hop-scoped after remediation A (`live_url_not_allowlisted` on off-list hops)
+- Kill-file `touch` → expect `503 live_killed` on live `/analyze`, `verify_kill_switch` on pin-verify, **zero provider calls**
+- Rollback steps (this runbook §5)
+- Evidence capture template: commit SHA, flags used, allowlist, HTTP statuses, timestamps (no secrets)
+- Explicit not-production-ready language; does not grant `READY_FOR_CANARY`
+
+This section does not enable canary or live mode. It does not close Issue #118.
 

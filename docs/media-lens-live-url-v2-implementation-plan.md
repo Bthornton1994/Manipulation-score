@@ -324,6 +324,7 @@ Extend when URL flags land:
 - Per-host limit once implemented.
 - Kill file: create temp file, request, unlink.
 - `/health` JSON has no `secrets` object and no bearer strings.
+- Canary/kill-switch **drill packet** (`docs/media-lens-canary-drill-v1.md`, Issue #118 E) stays docs-only: operator-run flag set, hop-scoped allowlist, kill-file `503 live_killed` / `verify_kill_switch`, rollback, evidence template. Fixture tests lock the checklist. The packet does not authorize live enablement and does **not** grant `READY_FOR_CANARY`.
 
 ### 6.6 Concept-separation tests
 

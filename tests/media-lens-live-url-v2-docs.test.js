@@ -15,6 +15,7 @@ import { join } from 'node:path';
 const ARCHITECTURE = 'docs/media-lens-live-url-v2-architecture.md';
 const PLAN = 'docs/media-lens-live-url-v2-implementation-plan.md';
 const RUNBOOK = 'docs/media-lens-ops-runbook-v2.md';
+const CANARY_DRILL = 'docs/media-lens-canary-drill-v1.md';
 
 const CONCEPTS = [
   'Factual verification',
@@ -31,13 +32,16 @@ test('Live URL v2 Phase 1 design artifacts exist and stay off GitHub Pages', asy
   await access(ARCHITECTURE);
   await access(PLAN);
   await access(RUNBOOK);
+  await access(CANARY_DRILL);
   assert.ok(PAGES_FORBIDDEN_NAMES.includes('docs'), 'docs/ must remain on the Pages forbidden list');
   assert.equal(isAllowedSitePath(ARCHITECTURE), false);
   assert.equal(isAllowedSitePath(PLAN), false);
   assert.equal(isAllowedSitePath(RUNBOOK), false);
+  assert.equal(isAllowedSitePath(CANARY_DRILL), false);
   assert.equal(isForbiddenSitePath(ARCHITECTURE), true);
   assert.equal(isForbiddenSitePath(PLAN), true);
   assert.equal(isForbiddenSitePath(RUNBOOK), true);
+  assert.equal(isForbiddenSitePath(CANARY_DRILL), true);
 
   const dest = await mkdtemp(join(tmpdir(), 'clarity-pages-live-url-v2-docs-'));
   await buildPagesSite(dest);
@@ -45,6 +49,7 @@ test('Live URL v2 Phase 1 design artifacts exist and stay off GitHub Pages', asy
   assert.equal(files.includes(ARCHITECTURE), false);
   assert.equal(files.includes(PLAN), false);
   assert.equal(files.includes(RUNBOOK), false);
+  assert.equal(files.includes(CANARY_DRILL), false);
 });
 
 test('Live URL v2 design docs link Issue #118, stay disabled-by-default, and do not claim production readiness', async () => {
@@ -106,4 +111,6 @@ test('Live URL v2 implementation plan maps Issue #118 gates and separates the se
   assert.match(plan, /compat-96-loopback/);
   assert.match(plan, /MEDIA_LENS_ENABLE_LIVE_URL/);
   assert.match(plan, /MEDIA_LENS_KILL_SWITCH/);
+  assert.match(plan, /media-lens-canary-drill-v1/);
+  assert.match(plan, /DRILL_PACKET_ONLY|does \*\*not\*\* grant `READY_FOR_CANARY`/);
 });

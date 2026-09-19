@@ -1,0 +1,109 @@
+{
+  "schema": "influence-graph.v1",
+  "graph_id": "00000000-0000-0000-0000-000000000000",
+  "generated_at": "2000-01-01T00:00:00.000Z",
+  "artifact": {
+    "kind": "article",
+    "input_mode": "fixture",
+    "url": "https://fictional-daily.example/articles/synthetic-06-short-excerpt",
+    "canonical_url": "https://fictional-daily.example/articles/synthetic-06-short-excerpt",
+    "title": "Brief: road closure this weekend",
+    "byline": null,
+    "publisher": {
+      "name": null,
+      "domain": "fictional-daily.example"
+    },
+    "published_at": "2026-09-17T08:00:00.000Z",
+    "modified_at": null,
+    "timestamp_precision": "time",
+    "language": "en",
+    "text_sha256": "45e45f1c88b1202832f40758abe4ac7eb21421f6707e0bafd3134e86cf07683b",
+    "text_length_chars": 78,
+    "paywall_detected": false,
+    "authorization": {
+      "user_asserted_public": true,
+      "consent_at": "2026-09-18T00:00:00.000Z"
+    }
+  },
+  "spans": [],
+  "observations": [],
+  "claims": [],
+  "coverage": {
+    "status": "not_requested",
+    "provenance": "none",
+    "story_origin": null,
+    "freshness_gate": null,
+    "cluster": null,
+    "frames": [],
+    "confidence": "low"
+  },
+  "source_context": {
+    "shown_separately": true,
+    "publisher": {
+      "name": null,
+      "domain": "fictional-daily.example"
+    },
+    "canonical_domain": "fictional-daily.example",
+    "metadata": {
+      "has_byline": false,
+      "has_published_time": true,
+      "has_canonical": true,
+      "syndication_markers": []
+    },
+    "third_party_ratings": [],
+    "note": "Source context is metadata, not a manipulation judgment."
+  },
+  "abstentions": [
+    {
+      "id": "abst-insufficient_text",
+      "scope": "graph",
+      "target": null,
+      "reason": "insufficient_text",
+      "message": "This excerpt is too short to analyze reliably, so no signals are shown."
+    }
+  ],
+  "engine": {
+    "pipeline_version": "media-lens-0.1.0",
+    "preparation": {
+      "version": "0.1.0",
+      "extractor": "fixture"
+    },
+    "jev": {
+      "mode": "disabled",
+      "model_requested": "jev-1.13.0",
+      "model_reported": null,
+      "model_match": null,
+      "question_set": "influence-questions.v1",
+      "question_set_sha256": "d3a4e401d484eb942b3811607e11cd0fc4604a2f8a87e03e061b0710352eeea1",
+      "calls": 0,
+      "failures": 0,
+      "elapsed_ms": 0
+    },
+    "newsjack": {
+      "mode": "disabled",
+      "version": null,
+      "artifacts": []
+    },
+    "fusion": {
+      "version": "0.1.0",
+      "thresholds": {
+        "observed_min_probability": 0.6,
+        "candidate_min_probability": 0.45,
+        "quoted_agreement_min": 0.7,
+        "failure_rate_abstain": 0.2
+      }
+    },
+    "timestamps": {
+      "started_at": "2000-01-01T00:00:00.000Z",
+      "completed_at": "2000-01-01T00:00:00.000Z"
+    }
+  },
+  "privacy": {
+    "external_processing": [],
+    "clarity_isolation": "no_private_message_path",
+    "full_text_persisted": false,
+    "spans_included": "all",
+    "retention": "none",
+    "disclosure_shown": true
+  }
+}

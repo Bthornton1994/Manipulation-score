@@ -1,0 +1,275 @@
+{
+  "schema": "influence-graph.v1",
+  "graph_id": "00000000-0000-0000-0000-000000000000",
+  "generated_at": "2000-01-01T00:00:00.000Z",
+  "artifact": {
+    "kind": "article",
+    "input_mode": "fixture",
+    "url": "https://fictional-daily.example/articles/synthetic-02-syndicated-cluster",
+    "canonical_url": "https://fictional-daily.example/articles/synthetic-02-syndicated-cluster",
+    "title": "Regional transit agency proposes fare increase",
+    "byline": "Priya Nandan",
+    "publisher": {
+      "name": null,
+      "domain": "fictional-daily.example"
+    },
+    "published_at": "2026-09-16T09:00:00.000Z",
+    "modified_at": null,
+    "timestamp_precision": "time",
+    "language": "en",
+    "text_sha256": "43e8866aa8472fb03ae5f4d6fe3e0ff6ef2581355605adf61fb9c1ab17690c0b",
+    "text_length_chars": 411,
+    "paywall_detected": false,
+    "authorization": {
+      "user_asserted_public": true,
+      "consent_at": "2026-09-18T00:00:00.000Z"
+    }
+  },
+  "spans": [
+    {
+      "id": "span-1",
+      "start": 0,
+      "end": 46,
+      "text": "Regional transit agency proposes fare increase",
+      "paragraph_index": 0,
+      "role": "headline",
+      "attribution": {
+        "speaker": null,
+        "cue": null
+      },
+      "role_basis": "html_structure"
+    },
+    {
+      "id": "span-2",
+      "start": 47,
+      "end": 62,
+      "text": "By Priya Nandan",
+      "paragraph_index": 1,
+      "role": "byline_meta",
+      "attribution": {
+        "speaker": null,
+        "cue": null
+      },
+      "role_basis": "html_structure"
+    },
+    {
+      "id": "span-3",
+      "start": 63,
+      "end": 200,
+      "text": "The regional transit authority proposed a 12 percent fare increase on Wednesday, citing rising maintenance costs across the rail network.",
+      "paragraph_index": 2,
+      "role": "authorial",
+      "attribution": {
+        "speaker": null,
+        "cue": null
+      },
+      "role_basis": "default"
+    },
+    {
+      "id": "span-4",
+      "start": 201,
+      "end": 310,
+      "text": "Riders and advocacy groups say the increase would burden low-income commuters who depend on the system daily.",
+      "paragraph_index": 3,
+      "role": "authorial",
+      "attribution": {
+        "speaker": null,
+        "cue": null
+      },
+      "role_basis": "default"
+    },
+    {
+      "id": "span-5",
+      "start": 311,
+      "end": 411,
+      "text": "A spokesperson for the agency said the change would take effect in January if approved by the board.",
+      "paragraph_index": 4,
+      "role": "authorial",
+      "attribution": {
+        "speaker": null,
+        "cue": null
+      },
+      "role_basis": "default"
+    }
+  ],
+  "observations": [
+    {
+      "id": "obs-jev-1",
+      "dimension": "language",
+      "signal": "anecdote_generalization",
+      "strength": "candidate",
+      "localization": "span",
+      "span_ids": [
+        "span-4"
+      ],
+      "authorial_attribution": "authorial",
+      "evidence": {
+        "engine": "jev",
+        "question_id": "influence_signal",
+        "top_probability": 0.5,
+        "answers_ref": "span-4"
+      },
+      "review_status": "auto",
+      "ui_phrase": "Observed influence signal"
+    }
+  ],
+  "claims": [
+    {
+      "id": "claim-1",
+      "span_ids": [
+        "span-3"
+      ],
+      "text": "The regional transit authority proposed a 12 percent fare increase on Wednesday, citing rising maintenance costs across the rail network.",
+      "kind": "statistic",
+      "attribution": "authorial",
+      "support": "not_checked",
+      "support_evidence": [],
+      "review_status": "auto"
+    }
+  ],
+  "coverage": {
+    "status": "available",
+    "provenance": "fixture",
+    "story_origin": {
+      "same_story_assessment": "same_story",
+      "surfaced_article_published_at": "2026-09-16T09:00:00.000Z",
+      "first_public_at": "2026-09-16T08:30:00.000Z",
+      "original_url": "https://wire-source.example/stories/transit-fare-increase",
+      "original_source": "Wire Source",
+      "canonical_coverage_url": "https://fictional-daily.example/articles/synthetic-02-syndicated-cluster",
+      "canonical_coverage_source": "Fictional Daily",
+      "canonical_coverage_published_at": "2026-09-16T09:00:00.000Z",
+      "canonical_coverage_basis": "first_independent_report",
+      "same_story_basis": "headline_wording",
+      "new_development": false,
+      "new_development_at": null,
+      "confidence": "medium",
+      "timestamp_evidence": [
+        {
+          "url_key": "https://fictional-daily.example/articles/synthetic-02-syndicated-cluster",
+          "published_at": "2026-09-16T09:00:00.000Z"
+        },
+        {
+          "url_key": "https://second-outlet.example/news/transit-fare-increase",
+          "published_at": "2026-09-16T09:15:00.000Z"
+        }
+      ],
+      "evidence_urls": [
+        "https://fictional-daily.example/articles/synthetic-02-syndicated-cluster",
+        "https://second-outlet.example/news/transit-fare-increase"
+      ],
+      "rationale": "Two independently operated outlets published within 45 minutes of each other."
+    },
+    "freshness_gate": {
+      "computed_status": "fresh",
+      "basis_field": "first_public_at",
+      "basis_value": "2026-09-16T08:30:00.000Z",
+      "rationale": "Published within the freshness window with two corroborating independent sources."
+    },
+    "cluster": {
+      "member_count": 5,
+      "independent_sources_estimate": 2,
+      "duplicate_or_syndicated_count": 3,
+      "members": [
+        {
+          "url": "https://fictional-daily.example/articles/synthetic-02-syndicated-cluster",
+          "url_key": "https://fictional-daily.example/articles/synthetic-02-syndicated-cluster",
+          "source": "Fictional Daily",
+          "published_at": "2026-09-16T09:00:00.000Z",
+          "relation": "surfaced"
+        },
+        {
+          "url": "https://second-outlet.example/news/transit-fare-increase",
+          "url_key": "https://second-outlet.example/news/transit-fare-increase",
+          "source": "Second Outlet",
+          "published_at": "2026-09-16T09:15:00.000Z",
+          "relation": "same_story"
+        },
+        {
+          "url": "https://fictional-daily.example/wire/transit-fare-increase-copy",
+          "url_key": "https://fictional-daily.example/wire/transit-fare-increase-copy",
+          "source": "Fictional Daily Wire Feed",
+          "published_at": "2026-09-16T09:05:00.000Z",
+          "relation": "syndicated"
+        },
+        {
+          "url": "https://third-outlet.example/syndicated/transit-fare-increase",
+          "url_key": "https://third-outlet.example/syndicated/transit-fare-increase",
+          "source": "Third Outlet (syndicated feed)",
+          "published_at": "2026-09-16T09:20:00.000Z",
+          "relation": "syndicated"
+        },
+        {
+          "url": "https://www.prnewswire.com/news-releases/transit-agency-applauds-board-vote",
+          "url_key": "https://www.prnewswire.com/news-releases/transit-agency-applauds-board-vote",
+          "source": "PR Newswire",
+          "published_at": "2026-09-16T08:00:00.000Z",
+          "relation": "same_story"
+        }
+      ]
+    },
+    "frames": [],
+    "confidence": "medium"
+  },
+  "source_context": {
+    "shown_separately": true,
+    "publisher": {
+      "name": null,
+      "domain": "fictional-daily.example"
+    },
+    "canonical_domain": "fictional-daily.example",
+    "metadata": {
+      "has_byline": true,
+      "has_published_time": true,
+      "has_canonical": true,
+      "syndication_markers": []
+    },
+    "third_party_ratings": [],
+    "note": "Source context is metadata, not a manipulation judgment."
+  },
+  "abstentions": [],
+  "engine": {
+    "pipeline_version": "media-lens-0.1.0",
+    "preparation": {
+      "version": "0.1.0",
+      "extractor": "fixture"
+    },
+    "jev": {
+      "mode": "fixture",
+      "model_requested": "jev-1.13.0",
+      "model_reported": "jev-1.13.0",
+      "model_match": true,
+      "question_set": "influence-questions.v1",
+      "question_set_sha256": "d3a4e401d484eb942b3811607e11cd0fc4604a2f8a87e03e061b0710352eeea1",
+      "calls": 4,
+      "failures": 0,
+      "elapsed_ms": 0
+    },
+    "newsjack": {
+      "mode": "fixture",
+      "version": null,
+      "artifacts": []
+    },
+    "fusion": {
+      "version": "0.1.0",
+      "thresholds": {
+        "observed_min_probability": 0.6,
+        "candidate_min_probability": 0.45,
+        "quoted_agreement_min": 0.7,
+        "failure_rate_abstain": 0.2
+      }
+    },
+    "timestamps": {
+      "started_at": "2000-01-01T00:00:00.000Z",
+      "completed_at": "2000-01-01T00:00:00.000Z"
+    }
+  },
+  "privacy": {
+    "external_processing": [],
+    "clarity_isolation": "no_private_message_path",
+    "full_text_persisted": false,
+    "spans_included": "all",
+    "retention": "none",
+    "disclosure_shown": true
+  }
+}

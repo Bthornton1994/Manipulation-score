@@ -34,17 +34,11 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
       - uses: actions/configure-pages@v5
-      - run: |
-          mkdir -p _site
-          rsync -a \
-            --exclude '.git' \
-            --exclude '.github' \
-            --exclude '.venv' \
-            --exclude '.cursor' \
-            --exclude 'tests' \
-            --exclude '_site' \
-            ./ _site/
+      - run: node scripts/build-pages-site.js _site
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

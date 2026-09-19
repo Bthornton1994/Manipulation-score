@@ -73,6 +73,21 @@ Optional **AAAA** records for IPv6:
 
 GitHub provisions TLS for both `manipulationscore.com` and `www.manipulationscore.com`. Visitors on `www` are redirected to the apex domain (canonical URL for SEO and sharing).
 
+## Media Lens (preview)
+
+Media Lens is a separate, unreleased preview mode for public articles, advertisements, speeches, and campaign material — not for private messages. It is isolated from Clarity (no shared code, no shared network path) and is **not deployed**: it is excluded from the GitHub Pages build.
+
+Media Lens runs entirely through a local worker process. The default and only mode exercised in automated tests is `fixture` mode, which reads local example files and makes no network calls. A `live` mode exists as an adapter seam behind explicit operator configuration (`MEDIA_LENS_ENABLE_LIVE=true` and `MEDIA_LENS_TYPESAFE_API_KEY`, never committed) and is not used by default or in CI. Live pasted-text analysis is disabled. Live URL mode is experimental and not production-ready.
+
+```bash
+node --test tests/*.test.js                                                          # full suite, including Media Lens tests
+node media-lens/worker/analyze-fixture.js synthetic-01-quoted-vs-authorial | node media-lens/schema/validate.js
+MEDIA_LENS_MODE=fixture node media-lens/worker/server.js                             # http://127.0.0.1:8787/health
+python3 -m http.server 4173                                                          # then open http://localhost:4173/media-lens/
+```
+
+See `media-lens/README.md` for the module layout, modes, and limits, and `docs/media-lens-build-brief.md` / `docs/media-lens-influence-graph-plan.md` for the product decisions and implementation plan this feature follows.
+
 ## Important
 
 Clarity by Manipulation Score is an educational aid—not a diagnosis, safety assessment, or substitute for professional advice. See [limitations.html](limitations.html).

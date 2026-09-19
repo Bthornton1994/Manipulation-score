@@ -2,20 +2,24 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
+import { PAGES_ROOT_DIRS, PAGES_ROOT_FILES, isAllowedSitePath } from '../scripts/build-pages-site.js';
 
 const SECRET_PATTERNS = [/MEDIA_LENS_TYPESAFE_API_KEY/, /TYPESAFE_API_KEY/, /Authorization/, /api\.typesafe\.ai/, /medialyst/i];
 
-const DEPLOY_EXCLUDES = new Set(['.git', '.github', '.venv', '.cursor', 'tests', '_site', 'media-lens', 'node_modules']);
-
-async function listPublishedFiles(dir = '.') {
-  const entries = await readdir(dir, { withFileTypes: true });
-  const files = [];
-  for (const entry of entries) {
-    if (DEPLOY_EXCLUDES.has(entry.name)) continue;
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) files.push(...(await listPublishedFiles(full)));
-    else files.push(full);
+async function listPublishedFiles() {
+  const files = PAGES_ROOT_FILES.map((name) => join('.', name));
+  async function walk(dir) {
+    const entries = await readdir(dir, { withFileTypes: true });
+    const found = [];
+    for (const entry of entries) {
+      const full = join(dir, entry.name);
+      const rel = relative('.', full).replace(/\\/g, '/');
+      if (entry.isDirectory()) found.push(...(await walk(full)));
+      else if (isAllowedSitePath(rel)) found.push(full);
+    }
+    return found;
   }
+  for (const dir of PAGES_ROOT_DIRS) files.push(...(await walk(dir)));
   return files;
 }
 
@@ -113,9 +117,15 @@ test('.gitignore excludes .env files', async () => {
   assert.match(gitignore, /^\.env$/m);
 });
 
-test('ci.yml excludes media-lens/ from the Pages deploy rsync', async () => {
+test('ci.yml publishes Pages through the shared allowlist script and never includes media-lens/', async () => {
   const ci = await readFile('.github/workflows/ci.yml', 'utf8');
-  assert.match(ci, /--exclude 'media-lens'/);
+  assert.match(ci, /node scripts\/build-pages-site\.js/);
+  assert.doesNotMatch(ci, /\brsync\b/);
+  assert.equal(
+    PAGES_ROOT_FILES.some((name) => name === 'media-lens' || name.startsWith('media-lens/')),
+    false
+  );
+  assert.equal(PAGES_ROOT_DIRS.includes('media-lens'), false);
 });
 
 test('no key value is ever returned from the worker health/public config', async () => {

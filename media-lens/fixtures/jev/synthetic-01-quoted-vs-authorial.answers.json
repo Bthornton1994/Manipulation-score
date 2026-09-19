@@ -7,10 +7,12 @@
         "probabilities": {
           "none": 0.9
         },
-        "confidence": 0.9
+        "confidence": 0.9,
+        "type": "choice"
       },
       "is_quoted_or_attributed": {
-        "noul": 0.05
+        "noul": 0.05,
+        "type": "noul"
       }
     },
     "span-3": {
@@ -19,10 +21,12 @@
         "probabilities": {
           "none": 0.85
         },
-        "confidence": 0.85
+        "confidence": 0.85,
+        "type": "choice"
       },
       "is_quoted_or_attributed": {
-        "noul": 0.05
+        "noul": 0.05,
+        "type": "noul"
       }
     },
     "span-4": {
@@ -32,10 +36,12 @@
           "urgency": 0.72,
           "none": 0.2
         },
-        "confidence": 0.72
+        "confidence": 0.72,
+        "type": "choice"
       },
       "is_quoted_or_attributed": {
-        "noul": 0.95
+        "noul": 0.95,
+        "type": "noul"
       }
     },
     "span-6": {
@@ -45,10 +51,12 @@
           "certainty_beyond_evidence": 0.75,
           "none": 0.15
         },
-        "confidence": 0.75
+        "confidence": 0.75,
+        "type": "choice"
       },
       "is_quoted_or_attributed": {
-        "noul": 0.1
+        "noul": 0.1,
+        "type": "noul"
       }
     },
     "span-7": {
@@ -58,10 +66,12 @@
           "vague_authority": 0.68,
           "none": 0.2
         },
-        "confidence": 0.68
+        "confidence": 0.68,
+        "type": "choice"
       },
       "is_quoted_or_attributed": {
-        "noul": 0.85
+        "noul": 0.85,
+        "type": "noul"
       }
     }
   }

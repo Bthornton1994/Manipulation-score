@@ -1,0 +1,86 @@
+{
+  "version": "jev-calibration-v1",
+  "disclaimer": "Synthetic labeled fixtures for software consistency only. Not representative real-world accuracy.",
+  "cases": [
+    {
+      "id": "cal-urgency-positive",
+      "label": { "influence_signal": "urgency", "quoted": false },
+      "span": {
+        "id": "span-1",
+        "role": "authorial",
+        "text": "Time is running out. Act this hour or lose your only chance forever."
+      },
+      "artifact": { "kind": "article", "title": "Synthetic calibration urgency" }
+    },
+    {
+      "id": "cal-none-negative",
+      "label": { "influence_signal": "none", "quoted": false },
+      "span": {
+        "id": "span-1",
+        "role": "authorial",
+        "text": "The committee met on Tuesday and approved the budget amendment."
+      },
+      "artifact": { "kind": "article", "title": "Synthetic calibration none" }
+    },
+    {
+      "id": "cal-quoted-urgency",
+      "label": { "influence_signal": "urgency", "quoted": true },
+      "span": {
+        "id": "span-1",
+        "role": "quoted",
+        "text": "We have to move tonight before anyone can check the numbers."
+      },
+      "artifact": { "kind": "article", "title": "Synthetic calibration quoted" }
+    },
+    {
+      "id": "cal-false-positive",
+      "label": { "influence_signal": "none", "quoted": false },
+      "span": {
+        "id": "span-1",
+        "role": "authorial",
+        "text": "Rain is expected after midnight according to the posted forecast."
+      },
+      "artifact": { "kind": "article", "title": "Synthetic calibration false positive" }
+    },
+    {
+      "id": "cal-false-negative",
+      "label": { "influence_signal": "fear_threat", "quoted": false },
+      "span": {
+        "id": "span-1",
+        "role": "authorial",
+        "text": "If this bill passes, families will be in immediate danger everywhere."
+      },
+      "artifact": { "kind": "article", "title": "Synthetic calibration false negative" }
+    },
+    {
+      "id": "cal-low-confidence-review",
+      "label": { "influence_signal": "bandwagon", "quoted": false },
+      "span": {
+        "id": "span-1",
+        "role": "authorial",
+        "text": "Everyone already agrees this is the only sensible view."
+      },
+      "artifact": { "kind": "article", "title": "Synthetic calibration review" }
+    },
+    {
+      "id": "cal-unavailable",
+      "label": { "influence_signal": "vague_authority", "quoted": false },
+      "span": {
+        "id": "span-1",
+        "role": "authorial",
+        "text": "Officials say the matter is already settled."
+      },
+      "artifact": { "kind": "article", "title": "Synthetic calibration unavailable" }
+    },
+    {
+      "id": "cal-malformed",
+      "label": { "influence_signal": "none", "quoted": false },
+      "span": {
+        "id": "span-1",
+        "role": "authorial",
+        "text": "The vote count was certified at noon."
+      },
+      "artifact": { "kind": "article", "title": "Synthetic calibration malformed" }
+    }
+  ]
+}

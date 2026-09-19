@@ -1,13 +1,15 @@
-// Pinned HTTP(S) GET for Media Lens live URL fetch (Issue #118).
+// Pinned HTTP(S) for Media Lens (Issue #118).
 //
-// Connects only to a pre-classified public IP. The stack must not perform
-// a second DNS lookup for the hop: `lookup` returns the pin and never
+// Connects only to a pre-classified IP. The stack must not perform a
+// second DNS lookup for the hop: `lookup` returns the pin and never
 // calls `dns`. TLS SNI / certificate identity stay on the original
 // hostname. HTTP_PROXY / HTTPS_PROXY are not read (this module does
 // not inspect the process environment; Node http.request does not honor
 // those vars).
 //
-// Zero new dependencies. HTTP/1.1 only. No keep-alive reuse. GET only.
+// Zero new dependencies. HTTP/1.1 only. No keep-alive reuse.
+// Article fetch: GET. Provider clients (Jev / classifier.dev): POST.
+// Does not follow redirects.
 
 import http from 'node:http';
 import https from 'node:https';
@@ -196,28 +198,60 @@ function isIpHostname(hostname) {
   return bare.includes(':') || /^(?:\d{1,3}\.){3}\d{1,3}$/.test(bare);
 }
 
+function pinnedRequestHeaders(parsed, extraHeaders) {
+  const out = {};
+  const src = extraHeaders && typeof extraHeaders === 'object' && !Array.isArray(extraHeaders) ? extraHeaders : {};
+  for (const [key, value] of Object.entries(src)) {
+    if (value == null) continue;
+    const lower = String(key).toLowerCase();
+    if (lower === 'host' || lower === 'connection' || lower === 'content-length' || lower === 'transfer-encoding') {
+      continue;
+    }
+    out[key] = Array.isArray(value) ? value.join(', ') : String(value);
+  }
+  out.Host = parsed.host;
+  out.Connection = 'close';
+  return out;
+}
+
+function encodePinnedBody(body) {
+  if (body == null) return null;
+  if (Buffer.isBuffer(body)) return body;
+  if (body instanceof Uint8Array) return Buffer.from(body);
+  return Buffer.from(String(body));
+}
+
 /**
- * Perform one GET to the pinned IP. Callers must already have classified
- * the pin as allow_public. Does not follow redirects.
+ * Perform one request to the pinned IP. Callers must already have classified
+ * the pin. Does not follow redirects. GET (article fetch) or POST (provider
+ * clients). The custom lookup never calls DNS again.
  */
-export function performPinnedGet({
+export function performPinnedRequest({
   parsed,
   pin,
+  method = 'GET',
+  headers: extraHeaders = null,
+  body = null,
   signal,
   timeoutMs,
   connectTimeoutMs = DEFAULT_CONNECT_TIMEOUT_MS,
   maxHeaderBytes = DEFAULT_MAX_HEADER_BYTES,
-  maxBytes,
   createConnectionImpl = null,
   tlsCa = null
 }) {
+  const verb = String(method || 'GET').toUpperCase();
+  if (verb !== 'GET' && verb !== 'POST') {
+    return Promise.reject(taggedError(`Unsupported method ${verb}`, 'FETCH_ERROR'));
+  }
   const isHttps = parsed.protocol === 'https:';
   const transport = isHttps ? https : http;
   const requestHostname = stripIPv6Brackets(parsed.hostname);
   const path = `${parsed.pathname || '/'}${parsed.search || ''}`;
   const port = parsed.port ? Number(parsed.port) : isHttps ? 443 : 80;
   const lookup = makePinnedLookup(pin);
-  const headers = requestHeaders(parsed);
+  const headers = pinnedRequestHeaders(parsed, extraHeaders);
+  const payload = encodePinnedBody(body);
+  if (payload) headers['Content-Length'] = String(payload.length);
 
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -265,7 +299,7 @@ export function performPinnedGet({
       hostname: requestHostname,
       port,
       path,
-      method: 'GET',
+      method: verb,
       headers,
       agent,
       lookup,
@@ -358,7 +392,21 @@ export function performPinnedGet({
       finish(taggedError(`Fetch failed: ${err.message}`, 'FETCH_ERROR'));
     });
 
+    if (payload && payload.length) req.write(payload);
     req.end();
+  });
+}
+
+/**
+ * Perform one GET to the pinned IP. Callers must already have classified
+ * the pin as allow_public. Does not follow redirects.
+ */
+export function performPinnedGet(ctx) {
+  return performPinnedRequest({
+    ...ctx,
+    method: 'GET',
+    headers: requestHeaders(ctx.parsed),
+    body: null
   });
 }
 

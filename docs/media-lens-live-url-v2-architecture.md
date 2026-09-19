@@ -318,7 +318,7 @@ If pinning cannot be implemented on the Node version in CI, live URL must remain
 
 Undici/Node `fetch` will resolve the hostname again unless a custom dispatcher forces `lookup`. v1's `fetchImpl(currentUrl, { redirect: 'manual' })` is exactly the TOCTOU. v2's article client must not call global `fetch` on a user hostname.
 
-Jev calls to `api.typesafe.ai` are a **different** trust path (T4): they use a configured base URL, not user input. They may keep `fetch`, but must not be pointed at a user-controlled URL. `MEDIA_LENS_TYPESAFE_BASE_URL` is an operator/test override; in live-operator deployments it should remain the official origin unless a documented mock is in use.
+Jev calls to `api.typesafe.ai` and evaluation-only classifier.dev `POST /v1/classify` are a **different** trust path (T4): they use a configured base URL, not user input. Live paths that actually call the network still use **connect-time destination pinning** (resolve DNS once, classify every address, pin one allowed IP, abort `PIN_MISMATCH` / `BLOCKED_HOST` on mismatch) and **do not follow redirects**. `MEDIA_LENS_TYPESAFE_BASE_URL` is an operator/test override; loopback HTTP is for mocks. classifier.dev production origin remains `https://classifier.dev` only (`/v1/classify`, model allowlist `jev-1.13.0`). This is not a production-readiness claim. Live URL remains disabled by default.
 
 ### 7.4 Connection reuse
 

@@ -1,5 +1,6 @@
 // classifier.dev evaluation adapter. Server-side only. Default-off.
-// Uses POST /v1/classify exclusively. Never logs raw span text, credentials,
+// Uses POST /v1/classify exclusively. Live HTTPS uses connect-time IP
+// pinning and does not follow redirects. Never logs raw span text, credentials,
 // or Authorization headers. Not a second independent Media Lens model.
 
 import {
@@ -31,6 +32,7 @@ import {
 } from '../classifier-dev/contract.js';
 import { createCircuitBreaker, createDailyBudget, createConcurrencyGate } from '../classifier-dev/ops.js';
 import { CDEV_LABEL_IDS } from '../classifier-dev/taxonomy.js';
+import { createProviderPinnedFetch, mapProviderTransportError } from '../provider-pinned-fetch.js';
 
 function sleep(ms, signal) {
   const delay = Math.max(0, ms);
@@ -192,7 +194,8 @@ async function postClassify({
       if (/redirect/i.test(message)) {
         lastError = 'redirect_rejected';
       } else {
-        lastError = timedOut ? 'timeout' : 'transport_error';
+        lastError = mapProviderTransportError(err, timedOut);
+        if (lastError.startsWith('transport_error:')) lastError = timedOut ? 'timeout' : 'transport_error';
       }
       circuit.recordFailure();
       return { ok: false, error: lastError, status: lastStatus, apiVersion: lastApiVersion, retries, latencyMs: now() - started };
@@ -218,16 +221,30 @@ export function createClassifierDevAdapter({
   timeoutMs = DEFAULT_TIMEOUT_MS,
   maxBatch = DEFAULT_MAX_BATCH,
   maxDailyClassifications = DEFAULT_MAX_DAILY_CLASSIFICATIONS,
-  fetchImpl = globalThis.fetch,
+  fetchImpl = null,
   now = () => Date.now(),
   circuit = null,
   dailyBudget = null,
-  concurrency = DEFAULT_CONCURRENCY
+  concurrency = DEFAULT_CONCURRENCY,
+  lookupImpl = undefined,
+  classifyImpl = undefined,
+  createConnectionImpl = undefined,
+  tlsCa = undefined
 } = {}) {
   const resolved = resolveClassifierDevBaseUrl(baseUrl);
   const circuitBreaker = circuit || createCircuitBreaker({ failureThreshold: CIRCUIT_FAILURE_THRESHOLD, resetMs: CIRCUIT_RESET_MS, now });
   const budget = dailyBudget || createDailyBudget(maxDailyClassifications, { now });
   const gate = createConcurrencyGate(Math.max(1, concurrency));
+  const liveFetch =
+    typeof fetchImpl === 'function'
+      ? fetchImpl
+      : createProviderPinnedFetch({
+          lookupImpl,
+          classifyImpl,
+          createConnectionImpl,
+          tlsCa,
+          timeoutMs
+        });
 
   async function classify({
     inputs,
@@ -246,7 +263,7 @@ export function createClassifierDevAdapter({
     if (!resolved.ok) {
       return emptyUnavailable(list, resolved.reason || 'bad_base_url');
     }
-    if (typeof fetchImpl !== 'function') {
+    if (typeof liveFetch !== 'function') {
       return emptyUnavailable(list, 'no_fetch');
     }
 
@@ -305,7 +322,7 @@ export function createClassifierDevAdapter({
           href: resolved.href,
           body: chunkBody,
           timeoutMs,
-          fetchImpl,
+          fetchImpl: liveFetch,
           outerSignal: signal,
           circuit: circuitBreaker,
           now

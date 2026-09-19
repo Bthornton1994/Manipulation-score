@@ -76,6 +76,65 @@ export async function pinHost(hostname, { lookupImpl = dnsLookup, classifyImpl =
   return { address: preferred.canonical, family: preferred.family, classified };
 }
 
+const OPERATOR_LOOPBACK_NAMES = new Set(['localhost', 'localhost.localdomain']);
+
+function isLoopbackAddress(address, classified) {
+  if (classified?.reason === 'block_loopback' || String(classified?.reason || '').includes('block_loopback')) {
+    return true;
+  }
+  const bare = stripIPv6Brackets(String(address || '')).toLowerCase();
+  return bare === '127.0.0.1' || bare === '::1';
+}
+
+/**
+ * Pin a configured provider host (TypeSafe Jev / classifier.dev).
+ *
+ * DNS names use the same public-only policy as article fetch (`pinHost`):
+ * mixed or private answers are BLOCKED_HOST. Operator-configured loopback
+ * HTTP mocks may pin 127.0.0.1 / ::1 / localhost because those destinations
+ * are not user URLs and cannot rebind a public hostname.
+ */
+export async function pinProviderHost(
+  hostname,
+  { lookupImpl = dnsLookup, classifyImpl = classifyIp, allowLoopbackLiteral = true } = {}
+) {
+  const bareHostname = stripIPv6Brackets(hostname).toLowerCase();
+
+  if (allowLoopbackLiteral && (isStrictIPv4(bareHostname) || bareHostname.includes(':'))) {
+    const classified = classifyImpl(bareHostname);
+    if (isLoopbackAddress(bareHostname, classified) || classifyIp(bareHostname).reason === 'block_loopback') {
+      const family = classified.family || (bareHostname.includes(':') ? 6 : 4);
+      const address = classified.canonical || bareHostname;
+      return { address, family, classified };
+    }
+  }
+
+  if (allowLoopbackLiteral && OPERATOR_LOOPBACK_NAMES.has(bareHostname)) {
+    let results;
+    try {
+      results = await lookupImpl(bareHostname, { all: true, verbatim: true });
+    } catch {
+      throw taggedError(`Could not resolve host: ${hostname}`, 'DNS_ERROR');
+    }
+    const addresses = (Array.isArray(results) ? results : [results]).map((r) => r && r.address).filter(Boolean);
+    if (addresses.length === 0) {
+      throw taggedError(`Could not resolve host: ${hostname}`, 'DNS_ERROR');
+    }
+    const classified = addresses.map((address) => classifyImpl(address));
+    if (!classified.every((entry, index) => isLoopbackAddress(addresses[index], entry))) {
+      throw taggedError(`Blocked host: ${hostname} resolves to a non-loopback address`, 'BLOCKED_HOST');
+    }
+    const preferred = classified.find((entry) => entry.family === 6) || classified[0];
+    return {
+      address: preferred.canonical || addresses[classified.indexOf(preferred)],
+      family: preferred.family || 4,
+      classified
+    };
+  }
+
+  return pinHost(hostname, { lookupImpl, classifyImpl });
+}
+
 export async function assertHostIsPublic(hostname, { lookupImpl = dnsLookup, classifyImpl = classifyIp } = {}) {
   await pinHost(hostname, { lookupImpl, classifyImpl });
 }

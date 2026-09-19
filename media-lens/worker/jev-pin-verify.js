@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { prepareFromHtml } from './prepare.js';
 import { isKillSwitchAsserted, loadConfig } from './config.js';
+import { createProviderPinnedFetch } from './provider-pinned-fetch.js';
 import {
   createJevAdapter,
   loadQuestionSet,
@@ -211,6 +212,19 @@ function mapUnavailableReason(reason) {
     return JEV_PIN_VERIFY_REASONS.MISSING_ANSWERS;
   }
   if (String(reason).startsWith('http_')) return reason;
+  if (
+    reason === 'PIN_MISMATCH' ||
+    reason === 'BLOCKED_HOST' ||
+    reason === 'redirect_rejected' ||
+    reason === 'DNS_ERROR' ||
+    reason === 'BAD_SCHEME' ||
+    reason === 'BAD_URL' ||
+    reason === 'TLS_ERROR' ||
+    reason === 'timeout' ||
+    reason === 'TIMEOUT'
+  ) {
+    return reason;
+  }
   return JEV_PIN_VERIFY_REASONS.TYPED_SHAPE;
 }
 
@@ -362,7 +376,16 @@ export async function runJevPinVerify(options = {}) {
   const requestedModels = [];
   const reportedModels = [];
   let networkCalls = 0;
-  const innerFetch = options.fetchImpl || globalThis.fetch;
+  const innerFetch =
+    typeof options.fetchImpl === 'function'
+      ? options.fetchImpl
+      : createProviderPinnedFetch({
+          lookupImpl: options.lookupImpl,
+          classifyImpl: options.classifyImpl,
+          createConnectionImpl: options.createConnectionImpl,
+          tlsCa: options.tlsCa,
+          timeoutMs: options.timeoutMs || 8000
+        });
   const wrappedFetch = async (url, init) => {
     networkCalls += 1;
     try {
@@ -383,7 +406,11 @@ export async function runJevPinVerify(options = {}) {
     apiKey: gate.apiKey,
     fetchImpl: wrappedFetch,
     timeoutMs: options.timeoutMs || 8000,
-    concurrency: 1
+    concurrency: 1,
+    lookupImpl: options.lookupImpl,
+    classifyImpl: options.classifyImpl,
+    createConnectionImpl: options.createConnectionImpl,
+    tlsCa: options.tlsCa
   });
 
   const fixtureReports = [];

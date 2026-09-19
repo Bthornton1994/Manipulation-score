@@ -16,7 +16,6 @@ import {
   shouldEscalate
 } from '../media-lens/worker/classifier-dev/cascade.js';
 import { createClassifierDevAdapter } from '../media-lens/worker/adapters/classifier-dev.js';
-import { CDEV_LABEL_IDS } from '../media-lens/worker/classifier-dev/taxonomy.js';
 import { JEV_SIGNAL_QUESTION_ID, JEV_QUOTED_QUESTION_ID } from '../media-lens/worker/adapters/jev.js';
 
 function jevAnswers({ choice, confidence, noul = 0.1, probabilities }) {
@@ -250,6 +249,8 @@ test('selective cascade behind ENABLE_CLASSIFIER_DEV records evaluation metadata
   assert.equal(graph.engine.classifier_dev.evaluation_only, true);
   assert.equal(graph.engine.classifier_dev.mode, 'evaluation');
   assert.ok(graph.privacy.external_processing.some((row) => row.recipient.includes('classifier.dev')));
-  assert.ok(hits >= 0);
-  assert.equal(Array.isArray(CDEV_LABEL_IDS), true);
+  assert.equal(hits, graph.engine.classifier_dev.calls);
+  assert.ok(hits >= 1, 'selective cascade must call the adapter for this fixture');
+  assert.ok(graph.engine.classifier_dev.escalated_span_count >= 1);
+  assert.equal(graph.engine.classifier_dev.policy_version, CASCADE_POLICY_VERSION);
 });

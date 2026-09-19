@@ -67,7 +67,7 @@ The UI shows a persistent, non-dismissable notice describing what Media Lens ana
 
 Operator runbook: `docs/media-lens-ops-runbook-v2.md`. Architecture rollback and incident classes: `docs/media-lens-live-url-v2-architecture.md` §20.
 
-Do not paste API keys, article bodies, or URLs with credentials into tickets. To stop every external Jev-capable path immediately (live URL fetch, live Jev, and isolated pin verification): set `MEDIA_LENS_KILL_SWITCH=true` or `touch` the kill file, then confirm live `/analyze` returns `503 live_killed` (live mode) or that fixture-only behavior continues, and that `scripts/jev-pin-verify.js` exits nonzero with `verify_kill_switch`. This is not a production-ready mode and is not hosted on GitHub Pages.
+Do not paste API keys, article bodies, or URLs with credentials into tickets. To stop every external Jev-capable path immediately (live URL fetch, live Jev, isolated pin verification, and classifier.dev): set `MEDIA_LENS_KILL_SWITCH=true` or `touch` the kill file, then confirm live `/analyze` returns `503 live_killed` (live mode) or that fixture-only behavior continues, that `scripts/jev-pin-verify.js` exits nonzero with `verify_kill_switch`, and that classifier.dev makes zero outbound calls. This is not a production-ready mode and is not hosted on GitHub Pages.
 
 ## Run it
 

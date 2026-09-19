@@ -22,7 +22,7 @@ Repository and CI defaults:
 | `MEDIA_LENS_MODE` | `fixture` | Only `live` if the exact value `live` |
 | `MEDIA_LENS_ENABLE_LIVE` | unset / false | Exact string `true` required to *start* live mode |
 | `MEDIA_LENS_ENABLE_LIVE_URL` | unset / false | Exact string `true` required **in addition** before `mode: "url"` may fetch |
-| `MEDIA_LENS_KILL_SWITCH` | unset / false | Exact string `true` forces live URL and live Jev off |
+| `MEDIA_LENS_KILL_SWITCH` | unset / false | Exact string `true` only (same rule as the ENABLE flags). Forces live URL and live Jev off |
 | `MEDIA_LENS_KILL_SWITCH_FILE` | unset | If set and the path exists, same as kill switch |
 | `MEDIA_LENS_URL_ALLOWLIST` | empty | Empty means public-address policy only. Canary should set exact hostnames |
 
@@ -93,14 +93,16 @@ A production live-URL worker is **not authorized** by Issue #118 until every acc
 
 ## 3. Rate limits
 
-Already enforced per worker process (fixed one-minute window, checked before the `/analyze` body is read):
+Per worker process, fixed one-minute windows (except concurrency, which is in-flight):
 
-| Limit | Default | Env override |
-| --- | --- | --- |
-| Analyses / minute | 10 | `MEDIA_LENS_MAX_ANALYSES_PER_MINUTE` |
-| Live URL attempts / minute | 10 | `MEDIA_LENS_MAX_LIVE_URL_PER_MINUTE` |
-| Live URL attempts / host / minute | 3 | `MEDIA_LENS_MAX_LIVE_URL_PER_HOST_PER_MINUTE` |
-| Concurrent live URL fetches | 1 | `MEDIA_LENS_MAX_CONCURRENT_LIVE_URL` |
+| Limit | Default | Env override | When checked |
+| --- | --- | --- | --- |
+| Analyses / minute | 10 | `MEDIA_LENS_MAX_ANALYSES_PER_MINUTE` | Before the `/analyze` body is read |
+| Live URL attempts / minute | 10 | `MEDIA_LENS_MAX_LIVE_URL_PER_MINUTE` | After JSON parse, on `mode: "url"` |
+| Live URL attempts / host / minute | 3 | `MEDIA_LENS_MAX_LIVE_URL_PER_HOST_PER_MINUTE` | After JSON parse, on `mode: "url"` |
+| Concurrent live URL fetches | 1 | `MEDIA_LENS_MAX_CONCURRENT_LIVE_URL` | After JSON parse, on `mode: "url"` |
+
+Only the analyses/minute limiter runs before the body is read. Live-URL, per-host, and concurrent limiters need `payload.mode` and the URL, so they run after JSON parse.
 
 Host budget keys on the exact hostname and a registrable-domain approximation (not the full Public Suffix List). Concurrent fetch is also serialized inside `safe-fetch.js`. Exhaustion returns `429 rate_limited`. Setting a live-URL max to `0` rejects all live URL attempts (an extra local brake, not a substitute for the kill switch).
 
@@ -112,15 +114,16 @@ Other existing caps: 512 KiB request body, 60k prepared chars, 200 spans, 8s Jev
 
 Two equivalent controls, re-checked on each `/analyze` (and kill-file `stat` each time):
 
-1. `MEDIA_LENS_KILL_SWITCH=true`
-2. `touch` the path in `MEDIA_LENS_KILL_SWITCH_FILE`
+1. `MEDIA_LENS_KILL_SWITCH=true` — the exact string `true` only, same rule as `MEDIA_LENS_ENABLE_LIVE` and `MEDIA_LENS_ENABLE_LIVE_URL`. `TRUE`, `1`, and `yes` do not assert the kill switch.
+2. `touch` the path in `MEDIA_LENS_KILL_SWITCH_FILE` (existence, not file contents)
 
 Effect:
 
 - Live URL fetch does not run (no DNS, no connect).
 - Live Jev does not run.
-- If `MEDIA_LENS_MODE=live`, `/analyze` returns `503 live_killed`.
-- Fixture mode continues to serve local examples.
+- If `MEDIA_LENS_MODE=live`, `/analyze` returns `503 live_killed` (before the body is read).
+- Fixture `mode: "fixture"` continues to serve local examples.
+- Fixture `mode: "url"` is `400 URL_MODE_REQUIRES_LIVE` even when the kill switch is on. The kill check runs after that gate.
 
 `/health` remains up so operators can confirm `killSwitch: true` without secrets.
 
@@ -164,7 +167,7 @@ The worker writes one JSON object per event to stderr (tests may capture a sink)
 | --- | --- |
 | `live_url_blocked` | URL fetch refused (`live_url_disabled`, allowlist miss, URL mode without live) |
 | `ssrf_block` | Policy denial (`BLOCKED_HOST`, `BAD_SCHEME`, `BAD_URL`, `REDIRECT_DOWNGRADE`, `PIN_MISMATCH`) |
-| `kill_switch` | Kill switch asserted on a live `/analyze` |
+| `kill_switch` | Kill switch asserted on a live-mode `/analyze` (`503 live_killed`). Fixture `mode: "url"` is `live_url_blocked` / `URL_MODE_REQUIRES_LIVE` first, not `kill_switch` |
 | `rate_limit` | Analyze, live-URL, per-host, or concurrent budget exhausted |
 | `analyze_complete` | Response about to be sent (latency and counts only) |
 

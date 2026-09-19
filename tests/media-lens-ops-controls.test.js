@@ -106,6 +106,10 @@ test('ENABLE_LIVE and ENABLE_LIVE_URL remain default-off; kill switch is off unt
   assert.equal(wrongCase.liveEnabled, false);
   assert.equal(wrongCase.liveUrlEnabled, false);
   assert.equal(isKillSwitchAsserted(wrongCase), false);
+
+  for (const value of ['1', 'yes', 'true ', ' true']) {
+    assert.equal(isKillSwitchAsserted(loadConfig({ MEDIA_LENS_KILL_SWITCH: value })), false);
+  }
 });
 
 test('kill switch forces live URL and live Jev off even when enable flags are true', async () => {
@@ -228,6 +232,38 @@ test('fixture mode still analyzes when the kill switch is asserted', async () =>
     });
     assert.equal(res.status, 200);
     assert.equal(res.body.schema, 'influence-graph.v1');
+  } finally {
+    server.close();
+  }
+});
+
+test('fixture mode:url is URL_MODE_REQUIRES_LIVE even when the kill switch is on', async () => {
+  const audit = collectAudit();
+  let fetchHits = 0;
+  const config = loadConfig({ MEDIA_LENS_MODE: 'fixture', MEDIA_LENS_KILL_SWITCH: 'true' });
+  const server = await listen(
+    createServer(config, {
+      auditLogger: audit.logger,
+      fetchArticle: async () => {
+        fetchHits += 1;
+        throw new Error('must not fetch');
+      }
+    })
+  );
+  try {
+    const res = await requestJson(server, {
+      method: 'POST',
+      path: '/analyze',
+      body: { user_asserted_public: true, mode: 'url', url: 'http://203.0.113.7/article' }
+    });
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error, 'URL_MODE_REQUIRES_LIVE');
+    assert.equal(fetchHits, 0);
+    assert.ok(audit.events().some((event) => event.event === 'live_url_blocked' && event.error === 'URL_MODE_REQUIRES_LIVE'));
+    assert.equal(
+      audit.events().some((event) => event.event === 'kill_switch'),
+      false
+    );
   } finally {
     server.close();
   }
@@ -450,11 +486,18 @@ test('ops runbook exists, stays off Pages, and does not claim production readine
   const body = await readFile(RUNBOOK, 'utf8');
   assert.match(body, /Issue #118/);
   assert.match(body, /MEDIA_LENS_KILL_SWITCH/);
+  assert.match(body, /exact string `true` only/);
+  assert.match(body, /do not assert the kill switch/);
   assert.match(body, /MEDIA_LENS_ENABLE_LIVE_URL/);
   assert.match(body, /live_url_blocked/);
   assert.match(body, /ssrf_block/);
   assert.match(body, /kill_switch/);
   assert.match(body, /rate_limit/);
+  assert.match(body, /Before the `\/analyze` body is read/);
+  assert.match(body, /After JSON parse, on `mode: "url"`/);
+  assert.match(body, /Only the analyses\/minute limiter runs before the body is read/);
+  assert.match(body, /Fixture `mode: "url"` is `400 URL_MODE_REQUIRES_LIVE` even when the kill switch is on/);
+  assert.match(body, /Kill switch asserted on a live-mode `\/analyze`/);
   assert.match(body, /Latency/);
   assert.match(body, /Abstentions/);
   assert.match(body, /SSRF blocks/);
@@ -470,4 +513,14 @@ test('ops runbook exists, stays off Pages, and does not claim production readine
   await buildPagesSite(dest);
   const files = await listSiteFiles(dest);
   assert.equal(files.includes(RUNBOOK), false);
+});
+
+test('fetchArticle on createServer is a test seam and is unused by startServer', async () => {
+  const serverSrc = await readFile('media-lens/worker/server.js', 'utf8');
+  assert.match(serverSrc, /options\.fetchArticle is a test\/programmatic seam only/);
+  assert.match(serverSrc, /Unused by startServer\(\) \/ the CLI/);
+  const startBlock = serverSrc.slice(serverSrc.indexOf('export async function startServer'));
+  assert.match(startBlock, /createServer\(config\)/);
+  assert.doesNotMatch(startBlock.slice(0, 400), /fetchArticle/);
+  assert.doesNotMatch(startBlock.slice(0, 250), /options = \{\}/);
 });

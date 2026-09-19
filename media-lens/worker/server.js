@@ -234,15 +234,8 @@ function requireLiveModeReady(config) {
 function liveUrlGate({ payload, config, audit, consumeLiveUrl, consumeLiveUrlHost }) {
   const flags = effectiveLiveFlags(config);
   const urlFields = safeUrlAuditFields(payload.url);
-  if (flags.killSwitch) {
-    audit.emit(AUDIT_EVENTS.KILL_SWITCH, {
-      mode: config.mode,
-      input_mode: payload.mode,
-      error: 'live_killed',
-      kill_switch: true
-    });
-    return { error: 'live_killed', status: 503, message: 'Live URL and live Jev are disabled by the operator kill switch.' };
-  }
+  // Fixture workers reject URL mode as URL_MODE_REQUIRES_LIVE before the
+  // kill switch, matching preparePayload. Kill switch 503 is live-mode only.
   if (config.mode !== 'live') {
     audit.emit(AUDIT_EVENTS.LIVE_URL_BLOCKED, {
       mode: config.mode,
@@ -252,6 +245,15 @@ function liveUrlGate({ payload, config, audit, consumeLiveUrl, consumeLiveUrlHos
       ...urlFields
     });
     return { error: 'URL_MODE_REQUIRES_LIVE', status: 400, message: 'URL mode requires the worker to be running in live mode' };
+  }
+  if (flags.killSwitch) {
+    audit.emit(AUDIT_EVENTS.KILL_SWITCH, {
+      mode: config.mode,
+      input_mode: payload.mode,
+      error: 'live_killed',
+      kill_switch: true
+    });
+    return { error: 'live_killed', status: 503, message: 'Live URL and live Jev are disabled by the operator kill switch.' };
   }
   if (flags.liveUrlEnabled !== true) {
     audit.emit(AUDIT_EVENTS.LIVE_URL_BLOCKED, {
@@ -328,10 +330,14 @@ function liveUrlGate({ payload, config, audit, consumeLiveUrl, consumeLiveUrlHos
  * Create (but do not start) the Media Lens worker HTTP server.
  * Live mode is refused here, not only in startServer(), so a direct
  * createServer(config).listen() cannot skip the opt-in + API-key gate.
+ *
+ * options.fetchArticle is a test/programmatic seam only. startServer()
+ * does not pass it; the CLI and operator path always use fetchArticleSafely.
  */
 export function createServer(config = loadConfig(), options = {}) {
   requireLiveModeReady(config);
   const audit = options.auditLogger || createAuditLogger();
+  // Test/programmatic only. Unused by startServer() / the CLI.
   const fetchArticle = options.fetchArticle || null;
   const checkRateLimit = createFixedWindowLimiter(config.limits.maxAnalysesPerMinute);
   const consumeLiveUrl = createFixedWindowLimiter(config.limits.maxLiveUrlPerMinute);
@@ -557,10 +563,12 @@ export function createServer(config = loadConfig(), options = {}) {
 /**
  * Start the worker. Refuses to start in live mode unless
  * MEDIA_LENS_ENABLE_LIVE=true and the TypeSafe key are both present.
+ * Does not accept a fetchArticle override; that seam exists only on
+ * createServer() for tests.
  */
-export async function startServer(config = loadConfig(), options = {}) {
+export async function startServer(config = loadConfig()) {
   requireLiveModeReady(config);
-  const server = createServer(config, options);
+  const server = createServer(config);
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(config.port, config.host, resolve);

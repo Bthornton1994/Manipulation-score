@@ -112,9 +112,11 @@ export function loadConfig(env = process.env) {
 }
 
 /**
- * Per-request kill-switch check. MEDIA_LENS_KILL_SWITCH=true or an existing
- * MEDIA_LENS_KILL_SWITCH_FILE forces live URL fetch and live Jev off.
- * File existence is re-read each call so ops can `touch` without a restart.
+ * Per-request kill-switch check. MEDIA_LENS_KILL_SWITCH must be the exact
+ * string `true` (same rule as ENABLE_LIVE / ENABLE_LIVE_URL). `TRUE`, `1`,
+ * and `yes` do not assert it. An existing MEDIA_LENS_KILL_SWITCH_FILE is
+ * equivalent. File existence is re-read each call so ops can `touch`
+ * without a restart.
  */
 export function isKillSwitchAsserted(config) {
   const env = getEnv(config);

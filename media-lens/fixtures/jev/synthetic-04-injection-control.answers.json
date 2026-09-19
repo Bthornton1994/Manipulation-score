@@ -7,10 +7,12 @@
         "probabilities": {
           "none": 0.9
         },
-        "confidence": 0.9
+        "confidence": 0.9,
+        "type": "choice"
       },
       "is_quoted_or_attributed": {
-        "noul": 0.05
+        "noul": 0.05,
+        "type": "noul"
       }
     },
     "span-3": {
@@ -19,10 +21,12 @@
         "probabilities": {
           "none": 0.85
         },
-        "confidence": 0.85
+        "confidence": 0.85,
+        "type": "choice"
       },
       "is_quoted_or_attributed": {
-        "noul": 0.05
+        "noul": 0.05,
+        "type": "noul"
       }
     },
     "span-4": {
@@ -31,10 +35,12 @@
         "probabilities": {
           "none": 0.8
         },
-        "confidence": 0.8
+        "confidence": 0.8,
+        "type": "choice"
       },
       "is_quoted_or_attributed": {
-        "noul": 0.1
+        "noul": 0.1,
+        "type": "noul"
       }
     }
   }

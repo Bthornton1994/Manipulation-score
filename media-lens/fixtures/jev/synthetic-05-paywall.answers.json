@@ -7,10 +7,12 @@
         "probabilities": {
           "none": 0.85
         },
-        "confidence": 0.85
+        "confidence": 0.85,
+        "type": "choice"
       },
       "is_quoted_or_attributed": {
-        "noul": 0.1
+        "noul": 0.1,
+        "type": "noul"
       }
     },
     "span-3": {
@@ -20,10 +22,12 @@
           "vague_authority": 0.62,
           "none": 0.2
         },
-        "confidence": 0.62
+        "confidence": 0.62,
+        "type": "choice"
       },
       "is_quoted_or_attributed": {
-        "noul": 0.2
+        "noul": 0.2,
+        "type": "noul"
       }
     }
   }

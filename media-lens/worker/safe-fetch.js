@@ -20,6 +20,7 @@ import {
   stripIPv6Brackets,
   taggedError
 } from './address-policy.js';
+import { hostIsAllowlisted } from './host-key.js';
 import { finalizePinnedResponse, performPinnedGet } from './pinned-http.js';
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
@@ -128,6 +129,9 @@ async function fetchArticleSafelyUnlocked(
     maxHeaderBytes = DEFAULT_MAX_HEADER_BYTES,
     parseTimeoutMs = DEFAULT_PARSE_TIMEOUT_MS,
     lookupImpl = dnsLookup,
+    // Optional canary hostname allowlist (exact hosts). Empty/omitted means
+    // address-policy only. Checked on the entry URL and every redirect hop.
+    urlAllowlist = null,
     // Test seams. Production callers omit these: classifyImpl stays
     // classifyIp (loopback remains BLOCKED_HOST), tlsCa is unset so the
     // default CA store applies, and createConnectionImpl/requestImpl are
@@ -144,10 +148,16 @@ async function fetchArticleSafelyUnlocked(
   const request = requestImpl || defaultRequestImpl;
 
   for (let hop = 0; hop <= maxRedirects; hop++) {
-    const { parsed } = parseArticleUrl(currentUrl);
+    const { parsed, bareHost } = parseArticleUrl(currentUrl);
 
     if (previousScheme === 'https:' && parsed.protocol === 'http:') {
       throw taggedError('HTTPS to HTTP redirects are not allowed', 'REDIRECT_DOWNGRADE');
+    }
+
+    // Canary allowlist is a trust boundary, not only an entry-URL gate.
+    // An open redirect on an allowlisted host must not fetch off-list origins.
+    if (!hostIsAllowlisted(bareHost, urlAllowlist)) {
+      throw taggedError('This host is not on the operator URL allowlist.', 'live_url_not_allowlisted');
     }
 
     const pin = await pinHost(parsed.hostname, { lookupImpl, classifyImpl });

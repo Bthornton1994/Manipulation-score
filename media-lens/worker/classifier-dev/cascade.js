@@ -1,8 +1,9 @@
-// Selective cascade: direct Jev is primary. classifier.dev smart is an
-// evaluation-only escalation, not a second independent model. Agreement
-// may be recorded as calibrated only when supported. Disagreement and
-// unavailability become explicit review or unavailable. Never a silent
-// fallback.
+// Selective cascade: direct Jev is primary. classifier.dev is an
+// evaluation-only escalation (default tier fast; smart only when the
+// operator sets MEDIA_LENS_CLASSIFIER_DEV_TIER=smart exactly), not a
+// second independent model. Agreement may be recorded as calibrated only
+// when supported. Disagreement and unavailability become explicit review
+// or unavailable. Never a silent fallback.
 
 import { JEV_SIGNAL_QUESTION_ID, JEV_QUOTED_QUESTION_ID, JEV_MAX_SPAN_CHARS } from '../adapters/jev.js';
 import { THRESHOLDS } from '../fusion.js';

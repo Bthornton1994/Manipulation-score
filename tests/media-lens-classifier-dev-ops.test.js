@@ -68,6 +68,8 @@ test('runbook can disable classifier.dev independently of Jev and fail closed wh
   assert.match(body, /Redirects are not followed/);
   assert.match(body, /agree_calibrated/);
   assert.match(body, /jev-1\.13\.0/);
+  assert.match(body, /MEDIA_LENS_CLASSIFIER_DEV_TIER/);
+  assert.match(body, /Unset\/empty → `fast`/);
 });
 
 test('browser Media Lens files never call classifier.dev', async () => {

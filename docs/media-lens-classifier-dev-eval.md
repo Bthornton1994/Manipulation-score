@@ -1,6 +1,6 @@
 # classifier.dev evaluation harness (scaffold)
 
-Status: **evaluation-only**. Not production-ready. Not a second independent model. Direct Jev remains the Media Lens primary typed classifier. classifier.dev smart is a selective low-confidence escalation behind a default-off flag.
+Status: **evaluation-only**. Not production-ready. Not a second independent model. Direct Jev remains the Media Lens primary typed classifier. classifier.dev is a selective low-confidence escalation behind a default-off flag. The default requested tier is `fast` when `MEDIA_LENS_CLASSIFIER_DEV_TIER` is unset or empty. Smart requires the exact value `MEDIA_LENS_CLASSIFIER_DEV_TIER=smart`.
 
 Related to [Issue #118](https://github.com/Bthornton1994/Manipulation-score/issues/118). This document does **not** close that issue. AG News / emotion-benchmark figures from provider pages are **not** Media Lens accuracy and must not be cited as such.
 
@@ -13,7 +13,7 @@ Fixture-only paths in `media-lens/worker/classifier-dev/eval-harness.js`, seeded
 | `direct_jev` | Typed TypeSafe Jev answers (recorded / fixture) |
 | `cdev_fast` | classifier.dev `tier=fast` recorded outputs |
 | `cdev_smart` | classifier.dev `tier=smart` recorded outputs |
-| `cascade` | Jev primary + selective smart escalation policy |
+| `cascade` | Jev primary + selective escalation policy (default requested tier `fast`) |
 | `deterministic_policy` | Local rules only (for example absolute-quantifier candidates) |
 
 Default CI never calls classifier.dev. Live URL and live pasted-text stay disabled.

@@ -61,7 +61,7 @@ async function jevOkBody() {
 
 function cdevOkBody() {
   return {
-    tier: 'smart',
+    tier: 'fast',
     model: 'jev-1.13.0',
     results: [
       {

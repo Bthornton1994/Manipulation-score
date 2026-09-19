@@ -272,7 +272,7 @@ test('selective cascade behind ENABLE_CLASSIFIER_DEV records evaluation metadata
         headers: { get: () => 'v1' },
         async json() {
           return {
-            tier: 'smart',
+            tier: 'fast',
             model: 'jev-1.13.0',
             results: [{ label: 'no_detected_signal', confidence: 0.9, scores: { no_detected_signal: 0.9 } }]
           };

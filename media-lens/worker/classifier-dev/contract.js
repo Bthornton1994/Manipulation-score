@@ -27,7 +27,8 @@ export const DEFAULT_MAX_BATCH = 8;
 export const DEFAULT_TIMEOUT_MS = 12000;
 export const DEFAULT_MAX_DAILY_CLASSIFICATIONS = 200;
 export const DEFAULT_MIN_CONFIDENCE_FOR_ESCALATION = 0.7;
-export const DEFAULT_TIER = 'smart';
+export const DEFAULT_TIER = 'fast';
+export const SMART_TIER = 'smart';
 export const MAX_RETRY_ATTEMPTS = 4;
 export const RETRY_BASE_DELAY_MS = 250;
 export const MAX_RETRY_AFTER_MS = 5000;
@@ -55,10 +56,25 @@ export function isValidUnitInterval(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
 }
 
+/**
+ * Request-body tier: exact `fast` or `smart` only (no case folding).
+ * Unrecognised values fall back. Env parsing uses readClassifierDevTier.
+ */
 export function normalizeTier(raw, fallback = DEFAULT_TIER) {
-  if (typeof raw !== 'string') return fallback;
-  const tier = raw.trim().toLowerCase();
-  return tier === 'fast' || tier === 'smart' ? tier : fallback;
+  if (raw === 'fast' || raw === 'smart') return raw;
+  return fallback;
+}
+
+/**
+ * MEDIA_LENS_CLASSIFIER_DEV_TIER. Unset or empty → `fast`.
+ * Smart escalation requires the exact string `smart`, same rule as
+ * ENABLE_* flags (`SMART`, `Smart`, `1`, and `true` do not select smart).
+ */
+export function readClassifierDevTier(raw) {
+  if (raw == null || raw === '') return DEFAULT_TIER;
+  if (raw === SMART_TIER) return SMART_TIER;
+  if (raw === DEFAULT_TIER) return DEFAULT_TIER;
+  return DEFAULT_TIER;
 }
 
 export function normalizeClassifierDevHostname(hostname) {

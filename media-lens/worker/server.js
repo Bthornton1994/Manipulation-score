@@ -211,10 +211,20 @@ export async function validateOrAbstain({ graph, prepared, config, consentAt }) 
   });
 }
 
+function requireLiveModeReady(config) {
+  const readiness = assertLiveModeIsReady(config);
+  if (!readiness.ok) {
+    throw new Error(readiness.reason);
+  }
+}
+
 /**
  * Create (but do not start) the Media Lens worker HTTP server.
+ * Live mode is refused here, not only in startServer(), so a direct
+ * createServer(config).listen() cannot skip the opt-in + API-key gate.
  */
 export function createServer(config = loadConfig()) {
+  requireLiveModeReady(config);
   const checkRateLimit = createRateLimiter(config.limits.maxAnalysesPerMinute);
 
   return http.createServer(async (req, res) => {
@@ -330,10 +340,7 @@ export function createServer(config = loadConfig()) {
  * MEDIA_LENS_ENABLE_LIVE=true and the TypeSafe key are both present.
  */
 export async function startServer(config = loadConfig()) {
-  const readiness = assertLiveModeIsReady(config);
-  if (!readiness.ok) {
-    throw new Error(readiness.reason);
-  }
+  requireLiveModeReady(config);
   const server = createServer(config);
   await new Promise((resolve, reject) => {
     server.once('error', reject);

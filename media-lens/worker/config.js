@@ -79,7 +79,8 @@ export function publicConfig(config) {
 /**
  * Live mode must refuse to start unless the operator has opted in with
  * MEDIA_LENS_ENABLE_LIVE=true *and* the required TypeSafe key is present.
- * Called by server.js before binding.
+ * Called by createServer() before the HTTP server is constructed, so a
+ * direct createServer(config).listen() cannot bypass startServer().
  */
 export function assertLiveModeIsReady(config) {
   if (config.mode !== 'live') return { ok: true };

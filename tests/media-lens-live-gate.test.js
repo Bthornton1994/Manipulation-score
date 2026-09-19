@@ -92,6 +92,75 @@ test('live mode cannot start with only MEDIA_LENS_ENABLE_LIVE=true', async () =>
   );
 });
 
+test('createServer rejects live mode with only an API key', () => {
+  const config = loadConfig({
+    MEDIA_LENS_MODE: 'live',
+    MEDIA_LENS_TYPESAFE_API_KEY: 'test-key-not-used',
+    MEDIA_LENS_PORT: '0'
+  });
+  assert.throws(
+    () => createServer(config).listen(0, '127.0.0.1'),
+    /MEDIA_LENS_ENABLE_LIVE=true/
+  );
+});
+
+test('createServer rejects live mode with only MEDIA_LENS_ENABLE_LIVE=true', () => {
+  const config = loadConfig({
+    MEDIA_LENS_MODE: 'live',
+    MEDIA_LENS_ENABLE_LIVE: 'true',
+    MEDIA_LENS_PORT: '0'
+  });
+  assert.throws(
+    () => createServer(config).listen(0, '127.0.0.1'),
+    /MEDIA_LENS_TYPESAFE_API_KEY/
+  );
+});
+
+test('createServer accepts live configuration only when ENABLE_LIVE and API key are both present', async () => {
+  const config = loadConfig({
+    MEDIA_LENS_MODE: 'live',
+    MEDIA_LENS_ENABLE_LIVE: 'true',
+    MEDIA_LENS_TYPESAFE_API_KEY: 'test-key-not-used',
+    MEDIA_LENS_PORT: '0'
+  });
+  const server = await listen(createServer(config));
+  try {
+    const res = await requestJson(server, { method: 'GET', path: '/health' });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.mode, 'live');
+    assert.equal(res.body.liveEnabled, true);
+    assert.equal(res.body.jev.hasApiKey, true);
+    assert.doesNotMatch(JSON.stringify(res.body), /test-key-not-used/);
+  } finally {
+    server.close();
+  }
+});
+
+test('createServer fixture mode remains unchanged without live opt-in or API key', async () => {
+  const config = loadConfig({ MEDIA_LENS_MODE: 'fixture' });
+  assert.equal(config.liveEnabled, false);
+  assert.equal(config.jev.hasApiKey, false);
+  const server = await listen(createServer(config));
+  try {
+    const health = await requestJson(server, { method: 'GET', path: '/health' });
+    assert.equal(health.status, 200);
+    assert.equal(health.body.mode, 'fixture');
+    assert.equal(health.body.liveEnabled, false);
+
+    const fixtureRes = await requestJson(server, {
+      method: 'POST',
+      path: '/analyze',
+      body: { user_asserted_public: true, mode: 'fixture', fixture_id: 'synthetic-01-quoted-vs-authorial' }
+    });
+    assert.equal(fixtureRes.status, 200);
+    assert.equal(fixtureRes.body.schema, 'influence-graph.v1');
+    assert.equal(validate(fixtureRes.body).valid, true);
+    assert.equal(fixtureRes.body.artifact.input_mode, 'fixture');
+  } finally {
+    server.close();
+  }
+});
+
 test('live pasted text is rejected before any external request', async () => {
   let jevHits = 0;
   const mockJev = http.createServer((req, res) => {

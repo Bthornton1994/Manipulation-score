@@ -21,7 +21,7 @@ media-lens/
 Set with `MEDIA_LENS_MODE` (default `fixture`):
 
 - **`fixture`** — the only mode automated tests and CI exercise. No outbound network at all. The Jev and Newsjack adapters read local JSON fixtures under `fixtures/jev/` and `fixtures/newsjack/`.
-- **`live`** — refuses to start unless **both** `MEDIA_LENS_ENABLE_LIVE=true` and `MEDIA_LENS_TYPESAFE_API_KEY` are set. Live pasted-text analysis is disabled and is rejected before any external request. Live URL fetch is experimental and not production-ready. When those gates pass, prepared public span text from a fetched URL may be sent to TypeSafe's Jev classifier over HTTPS. Newsjack provenance in live mode is read from an **operator-provided artifacts directory** (`MEDIA_LENS_NEWSJACK_ARTIFACTS_DIR`) — the worker never spawns the Newsjack CLI and never calls a live news-search service.
+- **`live`** — refuses to start unless **both** `MEDIA_LENS_ENABLE_LIVE=true` and `MEDIA_LENS_TYPESAFE_API_KEY` are set. Live pasted-text analysis is disabled and is rejected before any external request. Live URL fetch is experimental, **disabled by default**, and additionally requires `MEDIA_LENS_ENABLE_LIVE_URL=true`. It is not production-ready. When those gates pass, prepared public span text from a fetched URL may be sent to TypeSafe's Jev classifier over HTTPS. Newsjack provenance in live mode is read from an **operator-provided artifacts directory** (`MEDIA_LENS_NEWSJACK_ARTIFACTS_DIR`) — the worker never spawns the Newsjack CLI and never calls a live news-search service.
 
 Environment variables (read only by `worker/config.js`, never logged, never returned by `/health`):
 
@@ -29,6 +29,7 @@ Environment variables (read only by `worker/config.js`, never logged, never retu
 | --- | --- |
 | `MEDIA_LENS_MODE` | `fixture` (default) or `live` |
 | `MEDIA_LENS_ENABLE_LIVE` | explicit opt-in; must be the exact value `true` before live mode can start (default: unset/false) |
+| `MEDIA_LENS_ENABLE_LIVE_URL` | exact value `true` required **in addition** before `mode: "url"` may fetch; live Jev tests must not open article fetch (default: unset/false) |
 | `MEDIA_LENS_HOST` / `MEDIA_LENS_PORT` | worker bind address (default `127.0.0.1:8787`) |
 | `MEDIA_LENS_TYPESAFE_API_KEY` | Jev API key; required for `live` mode together with `MEDIA_LENS_ENABLE_LIVE=true` |
 | `MEDIA_LENS_TYPESAFE_BASE_URL` | Jev API base URL override (used by tests to point at a mock server) |
@@ -40,7 +41,7 @@ Environment variables (read only by `worker/config.js`, never logged, never retu
 
 512 KB request body; 60,000 char prepared text; 200 spans; 10 analyses/minute/worker; 8 s per Jev call; 30 s per analysis. Exceeding a limit returns HTTP 413/429 and a graph with a single abstention, never a partial result.
 
-`worker/safe-fetch.js` rejects loopback/private/link-local hosts (including IPv6 literals, IPv4-mapped IPv6 in dotted and hexadecimal forms, and via redirect) before fetching a live-mode URL, resolving the hostname once via DNS at request time. A residual risk in any such check is DNS rebinding: the resolved address could change between that lookup and the underlying TCP connection. Other IPv4-embedded IPv6 prefixes (for example NAT64 `64:ff9b::/96`, SIIT `::ffff:0:0:0/96`, and deprecated IPv4-compatible `::/96`) are not classified as IPv4. Live URL mode is still not production-ready.
+`worker/safe-fetch.js` fetches live-mode article URLs with **connect-time destination pinning** (Issue #118): it classifies every A/AAAA, fails closed on mixed public+private DNS, and connects only to one pre-classified public IP via a custom `lookup` that never calls DNS again. IPv4-mapped `::ffff:0:0/96` (R1), SIIT `::ffff:0:0:0/96`, NAT64 `64:ff9b::/96`, deprecated IPv4-compatible `::/96`, and 6to4 extract IPv4 and apply the IPv4 table; Teredo and unknown embeddings fail closed. Redirects are re-validated hop-by-hop with re-pin; HTTPS→HTTP is denied; `HTTP_PROXY` is ignored. DNS rebinding cannot retarget an established pinned socket. Residual risk: a public pinned IP can still serve hostile HTML (content risk, not SSRF). Live URL mode is still not production-ready.
 
 ## Consent and disclosure
 

@@ -693,3 +693,56 @@ test('fetchArticle on createServer is a test seam and is unused by startServer',
   assert.doesNotMatch(startBlock.slice(0, 400), /fetchArticle/);
   assert.doesNotMatch(startBlock.slice(0, 250), /options = \{\}/);
 });
+
+test('allowlist and SSRF rejects do not burn the live-URL rate budget', async () => {
+  const audit = collectAudit();
+  const config = liveUrlConfig({ MEDIA_LENS_URL_ALLOWLIST: 'allowed.example' });
+  config.limits = { ...config.limits, maxAnalysesPerMinute: 20, maxLiveUrlPerMinute: 1, maxLiveUrlPerHostPerMinute: 10 };
+  let fetchHits = 0;
+  const server = await listen(
+    createServer(config, {
+      auditLogger: audit.logger,
+      fetchArticle: async () => {
+        fetchHits += 1;
+        throw Object.assign(new Error('mocked fetch failure'), { code: 'FETCH_ERROR' });
+      }
+    })
+  );
+  try {
+    const denied = await requestJson(server, {
+      method: 'POST',
+      path: '/analyze',
+      body: { user_asserted_public: true, mode: 'url', url: 'http://denied.example/article' }
+    });
+    assert.equal(denied.status, 400);
+    assert.equal(denied.body.error, 'live_url_not_allowlisted');
+
+    const loopback = await requestJson(server, {
+      method: 'POST',
+      path: '/analyze',
+      body: { user_asserted_public: true, mode: 'url', url: 'http://127.0.0.1/secret' }
+    });
+    assert.equal(loopback.status, 400);
+    assert.equal(loopback.body.error, 'BLOCKED_HOST');
+
+    // Budget still available for one authorized attempt.
+    const ok = await requestJson(server, {
+      method: 'POST',
+      path: '/analyze',
+      body: { user_asserted_public: true, mode: 'url', url: 'http://allowed.example/article' }
+    });
+    assert.equal(ok.status, 200);
+    assert.equal(fetchHits, 1);
+
+    const limited = await requestJson(server, {
+      method: 'POST',
+      path: '/analyze',
+      body: { user_asserted_public: true, mode: 'url', url: 'http://allowed.example/other' }
+    });
+    assert.equal(limited.status, 429);
+    assert.equal(limited.body.error, 'rate_limited');
+    assert.equal(fetchHits, 1);
+  } finally {
+    server.close();
+  }
+});

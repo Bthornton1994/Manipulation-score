@@ -200,7 +200,8 @@ async function preparePayload({ payload, config, fetchArticle }) {
       maxBytes: config.limits.urlFetchMaxBytes,
       maxRedirects: config.limits.urlFetchMaxRedirects,
       maxHeaderBytes: config.limits.urlFetchMaxHeaderBytes,
-      parseTimeoutMs: config.limits.urlFetchParseTimeoutMs
+      parseTimeoutMs: config.limits.urlFetchParseTimeoutMs,
+      urlAllowlist: config.urlAllowlist
     });
     return prepareFromHtml({ html, kind: payload.kind || 'article', sourceUrl: payload.url, inputMode: 'url' });
   }
@@ -490,12 +491,17 @@ export function createServer(config = loadConfig(), options = {}) {
               ...safeUrlAuditFields(payload.url)
             });
           }
-          if (err.code === 'live_url_disabled' || err.code === 'URL_MODE_REQUIRES_LIVE') {
+          if (
+            err.code === 'live_url_disabled' ||
+            err.code === 'URL_MODE_REQUIRES_LIVE' ||
+            err.code === 'live_url_not_allowlisted'
+          ) {
             audit.emit(AUDIT_EVENTS.LIVE_URL_BLOCKED, {
               mode: config.mode,
               input_mode: payload.mode,
               error: err.code,
-              live_url_enabled: false,
+              live_url_enabled: err.code === 'live_url_not_allowlisted' ? flags.liveUrlEnabled : false,
+              allowlist_configured: err.code === 'live_url_not_allowlisted' ? true : undefined,
               ...safeUrlAuditFields(payload.url)
             });
           }

@@ -320,10 +320,10 @@ Follow redirects **manually**. Never set `redirect: 'follow'`.
 | Relative `Location` | resolve against the **current hop URL** (not the original user URL only) |
 | Protocol-relative `//host/path` | resolve scheme from current hop, then full validation |
 | Max hops | 3 (existing `urlFetchMaxRedirects`). Exceeded: `TOO_MANY_REDIRECTS` → abstention graph |
-| Each hop | full §5–§7 (scheme, userinfo, host syntax, DNS, classify all addresses, pin, connect-time check) |
+| Each hop | full §5–§7 (scheme, userinfo, host syntax, DNS, classify all addresses, pin, connect-time check). If `MEDIA_LENS_URL_ALLOWLIST` is non-empty, the hop hostname must also match that exact-hostname canary list **before** pin/connect |
 | `https` → `http` | **fail closed** (`REDIRECT_DOWNGRADE`). Strip of TLS is a class of attack, not a convenience |
 | `http` → `https` | allowed if the new hop passes policy |
-| Cross-host | allowed if the new host independently passes |
+| Cross-host | allowed if the new host independently passes public-address policy **and** (when configured) the canary hostname allowlist. Off-list hops fail closed as `live_url_not_allowlisted` and must not return HTTP 200 from the hop |
 | Cross-port | allowed if destination address still `allow_public` |
 | Credentials | never forward. None were sent on hop 1 |
 | Method | remain GET |
@@ -331,6 +331,8 @@ Follow redirects **manually**. Never set `redirect: 'follow'`.
 | `307/308` with body | article fetch has no body |
 
 Redirect to a blocked address must fail as `BLOCKED_HOST` **before** connect, including when `Location` is an IP literal, mapped IPv6, NAT64 form, or metadata hostname.
+
+Relative `Location` on the same allowlisted host remains allowed. A redirect from an allowlisted host to a different hostname that is not on `MEDIA_LENS_URL_ALLOWLIST` (for example `allowed.example` → `other.example`) is fail-closed. Empty allowlist remains "policy only" (public IPs); this check does not apply until the operator sets the canary list.
 
 ---
 
@@ -598,7 +600,7 @@ Add before live URL enablement:
 | Concurrent URL fetches | 1 per worker (simplifies pin/reuse reasoning) |
 | Bind address | Default `127.0.0.1`. Document that `0.0.0.0` makes the worker a network service and is out of scope for enablement |
 | Fixture id | Already constrained to `^[a-z0-9-]+$` and known files (M1) |
-| URL allowlist | Optional canary-only `MEDIA_LENS_URL_ALLOWLIST` (exact hostnames). Empty means "policy only" (public IPs). Canary should set an allowlist |
+| URL allowlist | Optional canary-only `MEDIA_LENS_URL_ALLOWLIST` (exact hostnames). Empty means "policy only" (public IPs). Canary should set an allowlist. When set, **every redirect hop** is re-validated against the list, not only the initial user URL |
 | Bulk intake | No array of URLs. One URL per `/analyze` |
 
 Abuse cases (product, not only network): automated scoring of named journalists, brigading, leaderboards. Acceptable-use already forbids these. Design does not add a public API on Pages that would make bulk abuse easy.

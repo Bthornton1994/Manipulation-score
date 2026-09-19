@@ -5,7 +5,9 @@
 // pre-classified public IP. TLS SNI and certificate identity stay on the
 // original hostname. The client never calls global fetch() on a user URL
 // and never reads HTTP_PROXY. Redirects are followed manually with a full
-// re-validate and re-pin on every hop. HTTPS→HTTP is denied.
+// re-validate and re-pin on every hop. HTTPS→HTTP is denied. When a canary
+// hostname allowlist is configured, every hop (including the first) is
+// re-checked against it before DNS pin or connect.
 //
 // Live URL remains disabled unless MEDIA_LENS_ENABLE_LIVE_URL=true. This
 // module is not a production-readiness claim.
@@ -20,6 +22,7 @@ import {
   stripIPv6Brackets,
   taggedError
 } from './address-policy.js';
+import { hostIsAllowlisted } from './host-key.js';
 import { finalizePinnedResponse, performPinnedGet } from './pinned-http.js';
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
@@ -103,8 +106,9 @@ let fetchGate = Promise.resolve();
 /**
  * Fetch an article URL safely: http(s) GET only, no cookies, no userinfo,
  * loopback/private/link-local/multicast/metadata/embedding policy applied
- * at every hop, connect-time pin, bounded time/bytes/headers/parse, no
- * global fetch(userUrl). Concurrent fetches are serialized per process.
+ * at every hop, canary hostname allowlist re-checked at every hop,
+ * connect-time pin, bounded time/bytes/headers/parse, no global
+ * fetch(userUrl). Concurrent fetches are serialized per process.
  */
 export function fetchArticleSafely(targetUrl, options) {
   const run = fetchGate.then(
@@ -136,6 +140,7 @@ async function fetchArticleSafelyUnlocked(
     requestImpl = null,
     createConnectionImpl = null,
     tlsCa = null,
+    urlAllowlist = null,
     signal: outerSignal = null
   } = {}
 ) {
@@ -148,6 +153,13 @@ async function fetchArticleSafelyUnlocked(
 
     if (previousScheme === 'https:' && parsed.protocol === 'http:') {
       throw taggedError('HTTPS to HTTP redirects are not allowed', 'REDIRECT_DOWNGRADE');
+    }
+
+    // Canary allowlist is hop-scoped. Empty/unset means public-address
+    // policy only (hostIsAllowlisted returns true). Off-list hops fail
+    // closed before pin/connect so the hop cannot return 200.
+    if (!hostIsAllowlisted(parsed.hostname, urlAllowlist)) {
+      throw taggedError('This host is not on the operator URL allowlist.', 'live_url_not_allowlisted');
     }
 
     const pin = await pinHost(parsed.hostname, { lookupImpl, classifyImpl });

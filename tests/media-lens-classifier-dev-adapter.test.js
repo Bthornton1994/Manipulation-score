@@ -44,7 +44,7 @@ function readJsonBody(req) {
   });
 }
 
-function okBody({ label = 'no_detected_signal', confidence = 0.9, model = 'jev-1.13.0', tier = 'smart' } = {}) {
+function okBody({ label = 'no_detected_signal', confidence = 0.9, model = 'jev-1.13.0', tier = 'fast' } = {}) {
   return {
     tier,
     model,
@@ -70,6 +70,13 @@ test('request schema accepts inputs+labels and rejects empty or oversized fields
   assert.deepEqual(ok.body.inputs, ['The committee met on Tuesday.']);
   assert.equal(ok.body.tier, 'smart');
   assert.equal(ok.body.instructions, STATIC_INSTRUCTIONS);
+
+  const defaulted = buildClassifyRequest({
+    inputs: ['The committee met on Tuesday.'],
+    labels: ['alpha', 'beta']
+  });
+  assert.equal(defaulted.ok, true);
+  assert.equal(defaulted.body.tier, 'fast');
 
   assert.equal(buildClassifyRequest({ inputs: [], labels: ['a', 'b'] }).ok, false);
   assert.ok(buildClassifyRequest({ inputs: ['x'], labels: ['only'] }).errors.includes('too_few_labels'));
@@ -286,7 +293,7 @@ test('mock /v1/classify succeeds; unversioned / is not used', async () => {
       pathSeen = req.url;
       const body = await readJsonBody(req);
       assert.equal(Array.isArray(body.inputs), true);
-      assert.equal(body.tier, 'smart');
+      assert.equal(body.tier, 'fast');
       res.writeHead(200, { 'content-type': 'application/json', 'x-api-version': 'v1' });
       res.end(JSON.stringify(okBody({ label: 'no_detected_signal' })));
     },
@@ -392,7 +399,7 @@ test('malformed JSON and result-length mismatch fail closed without retry', asyn
     async (req, res) => {
       await readJsonBody(req);
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ tier: 'smart', model: 'jev-1.13.0', results: [] }));
+      res.end(JSON.stringify({ tier: 'fast', model: 'jev-1.13.0', results: [] }));
     },
     async (base) => {
       const adapter = createClassifierDevAdapter({ enabled: true, baseUrl: base });
@@ -409,7 +416,7 @@ test('model mismatch is recorded and not treated as a silent success', async () 
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(
         JSON.stringify({
-          tier: 'smart',
+          tier: 'fast',
           model: 'mixed',
           results: [{ label: 'no_detected_signal', confidence: 0.9, scores: { no_detected_signal: 0.9 } }]
         })
@@ -432,7 +439,7 @@ test('unknown model name is recorded and is not treated as calibrated agreement'
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(
         JSON.stringify({
-          tier: 'smart',
+          tier: 'fast',
           model: 'mystery-llm',
           results: [{ label: 'no_detected_signal', confidence: 0.9, scores: { no_detected_signal: 0.9 }, model: 'mystery-llm' }]
         })
@@ -480,7 +487,7 @@ test('batch limit splits requests; daily budget fail-closes leftover inputs', as
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(
         JSON.stringify({
-          tier: 'smart',
+          tier: 'fast',
           model: 'jev-1.13.0',
           results: [{ label: 'no_detected_signal', confidence: 0.9, scores: { no_detected_signal: 0.9 } }],
           usage: { classifications: 1 }

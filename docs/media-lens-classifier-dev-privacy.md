@@ -22,6 +22,7 @@ The following are claims from public classifier.dev documentation, treated as **
 ## Product disposition
 
 - The Media Lens classifier.dev adapter stays **evaluation-only** behind `MEDIA_LENS_ENABLE_CLASSIFIER_DEV=true` (exact string).
+- The default requested tier is `fast` when `MEDIA_LENS_CLASSIFIER_DEV_TIER` is unset or empty. Smart (the path whose provider docs mention a further reasoning provider) requires the exact value `MEDIA_LENS_CLASSIFIER_DEV_TIER=smart`.
 - Until owner and contractual verification of privacy, retention, and DPA terms, this feature must not be treated as a release candidate.
 - Only **public article** span text is contemplated for any future live use.
 - **Private messages, pasted sensitive content, and material the user is not authorized to examine are prohibited.** Live pasted-text remains disabled. Live URL remains disabled.

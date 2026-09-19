@@ -16,8 +16,7 @@ import {
   DEFAULT_TIMEOUT_MS,
   DEFAULT_MAX_DAILY_CLASSIFICATIONS,
   DEFAULT_MIN_CONFIDENCE_FOR_ESCALATION,
-  DEFAULT_TIER,
-  normalizeTier,
+  readClassifierDevTier,
   resolveClassifierDevBaseUrl
 } from './classifier-dev/contract.js';
 
@@ -124,7 +123,8 @@ export function loadConfig(env = process.env) {
     classifierDev: {
       enabled: readExactTrue(env, 'MEDIA_LENS_ENABLE_CLASSIFIER_DEV'),
       baseUrl: env.MEDIA_LENS_CLASSIFIER_DEV_BASE_URL || CLASSIFIER_DEV_DEFAULT_BASE_URL,
-      tier: normalizeTier(env.MEDIA_LENS_CLASSIFIER_DEV_TIER, DEFAULT_TIER),
+      // Unset/empty → fast. Smart requires exact MEDIA_LENS_CLASSIFIER_DEV_TIER=smart.
+      tier: readClassifierDevTier(env.MEDIA_LENS_CLASSIFIER_DEV_TIER),
       timeoutMs: readInt(env, 'MEDIA_LENS_CLASSIFIER_DEV_TIMEOUT_MS', DEFAULT_TIMEOUT_MS, {
         min: 1,
         max: 60000

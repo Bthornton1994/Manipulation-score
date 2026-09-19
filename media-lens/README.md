@@ -32,7 +32,7 @@ Worker environment variables (read only by `worker/config.js`, never logged, nev
 | `MEDIA_LENS_ENABLE_LIVE_URL` | exact value `true` required **in addition** before `mode: "url"` may fetch; live Jev tests must not open article fetch (default: unset/false) |
 | `MEDIA_LENS_ENABLE_CLASSIFIER_DEV` | exact value `true` required before the evaluation-only classifier.dev adapter may call `POST /v1/classify` (default: unset/false; not a second independent model) |
 | `MEDIA_LENS_CLASSIFIER_DEV_BASE_URL` | HTTPS production origin must be exactly `https://classifier.dev` (path `POST /v1/classify`). Other hosts and schemes fail closed before connect. Tests may use loopback HTTP. Redirects are not followed |
-| `MEDIA_LENS_CLASSIFIER_DEV_TIER` | `fast` or `smart` (default `smart` for selective escalation) |
+| `MEDIA_LENS_CLASSIFIER_DEV_TIER` | unset/empty → `fast`. Smart escalation requires the exact value `smart` (`SMART` / `Smart` do not select smart; same exact-match rule as ENABLE flags) |
 | `MEDIA_LENS_CLASSIFIER_DEV_TIMEOUT_MS` | per-request AbortController timeout (default 12000) |
 | `MEDIA_LENS_CLASSIFIER_DEV_MAX_BATCH` | local batch cap (default 8) |
 | `MEDIA_LENS_CLASSIFIER_DEV_MAX_DAILY_CLASSIFICATIONS` | in-process daily classification budget (default 200) |

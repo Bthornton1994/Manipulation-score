@@ -23,6 +23,7 @@ Repository and CI defaults:
 | `MEDIA_LENS_ENABLE_LIVE` | unset / false | Exact string `true` required to *start* live mode |
 | `MEDIA_LENS_ENABLE_LIVE_URL` | unset / false | Exact string `true` required **in addition** before `mode: "url"` may fetch |
 | `MEDIA_LENS_ENABLE_CLASSIFIER_DEV` | unset / false | Exact string `true` required before the evaluation-only classifier.dev adapter may make outbound calls. Default-off. Not a second independent model |
+| `MEDIA_LENS_CLASSIFIER_DEV_TIER` | `fast` | Unset/empty → `fast`. Smart escalation requires exact `MEDIA_LENS_CLASSIFIER_DEV_TIER=smart`. `SMART` / `Smart` do not select smart |
 | `MEDIA_LENS_KILL_SWITCH` | unset / false | Exact string `true` only (same rule as the ENABLE flags). Forces live URL, live Jev, isolated pin verification, and classifier.dev off |
 | `MEDIA_LENS_KILL_SWITCH_FILE` | unset | If set and the path exists, same as kill switch |
 | `MEDIA_LENS_URL_ALLOWLIST` | empty | Empty means public-address policy only. Canary should set exact hostnames. When set, every redirect hop is re-checked before pin/connect; off-list hops are `live_url_not_allowlisted` |
@@ -219,7 +220,7 @@ Default-off. Versioned path only: `POST /v1/classify`. Browser pages must not ca
 | --- | --- | --- |
 | `MEDIA_LENS_ENABLE_CLASSIFIER_DEV` | unset / false | Exact `true` required for any outbound classify call |
 | `MEDIA_LENS_CLASSIFIER_DEV_BASE_URL` | `https://classifier.dev` | Exact production origin `https://classifier.dev` and path `POST /v1/classify`. Other hosts fail closed before connect. Tests may use loopback HTTP. Credentials in the URL are rejected. Redirects are not followed. Outbound HTTPS uses connect-time IP pinning |
-| `MEDIA_LENS_CLASSIFIER_DEV_TIER` | `smart` | Escalation uses smart; eval harness may record fast separately |
+| `MEDIA_LENS_CLASSIFIER_DEV_TIER` | `fast` | Unset/empty → `fast`. Smart escalation requires the exact string `smart` (same exact-match rule as ENABLE flags). Eval harness may record smart separately |
 | `MEDIA_LENS_CLASSIFIER_DEV_TIMEOUT_MS` | 12000 | AbortController timeout; timeouts are not retried |
 | `MEDIA_LENS_CLASSIFIER_DEV_MAX_BATCH` | 8 | Local cap below the documented 1000-input ceiling |
 | `MEDIA_LENS_CLASSIFIER_DEV_MAX_DAILY_CLASSIFICATIONS` | 200 | In-process budget; exhaustion is explicit `daily_budget`, not an unmarked other model |

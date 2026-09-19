@@ -2,7 +2,9 @@
 //
 // Fail closed. Every A/AAAA or literal is classified as allow_public or
 // block. Known IPv4-in-IPv6 embeddings extract an IPv4 and reuse the IPv4
-// table. Unknown embeddings and mixed public+private DNS answers are block.
+// table. Well-known NAT64 64:ff9b::/96 may be allow_public only when that
+// IPv4 is public. Extra NAT64 (including RFC 8215 local-use), ISATAP, and
+// other unknown embeddings are block. Mixed public+private DNS is block.
 // This module does no I/O.
 
 export function taggedError(message, code) {
@@ -165,6 +167,38 @@ function classifyEmbeddedIPv4(ipv4, family, canonical, embedding) {
 }
 
 /**
+ * Known embedding that must not become allow_public even when the inner
+ * IPv4 is public (ISATAP, extra NAT64). Private inner addresses keep the
+ * more specific IPv4 reason so fixtures stay readable.
+ */
+function classifyFailClosedEmbedding(ipv4, family, canonical, embedding) {
+  const inner = classifyIPv4(ipv4);
+  if (inner.disposition === 'block') {
+    return blockResult(`${inner.reason}_via_${embedding}`, {
+      family,
+      canonical,
+      embeddedIPv4: ipv4
+    });
+  }
+  return blockResult(`block_${embedding}`, {
+    family,
+    canonical,
+    embeddedIPv4: ipv4
+  });
+}
+
+function ipv4FirstOctet(ipv4) {
+  const intIp = ipv4ToInt(ipv4);
+  if (intIp === null) return null;
+  return intIp >>> 24;
+}
+
+function isIsatapIid(words) {
+  // RFC 5214: IID 0000:5efe:IPv4 or 0200:5efe:IPv4 (U/L bit set).
+  return words[5] === 0x5efe && (words[4] === 0 || words[4] === 0x0200);
+}
+
+/**
  * RFC 6052 /48 IPv4 embed: bits 48–63 and 72–87, u-octet (bits 64–71) must be 0.
  * Returns null when u is nonzero (fail closed). Trailing suffix bits are ignored;
  * IPv4 policy then applies, matching well-known NAT64 /96.
@@ -222,27 +256,44 @@ function classifyIPv6(ip) {
   if (words[0] === 0 && words[1] === 0 && words[2] === 0 && words[3] === 0 && words[4] === 0xffff && words[5] === 0) {
     return classifyEmbeddedIPv4(hextetToIPv4(words[6], words[7]), 6, canonical, 'siit');
   }
-  // NAT64 well-known prefix 64:ff9b::/96 (RFC 6052).
+  // NAT64 well-known prefix 64:ff9b::/96 (RFC 6052). Architecture §6: the
+  // only NAT64 form that may be allow_public, and only when the embedded
+  // IPv4 itself is allow_public.
   if (words[0] === 0x64 && words[1] === 0xff9b && words[2] === 0 && words[3] === 0 && words[4] === 0 && words[5] === 0) {
     return classifyEmbeddedIPv4(hextetToIPv4(words[6], words[7]), 6, canonical, 'nat64');
   }
-  // Local-use NAT64 64:ff9b:1::/48 (RFC 8215). IPv4 embed is RFC 6052 /48.
+  // Local-use NAT64 64:ff9b:1::/48 (RFC 8215). Extra prefix: fail closed
+  // even when the embedded IPv4 is public. No extra-prefix allowlist env.
   if (words[0] === 0x64 && words[1] === 0xff9b && words[2] === 0x0001) {
     const ipv4 = ipv4FromRfc6052Slash48(words);
     if (!ipv4) {
       return blockResult('block_nat64_local_invalid', { family: 6, canonical });
     }
-    return classifyEmbeddedIPv4(ipv4, 6, canonical, 'nat64_local');
+    return classifyFailClosedEmbedding(ipv4, 6, canonical, 'nat64_local');
   }
   // Remainder of 64:ff9b::/32: unknown NAT64 prefix. Not native unicast.
-  // Classifier limit: network-specific NAT64 prefixes outside 64:ff9b::/32 are
-  // not detected and may classify as native unicast.
   if (words[0] === 0x64 && words[1] === 0xff9b) {
     return blockResult('block_nat64_unknown', { family: 6, canonical });
   }
   // Deprecated IPv4-compatible ::/96 excluding :: and ::1 (already handled).
   if (words[0] === 0 && words[1] === 0 && words[2] === 0 && words[3] === 0 && words[4] === 0 && words[5] === 0) {
     return classifyEmbeddedIPv4(hextetToIPv4(words[6], words[7]), 6, canonical, 'compat96');
+  }
+  // ISATAP (RFC 5214). Tunnel embedding; fail closed like Teredo. Do not
+  // allow even if the embedded IPv4 is public.
+  if (isIsatapIid(words)) {
+    return classifyFailClosedEmbedding(hextetToIPv4(words[6], words[7]), 6, canonical, 'isatap');
+  }
+  // Custom NAT64 /96: bits 96–127 decode to an IPv4 whose first octet is
+  // not 0. Covers sparse (bits 64–95 zero) and the QA residual (bits 64–95
+  // non-zero). Fail closed when in doubt. Well-known 64:ff9b::/96, mapped,
+  // SIIT, and deprecated ::/96 already returned. First-octet-0 last-32-bit
+  // forms (e.g. 2001:4860:4860::8888) stay native.
+  {
+    const ipv4 = hextetToIPv4(words[6], words[7]);
+    if (ipv4FirstOctet(ipv4) !== 0) {
+      return classifyFailClosedEmbedding(ipv4, 6, canonical, 'nat64_extra');
+    }
   }
 
   return allowResult(6, canonical);

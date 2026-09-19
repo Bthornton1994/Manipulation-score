@@ -10,7 +10,8 @@ export const AUDIT_EVENTS = Object.freeze({
   SSRF_BLOCK: 'ssrf_block',
   KILL_SWITCH: 'kill_switch',
   RATE_LIMIT: 'rate_limit',
-  ANALYZE_COMPLETE: 'analyze_complete'
+  ANALYZE_COMPLETE: 'analyze_complete',
+  CLASSIFIER_DEV_CASCADE: 'classifier_dev_cascade'
 });
 
 const ALLOWED_EVENTS = new Set(Object.values(AUDIT_EVENTS));
@@ -40,7 +41,25 @@ const ALLOWED_KEYS = new Set([
   'retries',
   'abstention_reason',
   'abstention_count',
-  'allowlist_configured'
+  'allowlist_configured',
+  'classifier_dev_enabled',
+  'cdev_calls',
+  'cdev_classifications',
+  'cdev_status',
+  'cdev_model',
+  'escalated_span_count',
+  'circuit_open',
+  'span_id',
+  'escalate_reason',
+  'disposition',
+  'calibrated',
+  'jev_choice',
+  'jev_confidence',
+  'cdev_label',
+  'cdev_confidence',
+  'cdev_reason',
+  'taxonomy_version',
+  'policy_version'
 ]);
 
 const SECRET_VALUE =

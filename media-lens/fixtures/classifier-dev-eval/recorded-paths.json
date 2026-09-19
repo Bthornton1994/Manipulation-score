@@ -1,0 +1,43 @@
+{
+  "disclaimer": "Recorded synthetic path outputs for the evaluation harness scaffold. Not live provider results.",
+  "direct_jev": [
+    { "caseId": "eval-none-neutral", "label": "none", "confidence": 0.91, "abstain": false, "latencyMs": 4 },
+    { "caseId": "eval-urgency-pressure", "label": "urgency", "confidence": 0.62, "abstain": false, "latencyMs": 5 },
+    { "caseId": "eval-certainty-marker", "label": "certainty_beyond_evidence", "confidence": 0.84, "abstain": false, "latencyMs": 5 },
+    { "caseId": "eval-personal-attack", "label": "none", "confidence": 0.55, "abstain": false, "latencyMs": 4 },
+    { "caseId": "eval-short-insufficient", "label": null, "confidence": null, "abstain": true, "latencyMs": 3 },
+    { "caseId": "eval-quoted-attribution", "label": "none", "confidence": 0.88, "abstain": false, "latencyMs": 4 }
+  ],
+  "cdev_fast": [
+    { "caseId": "eval-none-neutral", "label": "no_detected_signal", "confidence": 0.9, "abstain": false, "latencyMs": 12 },
+    { "caseId": "eval-urgency-pressure", "label": "fear_urgency", "confidence": 0.71, "abstain": false, "latencyMs": 11 },
+    { "caseId": "eval-certainty-marker", "label": "unsupported_certainty", "confidence": 0.8, "abstain": false, "latencyMs": 12 },
+    { "caseId": "eval-personal-attack", "label": "personal_attack", "confidence": 0.66, "abstain": false, "latencyMs": 12 },
+    { "caseId": "eval-short-insufficient", "label": "insufficient_evidence", "confidence": null, "abstain": true, "latencyMs": 9 },
+    { "caseId": "eval-quoted-attribution", "label": "no_detected_signal", "confidence": 0.82, "abstain": false, "latencyMs": 10 }
+  ],
+  "cdev_smart": [
+    { "caseId": "eval-none-neutral", "label": "no_detected_signal", "confidence": 0.93, "abstain": false, "latencyMs": 40 },
+    { "caseId": "eval-urgency-pressure", "label": "fear_urgency", "confidence": 0.78, "abstain": false, "latencyMs": 44 },
+    { "caseId": "eval-certainty-marker", "label": "unsupported_certainty", "confidence": 0.86, "abstain": false, "latencyMs": 41 },
+    { "caseId": "eval-personal-attack", "label": "personal_attack", "confidence": 0.74, "abstain": false, "latencyMs": 39 },
+    { "caseId": "eval-short-insufficient", "label": "insufficient_evidence", "confidence": null, "abstain": true, "latencyMs": 20 },
+    { "caseId": "eval-quoted-attribution", "label": "attribution_quotation_ambiguity", "confidence": 0.6, "abstain": false, "latencyMs": 42 }
+  ],
+  "cascade": [
+    { "caseId": "eval-none-neutral", "label": "no_detected_signal", "confidence": 0.91, "abstain": false, "latencyMs": 6 },
+    { "caseId": "eval-urgency-pressure", "label": "fear_urgency", "confidence": 0.78, "abstain": false, "latencyMs": 48 },
+    { "caseId": "eval-certainty-marker", "label": "unsupported_certainty", "confidence": 0.84, "abstain": false, "latencyMs": 8 },
+    { "caseId": "eval-personal-attack", "label": null, "confidence": null, "abstain": true, "latencyMs": 45 },
+    { "caseId": "eval-short-insufficient", "label": null, "confidence": null, "abstain": true, "latencyMs": 5 },
+    { "caseId": "eval-quoted-attribution", "label": "no_detected_signal", "confidence": 0.88, "abstain": false, "latencyMs": 6 }
+  ],
+  "deterministic_policy": [
+    { "caseId": "eval-none-neutral", "label": "none", "confidence": null, "abstain": false, "latencyMs": 1 },
+    { "caseId": "eval-urgency-pressure", "label": "none", "confidence": null, "abstain": false, "latencyMs": 1 },
+    { "caseId": "eval-certainty-marker", "label": "certainty_beyond_evidence", "confidence": null, "abstain": false, "latencyMs": 1 },
+    { "caseId": "eval-personal-attack", "label": "certainty_beyond_evidence", "confidence": null, "abstain": false, "latencyMs": 1 },
+    { "caseId": "eval-short-insufficient", "label": "none", "confidence": null, "abstain": false, "latencyMs": 1 },
+    { "caseId": "eval-quoted-attribution", "label": "none", "confidence": null, "abstain": false, "latencyMs": 1 }
+  ]
+}

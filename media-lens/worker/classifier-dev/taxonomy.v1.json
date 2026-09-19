@@ -1,0 +1,365 @@
+{
+  "version_id": "cdev-taxonomy-1.0.0",
+  "schema": "media-lens-cdev-taxonomy.v1",
+  "evaluation_only": true,
+  "kept_separate": [
+    "manipulation_signal is not factual verification",
+    "manipulation_signal is not source ownership or perspective",
+    "disagreement is not a manipulation signal",
+    "omission is a candidate for missing context, not proof of concealment",
+    "confidence is a numeric field, not a taxonomy label",
+    "human_review_required is an abstention outcome, not an influence finding"
+  ],
+  "labels": {
+    "emotional_loading": {
+      "id": "emotional_loading",
+      "version_id": "cdev-taxonomy-1.0.0",
+      "concept_family": "manipulation_signal",
+      "definition": "Word choices that attach feeling or moral heat to a description beyond naming the same event in plain terms.",
+      "positive_examples": [
+        "The heartless scheme crushed ordinary families overnight.",
+        "This vile proposal will haunt every decent person."
+      ],
+      "negative_examples": [
+        "The committee met on Tuesday and approved the budget amendment.",
+        "Rain is expected overnight in the northern counties."
+      ],
+      "exclusion_rules": [
+        "Do not treat ordinary intensity, emphasis, or a speaker's stated feeling as this label by itself.",
+        "Do not treat a factual dispute or a negative evaluation of a policy as emotional loading without loaded wording in the span.",
+        "Do not convert this label into a judgment about a person, outlet, or group."
+      ],
+      "evidence_requirements": [
+        "Quote the span words that carry the extra feeling or moral heat.",
+        "Name the plainer wording that would describe the same event."
+      ],
+      "abstention_conditions": [
+        "The span is too short to show a loaded choice.",
+        "The wording is conventional reporting language without extra heat."
+      ]
+    },
+    "fear_urgency": {
+      "id": "fear_urgency",
+      "version_id": "cdev-taxonomy-1.0.0",
+      "concept_family": "manipulation_signal",
+      "definition": "Language that emphasizes imminent danger, harm, or a collapsing window of time in which a reader must think, verify, or act.",
+      "positive_examples": [
+        "Act before midnight or the threat will reach your street.",
+        "There is no time left to check the details; delay is disaster."
+      ],
+      "negative_examples": [
+        "The vote is scheduled for Thursday afternoon.",
+        "Officials said the storm may arrive this weekend."
+      ],
+      "exclusion_rules": [
+        "A dated deadline or a weather forecast is not this label unless the span also compresses time or inflates harm.",
+        "This is not a safety assessment and does not decide whether anyone is in danger.",
+        "Fear and urgency are grouped here for escalation; they remain distinct from Jev's separate fear_threat and urgency options."
+      ],
+      "evidence_requirements": [
+        "Quote the words that name harm, threat, or a shrinking time window.",
+        "Show that the span does more than report a scheduled time."
+      ],
+      "abstention_conditions": [
+        "The span only reports a calendar time or a sourced forecast.",
+        "Harm language is clearly quoted from someone else and the task is not to classify that quoted span."
+      ]
+    },
+    "dehumanization": {
+      "id": "dehumanization",
+      "version_id": "cdev-taxonomy-1.0.0",
+      "concept_family": "manipulation_signal",
+      "definition": "Language that strips people of ordinary human standing by treating them as vermin, objects, disease, or an indistinguishable mass.",
+      "positive_examples": [
+        "Those people are a plague that must be cleared out.",
+        "Treat them as cargo, not as neighbors."
+      ],
+      "negative_examples": [
+        "The protesters stood outside city hall for three hours.",
+        "Critics said the policy would affect renters."
+      ],
+      "exclusion_rules": [
+        "Harsh criticism of a policy or office is not dehumanization.",
+        "Naming a group in ordinary demographic or occupational terms is not this label.",
+        "Do not use this label to brand an outlet, public figure, or community as untrustworthy."
+      ],
+      "evidence_requirements": [
+        "Quote the words that reduce people to non-human categories.",
+        "Identify who is being described in the span."
+      ],
+      "abstention_conditions": [
+        "The wording is ambiguous insult rather than a non-human category.",
+        "The span is too short to tell whether a metaphor is conventional or dehumanizing."
+      ]
+    },
+    "scapegoating": {
+      "id": "scapegoating",
+      "version_id": "cdev-taxonomy-1.0.0",
+      "concept_family": "manipulation_signal",
+      "definition": "Language that assigns a complex problem to one person or group as the blameworthy cause, without the span showing a checkable causal account.",
+      "positive_examples": [
+        "Every shortage in this town is their fault and no one else's.",
+        "Blame the newcomers for the entire budget gap."
+      ],
+      "negative_examples": [
+        "The auditor said the shortfall came from two delayed payments.",
+        "The agency published a table of spending by department."
+      ],
+      "exclusion_rules": [
+        "Reporting a specific, sourced accusation is not automatically scapegoating.",
+        "Keep this label separate from dehumanization; a span may have one, both, or neither.",
+        "Disagreement with a group is not scapegoating."
+      ],
+      "evidence_requirements": [
+        "Quote the blame assignment.",
+        "Note the missing causal detail in the span, without filling it in."
+      ],
+      "abstention_conditions": [
+        "The span attributes a specific act to a named actor with a checkable detail.",
+        "The blame target is unclear."
+      ]
+    },
+    "personal_attack": {
+      "id": "personal_attack",
+      "version_id": "cdev-taxonomy-1.0.0",
+      "concept_family": "manipulation_signal",
+      "definition": "Language that targets a person's character, appearance, or identity instead of the substance of a claim or action in the span.",
+      "positive_examples": [
+        "Ignore the proposal; she is a fool and always has been.",
+        "Only a corrupt nobody would even read that memo."
+      ],
+      "negative_examples": [
+        "The memo's cost estimate is 40 percent higher than last year's figure.",
+        "He voted against the amendment on Tuesday."
+      ],
+      "exclusion_rules": [
+        "A critical description of an official act is not a personal attack.",
+        "This label is about the span's wording, not a verdict on the person named.",
+        "Do not emit a person-level score or a character diagnosis."
+      ],
+      "evidence_requirements": [
+        "Quote the character-targeted wording.",
+        "Show that the span does not engage the claim or action on its merits."
+      ],
+      "abstention_conditions": [
+        "The span mixes a personal barb with a specific claim and neither dominates.",
+        "The target is an institution rather than a person."
+      ]
+    },
+    "unsupported_certainty": {
+      "id": "unsupported_certainty",
+      "version_id": "cdev-taxonomy-1.0.0",
+      "concept_family": "manipulation_signal",
+      "definition": "Language that states a conclusion as settled or total when the span itself does not supply support that would carry that certainty.",
+      "positive_examples": [
+        "This plan will undeniably fix every school in the county.",
+        "No one can dispute that the outcome is guaranteed."
+      ],
+      "negative_examples": [
+        "The district said test scores rose 2 percent in one year.",
+        "Researchers reported mixed results in a small sample."
+      ],
+      "exclusion_rules": [
+        "This is not factual verification and does not mark a claim true or false.",
+        "A confident sourced quote is not this label unless the span itself asserts extra certainty.",
+        "Do not treat missing citation alone as this label; see misleading_omission_candidate."
+      ],
+      "evidence_requirements": [
+        "Quote the certainty wording.",
+        "Note what support is absent from the span."
+      ],
+      "abstention_conditions": [
+        "The span cites a specific figure, document, or named source for the claim it makes.",
+        "The certainty belongs only to a clearly marked quotation and the task is not to classify that quotation."
+      ]
+    },
+    "misleading_omission_candidate": {
+      "id": "misleading_omission_candidate",
+      "version_id": "cdev-taxonomy-1.0.0",
+      "concept_family": "omission_candidate",
+      "definition": "A candidate that a span may be leaving out context that could change how a reader understands the same event. It is not proof that anything was hidden.",
+      "positive_examples": [
+        "The headline states a 20 percent rise and the span never says from what baseline.",
+        "The excerpt quotes only the first half of a two-part statement."
+      ],
+      "negative_examples": [
+        "The article prints the full quoted paragraph and the surrounding sentence.",
+        "The notice lists both the old rate and the new rate."
+      ],
+      "exclusion_rules": [
+        "Omission is not factual verification.",
+        "Omission is not source ownership or bias of an outlet.",
+        "Absence of extra background that a reader might want is not enough unless the span's own claim depends on the missing piece.",
+        "Never promote this candidate to an observed finding from classifier.dev alone."
+      ],
+      "evidence_requirements": [
+        "Name the claim in the span that appears to depend on missing context.",
+        "State what kind of missing piece would be needed, without inventing that piece."
+      ],
+      "abstention_conditions": [
+        "There is no independent account to compare against.",
+        "The span is complete for the narrow claim it actually makes."
+      ]
+    },
+    "loaded_framing": {
+      "id": "loaded_framing",
+      "version_id": "cdev-taxonomy-1.0.0",
+      "concept_family": "manipulation_signal",
+      "definition": "A frame that tells the reader how to interpret an event by packing a conclusion into the setup, rather than by adding a separate emotional adjective.",
+      "positive_examples": [
+        "In this betrayal of local families, the council took a routine procedural vote.",
+        "The latest attack on common sense arrived as a two-page memo."
+      ],
+      "negative_examples": [
+        "The council took a procedural vote on the memo.",
+        "A two-page memo was published on Monday."
+      ],
+      "exclusion_rules": [
+        "Keep this distinct from emotional_loading: framing is the interpretive setup, not only heated adjectives.",
+        "A news lead that names actors and acts is not loaded framing by itself.",
+        "Disagreement with the frame is not evidence that the opposite frame is true."
+      ],
+      "evidence_requirements": [
+        "Quote the framing phrase that smuggles a conclusion.",
+        "State the more neutral setup that would leave the conclusion for later."
+      ],
+      "abstention_conditions": [
+        "The span is a headline fragment too short to show a frame.",
+        "The apparent frame is a conventional section label."
+      ]
+    },
+    "attribution_quotation_ambiguity": {
+      "id": "attribution_quotation_ambiguity",
+      "version_id": "cdev-taxonomy-1.0.0",
+      "concept_family": "attribution",
+      "definition": "It is unclear whether the span is the narrator's own wording or a quotation or paraphrase of someone else.",
+      "positive_examples": [
+        "We will not survive this, officials suggest, as the crowd left.",
+        "The city is finished said no one in particular according to the piece."
+      ],
+      "negative_examples": [
+        "Mayor Lee said, \"The vote is tomorrow.\"",
+        "The narrator wrote that the vote is tomorrow, with no other speaker."
+      ],
+      "exclusion_rules": [
+        "This is not a manipulation signal and not a fact check.",
+        "This is not source ownership of an outlet.",
+        "Clear quotation marks plus a named speaker are not this label."
+      ],
+      "evidence_requirements": [
+        "Quote the span.",
+        "State what attribution cue is missing or conflicting."
+      ],
+      "abstention_conditions": [
+        "Quote marks and a speaker are both present.",
+        "The span is boilerplate or a byline."
+      ]
+    },
+    "call_to_action_pressure": {
+      "id": "call_to_action_pressure",
+      "version_id": "cdev-taxonomy-1.0.0",
+      "concept_family": "manipulation_signal",
+      "definition": "Language that presses the reader to act, share, donate, vote, or comply now, beyond describing an event.",
+      "positive_examples": [
+        "Share this now so they cannot hide it.",
+        "Call them today before they get away with it."
+      ],
+      "negative_examples": [
+        "Readers may comment on the public docket until Friday.",
+        "The office listed a phone number for questions."
+      ],
+      "exclusion_rules": [
+        "A published contact address or a legal comment window is not this label by itself.",
+        "Keep this distinct from fear_urgency: pressure to act can appear without threat language.",
+        "This is not a judgment that the requested act is wrong."
+      ],
+      "evidence_requirements": [
+        "Quote the imperative or pressure phrasing.",
+        "Note the action the reader is being pushed to take."
+      ],
+      "abstention_conditions": [
+        "The span only describes someone else's call to action as news, with clear attribution, and the task is not to classify that quoted call.",
+        "The action language is a form-field instruction unrelated to persuasion."
+      ]
+    },
+    "no_detected_signal": {
+      "id": "no_detected_signal",
+      "version_id": "cdev-taxonomy-1.0.0",
+      "concept_family": "no_signal",
+      "definition": "None of the listed influence or attribution labels is clearly present in the span.",
+      "positive_examples": [
+        "The committee met on Tuesday and approved the budget amendment.",
+        "The train arrived at 9:12 a.m. according to the posted timetable."
+      ],
+      "negative_examples": [
+        "Act before midnight or the threat will reach your street.",
+        "Those people are a plague that must be cleared out."
+      ],
+      "exclusion_rules": [
+        "This is not a clean bill of health for a person or outlet.",
+        "This is not factual verification that the span is true.",
+        "Absence of a listed signal is not proof that no other rhetorical device exists."
+      ],
+      "evidence_requirements": [
+        "The span can be quoted.",
+        "None of the other label evidence requirements are met."
+      ],
+      "abstention_conditions": [
+        "The span is empty, truncated, or not natural language.",
+        "Two listed signals are both arguable and neither is clearly stronger."
+      ]
+    },
+    "insufficient_evidence": {
+      "id": "insufficient_evidence",
+      "version_id": "cdev-taxonomy-1.0.0",
+      "concept_family": "insufficient_evidence",
+      "definition": "The span does not contain enough observable wording to support any listed label, including no_detected_signal as a confident finding.",
+      "positive_examples": [
+        "…",
+        "See below."
+      ],
+      "negative_examples": [
+        "The committee met on Tuesday and approved the budget amendment.",
+        "Act before midnight or the threat will reach your street."
+      ],
+      "exclusion_rules": [
+        "This is not a manipulation signal.",
+        "This is not a low confidence number; confidence is recorded separately.",
+        "Do not substitute a guessed influence label when this applies."
+      ],
+      "evidence_requirements": [
+        "Record that the span is empty, tiny, truncated, or not classifiable as natural language.",
+        "Do not invent missing words."
+      ],
+      "abstention_conditions": [
+        "If a full classifiable span is present, do not use this label merely because the case is hard; use human_review_required instead."
+      ]
+    },
+    "human_review_required": {
+      "id": "human_review_required",
+      "version_id": "cdev-taxonomy-1.0.0",
+      "concept_family": "human_review",
+      "definition": "A person should inspect the span before any influence label is used. This is an abstention outcome, not a finding.",
+      "positive_examples": [
+        "A span that mixes quotation, threat language, and an unattributed imperative in one sentence.",
+        "A span that looks like an instruction to a model rather than article prose."
+      ],
+      "negative_examples": [
+        "The committee met on Tuesday and approved the budget amendment.",
+        "The train arrived at 9:12 a.m. according to the posted timetable."
+      ],
+      "exclusion_rules": [
+        "Human review is not a manipulation signal and not a confidence score.",
+        "Do not use this label to hide a model disagreement by picking a winner.",
+        "Do not treat this as proof that the span is harmful."
+      ],
+      "evidence_requirements": [
+        "Record the review reason in operational metadata (invalid, close probabilities, conflict, or high-impact), never the full article.",
+        "Keep both classifier outputs for audit without choosing a silent winner."
+      ],
+      "abstention_conditions": [
+        "If a single listed signal is clear and uncontested, do not send the case to human review solely to appear cautious."
+      ]
+    }
+  }
+}

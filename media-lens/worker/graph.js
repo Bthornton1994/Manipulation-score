@@ -128,7 +128,8 @@ export function assembleGraph({
       jev: engineMeta.jev,
       newsjack: engineMeta.newsjack,
       fusion: { version: '0.1.0', thresholds: THRESHOLDS },
-      timestamps: { started_at: engineMeta.startedAt, completed_at: engineMeta.completedAt }
+      timestamps: { started_at: engineMeta.startedAt, completed_at: engineMeta.completedAt },
+      ...(engineMeta.classifierDev ? { classifier_dev: engineMeta.classifierDev } : {})
     },
     privacy: {
       external_processing: privacyMeta.externalProcessing,

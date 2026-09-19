@@ -5,10 +5,21 @@
 // are never logged, never returned from /health, and never written to a
 // file. Browser-served files under media-lens/*.js never import this
 // module and never reference process.env (enforced by
-// tests/media-lens-no-secrets.test.js).
+// tests/media-lens-no-secrets.test.js). classifier.dev enablement is an
+// evaluation-only exact-string flag and is off by default.
 
 import { existsSync } from 'node:fs';
 import { parseHostnameAllowlist } from './host-key.js';
+import {
+  DEFAULT_BASE_URL as CLASSIFIER_DEV_DEFAULT_BASE_URL,
+  DEFAULT_MAX_BATCH,
+  DEFAULT_TIMEOUT_MS,
+  DEFAULT_MAX_DAILY_CLASSIFICATIONS,
+  DEFAULT_MIN_CONFIDENCE_FOR_ESCALATION,
+  DEFAULT_TIER,
+  normalizeTier,
+  resolveClassifierDevBaseUrl
+} from './classifier-dev/contract.js';
 
 export const DEFAULT_LIMITS = Object.freeze({
   maxRequestBodyBytes: 512 * 1024,
@@ -42,6 +53,14 @@ function readInt(env, name, fallback, { min = 0, max = 100000 } = {}) {
   const raw = env[name];
   if (raw == null || raw === '') return fallback;
   const parsed = Number.parseInt(String(raw), 10);
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) return fallback;
+  return parsed;
+}
+
+function readNumber(env, name, fallback, { min = 0, max = 1 } = {}) {
+  const raw = env[name];
+  if (raw == null || raw === '') return fallback;
+  const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed < min || parsed > max) return fallback;
   return parsed;
 }
@@ -102,6 +121,28 @@ export function loadConfig(env = process.env) {
     newsjack: {
       artifactsDir: env.MEDIA_LENS_NEWSJACK_ARTIFACTS_DIR || null
     },
+    classifierDev: {
+      enabled: readExactTrue(env, 'MEDIA_LENS_ENABLE_CLASSIFIER_DEV'),
+      baseUrl: env.MEDIA_LENS_CLASSIFIER_DEV_BASE_URL || CLASSIFIER_DEV_DEFAULT_BASE_URL,
+      tier: normalizeTier(env.MEDIA_LENS_CLASSIFIER_DEV_TIER, DEFAULT_TIER),
+      timeoutMs: readInt(env, 'MEDIA_LENS_CLASSIFIER_DEV_TIMEOUT_MS', DEFAULT_TIMEOUT_MS, {
+        min: 1,
+        max: 60000
+      }),
+      maxBatch: readInt(env, 'MEDIA_LENS_CLASSIFIER_DEV_MAX_BATCH', DEFAULT_MAX_BATCH, { min: 0, max: 200 }),
+      maxDailyClassifications: readInt(
+        env,
+        'MEDIA_LENS_CLASSIFIER_DEV_MAX_DAILY_CLASSIFICATIONS',
+        DEFAULT_MAX_DAILY_CLASSIFICATIONS,
+        { min: 0, max: 20000 }
+      ),
+      minConfidenceForEscalation: readNumber(
+        env,
+        'MEDIA_LENS_CLASSIFIER_DEV_MIN_CONFIDENCE_FOR_ESCALATION',
+        DEFAULT_MIN_CONFIDENCE_FOR_ESCALATION,
+        { min: 0, max: 1 }
+      )
+    },
     secrets: {
       typesafeApiKey,
       medialystToken
@@ -141,7 +182,12 @@ export function effectiveLiveFlags(config) {
   const killSwitch = isKillSwitchAsserted(config);
   const liveEnabled = !killSwitch && env.MEDIA_LENS_ENABLE_LIVE === 'true';
   const liveUrlEnabled = !killSwitch && liveEnabled && env.MEDIA_LENS_ENABLE_LIVE_URL === 'true';
-  return { killSwitch, liveEnabled, liveUrlEnabled };
+  const classifierDevEnabled = !killSwitch && env.MEDIA_LENS_ENABLE_CLASSIFIER_DEV === 'true';
+  return { killSwitch, liveEnabled, liveUrlEnabled, classifierDevEnabled };
+}
+
+export function classifierDevAdapterEnabled(config) {
+  return effectiveLiveFlags(config).classifierDevEnabled;
 }
 
 export function jevAdapterMode(config) {
@@ -156,6 +202,7 @@ export function jevAdapterMode(config) {
  */
 export function publicConfig(config) {
   const flags = effectiveLiveFlags(config);
+  const resolvedBase = resolveClassifierDevBaseUrl(config.classifierDev.baseUrl);
   return {
     mode: config.mode,
     liveEnabled: Boolean(config.liveEnabled),
@@ -165,7 +212,18 @@ export function publicConfig(config) {
     urlAllowlistConfigured: Array.isArray(config.urlAllowlist) && config.urlAllowlist.length > 0,
     limits: config.limits,
     jev: { mode: config.mode === 'live' ? 'live' : 'fixture', modelRequested: config.jev.modelRequested, hasApiKey: config.jev.hasApiKey },
-    newsjack: { artifactsConfigured: Boolean(config.newsjack.artifactsDir) }
+    newsjack: { artifactsConfigured: Boolean(config.newsjack.artifactsDir) },
+    classifierDev: {
+      enabled: Boolean(config.classifierDev.enabled),
+      effectiveEnabled: flags.classifierDevEnabled,
+      evaluationOnly: true,
+      host: resolvedBase.ok ? resolvedBase.host : null,
+      tier: config.classifierDev.tier,
+      timeoutMs: config.classifierDev.timeoutMs,
+      maxBatch: config.classifierDev.maxBatch,
+      maxDailyClassifications: config.classifierDev.maxDailyClassifications,
+      minConfidenceForEscalation: config.classifierDev.minConfidenceForEscalation
+    }
   };
 }
 

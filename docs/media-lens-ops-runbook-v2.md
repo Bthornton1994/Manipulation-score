@@ -22,13 +22,14 @@ Repository and CI defaults:
 | `MEDIA_LENS_MODE` | `fixture` | Only `live` if the exact value `live` |
 | `MEDIA_LENS_ENABLE_LIVE` | unset / false | Exact string `true` required to *start* live mode |
 | `MEDIA_LENS_ENABLE_LIVE_URL` | unset / false | Exact string `true` required **in addition** before `mode: "url"` may fetch |
-| `MEDIA_LENS_KILL_SWITCH` | unset / false | Exact string `true` only (same rule as the ENABLE flags). Forces live URL, live Jev, and isolated pin verification off |
+| `MEDIA_LENS_ENABLE_CLASSIFIER_DEV` | unset / false | Exact string `true` required before the evaluation-only classifier.dev adapter may make outbound calls. Default-off. Not a second independent model |
+| `MEDIA_LENS_KILL_SWITCH` | unset / false | Exact string `true` only (same rule as the ENABLE flags). Forces live URL, live Jev, isolated pin verification, and classifier.dev off |
 | `MEDIA_LENS_KILL_SWITCH_FILE` | unset | If set and the path exists, same as kill switch |
 | `MEDIA_LENS_URL_ALLOWLIST` | empty | Empty means public-address policy only. Canary should set exact hostnames |
 
 Misspellings and `TRUE` / `1` / `yes` do not enable anything. They also do not assert the kill switch; use exact `true` or `touch` the kill file.
 
-`/health` reports configured `liveEnabled` / `liveUrlEnabled` plus `killSwitch` (current assertion). If `killSwitch` is true, live URL fetch, live Jev, and isolated pin verification do not run, even when the enable flags or `MEDIA_LENS_JEV_VERIFY=true` are set.
+`/health` reports configured `liveEnabled` / `liveUrlEnabled` plus `killSwitch` (current assertion) and `classifierDev.effectiveEnabled`. If `killSwitch` is true, live URL fetch, live Jev, isolated pin verification, and classifier.dev do not run, even when the enable flags or `MEDIA_LENS_JEV_VERIFY=true` are set.
 
 ---
 
@@ -114,13 +115,14 @@ Other existing caps: 512 KiB request body, 60k prepared chars, 200 spans, 8s Jev
 
 Two equivalent controls, re-checked on each `/analyze` (and kill-file `stat` each time). Isolated pin verification uses the same assertion before any TypeSafe call:
 
-1. `MEDIA_LENS_KILL_SWITCH=true` — the exact string `true` only, same rule as `MEDIA_LENS_ENABLE_LIVE` and `MEDIA_LENS_ENABLE_LIVE_URL`. `TRUE`, `1`, and `yes` do not assert the kill switch.
+1. `MEDIA_LENS_KILL_SWITCH=true` — the exact string `true` only, same rule as `MEDIA_LENS_ENABLE_LIVE`, `MEDIA_LENS_ENABLE_LIVE_URL`, and `MEDIA_LENS_ENABLE_CLASSIFIER_DEV`. `TRUE`, `1`, and `yes` do not assert the kill switch.
 2. `touch` the path in `MEDIA_LENS_KILL_SWITCH_FILE` (existence, not file contents)
 
-The kill switch stops every external Jev-capable path, including isolated pin verification:
+The kill switch stops every external Jev-capable path, including isolated pin verification and classifier.dev:
 
 - Live URL fetch does not run (no DNS, no connect).
 - Live Jev does not run.
+- classifier.dev does not run (zero `POST /v1/classify`, even if `MEDIA_LENS_ENABLE_CLASSIFIER_DEV=true`).
 - Isolated pin verification (`scripts/jev-pin-verify.js`) fail-closes immediately with reason `verify_kill_switch`, exit nonzero, and zero network calls. It does not invoke the TypeSafe adapter. This applies even when `MEDIA_LENS_JEV_VERIFY=true` and a key are set.
 - If `MEDIA_LENS_MODE=live`, `/analyze` returns `503 live_killed` (before the body is read).
 - Fixture `mode: "fixture"` continues to serve local examples.
@@ -134,8 +136,8 @@ The kill switch stops every external Jev-capable path, including isolated pin ve
 
 No history rewrite. Do not rebase or force-push PR #117 / `9cca564`.
 
-1. Assert the kill switch (`MEDIA_LENS_KILL_SWITCH=true` or `touch` the kill file). Confirm live `/analyze` is `503` or fixture-only, and that `scripts/jev-pin-verify.js` exits nonzero with `verify_kill_switch`.
-2. Unset `MEDIA_LENS_ENABLE_LIVE_URL` and/or `MEDIA_LENS_ENABLE_LIVE`. Restart the worker.
+1. Assert the kill switch (`MEDIA_LENS_KILL_SWITCH=true` or `touch` the kill file). Confirm live `/analyze` is `503` or fixture-only, that `scripts/jev-pin-verify.js` exits nonzero with `verify_kill_switch`, and that classifier.dev makes zero outbound calls.
+2. Unset `MEDIA_LENS_ENABLE_CLASSIFIER_DEV` to disable classifier.dev **without** touching Jev fixture mode. Unset `MEDIA_LENS_ENABLE_LIVE_URL` and/or `MEDIA_LENS_ENABLE_LIVE` to stop live Jev/URL. Restart the worker.
 3. Forward-fix or `git revert` the implementation PR on `main`.
 4. Rotate `MEDIA_LENS_TYPESAFE_API_KEY` if logs or a proxy might have seen it.
 5. If a mistaken Pages allowlist change published `media-lens/` or `docs/`, revert `scripts/build-pages-site.js` and redeploy. Treat that as an incident even if the worker was not hosted there.
@@ -171,6 +173,7 @@ The worker writes one JSON object per event to stderr (tests may capture a sink)
 | `kill_switch` | Kill switch asserted on a live-mode `/analyze` (`503 live_killed`). Fixture `mode: "url"` is `live_url_blocked` / `URL_MODE_REQUIRES_LIVE` first, not `kill_switch` |
 | `rate_limit` | Analyze, live-URL, per-host, or concurrent budget exhausted |
 | `analyze_complete` | Response about to be sent (latency and counts only) |
+| `classifier_dev_cascade` | Evaluation-only cascade ran (counts, model id, circuit state; never span text) |
 
 Allowed fields include `ts`, `event`, `mode`, `input_mode`, `error`, `scheme`, `host_key` (registrable DNS only, never IP literals or userinfo), `duration_ms`, `jev_calls`, `jev_failures`, `model_match`, `abstention_count`, `limiter`, `kill_switch`. `/health` has no `secrets` object and no bearer strings.
 
@@ -195,8 +198,42 @@ Also watch: live-URL 429s (`limiter: live_url` / `live_url_host` / `live_url_con
 
 ## 9. What this does not do
 
-- It does not set `MEDIA_LENS_ENABLE_LIVE` or `MEDIA_LENS_ENABLE_LIVE_URL` true by default.
+- It does not set `MEDIA_LENS_ENABLE_LIVE`, `MEDIA_LENS_ENABLE_LIVE_URL`, or `MEDIA_LENS_ENABLE_CLASSIFIER_DEV` true by default.
 - It does not host Media Lens on GitHub Pages.
 - It does not enable live pasted-text.
 - It does not claim production readiness, real-world accuracy, or that Issue #118 is done.
 - It does not replace independent security review or owner authorization.
+- It does not treat classifier.dev as a second independent model or as production-ready.
+
+---
+
+## 10. classifier.dev (evaluation-only, independently disableable)
+
+Privacy claims: `docs/media-lens-classifier-dev-privacy.md`. Eval scaffold: `docs/media-lens-classifier-dev-eval.md`.
+
+Default-off. Versioned path only: `POST /v1/classify`. Browser pages must not call classifier.dev.
+
+| Control | Default | Effect |
+| --- | --- | --- |
+| `MEDIA_LENS_ENABLE_CLASSIFIER_DEV` | unset / false | Exact `true` required for any outbound classify call |
+| `MEDIA_LENS_CLASSIFIER_DEV_BASE_URL` | `https://classifier.dev` | Tests point this at loopback mocks. Credentials in the URL are rejected |
+| `MEDIA_LENS_CLASSIFIER_DEV_TIER` | `smart` | Escalation uses smart; eval harness may record fast separately |
+| `MEDIA_LENS_CLASSIFIER_DEV_TIMEOUT_MS` | 12000 | AbortController timeout; timeouts are not retried |
+| `MEDIA_LENS_CLASSIFIER_DEV_MAX_BATCH` | 8 | Local cap below the documented 1000-input ceiling |
+| `MEDIA_LENS_CLASSIFIER_DEV_MAX_DAILY_CLASSIFICATIONS` | 200 | In-process budget; exhaustion is explicit `daily_budget`, not an unmarked other model |
+| `MEDIA_LENS_CLASSIFIER_DEV_MIN_CONFIDENCE_FOR_ESCALATION` | 0.7 | Jev confidence below this can escalate |
+| Circuit breaker | 3 consecutive 502/timeout-class failures | Further spans are `circuit_open` with zero additional calls until reset |
+| Kill switch | off | Zero classifier.dev calls, including when the enable flag is true |
+
+Retries: HTTP **429** and **selected 502** codes only (`typesafe`, `typesafe_NNN`, `openrouter_NNN`, `chain_exhausted`, `timeout`, `batch_unavailable`, `upstream_other`), honoring `Retry-After` with exponential backoff capped at 5s. Malformed bodies fail closed. Unavailable escalation is explicit review/unavailable; Jev is never silently replaced.
+
+To disable classifier.dev without touching Jev:
+
+```
+unset MEDIA_LENS_ENABLE_CLASSIFIER_DEV
+# or
+MEDIA_LENS_KILL_SWITCH=true
+```
+
+Restart the worker. Confirm `/health` shows `classifierDev.effectiveEnabled: false` and that a mock or probe records zero network calls. This is not a production-ready path.
+

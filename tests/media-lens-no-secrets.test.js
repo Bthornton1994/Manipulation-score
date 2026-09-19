@@ -72,7 +72,9 @@ test('architecture docs may name the env var but never an actual key value', asy
     'docs/media-lens-live-url-v2-architecture.md',
     'docs/media-lens-live-url-v2-implementation-plan.md',
     'docs/media-lens-ops-runbook-v2.md',
-    'docs/media-lens-jev-integration-v2.md'
+    'docs/media-lens-jev-integration-v2.md',
+    'docs/media-lens-classifier-dev-privacy.md',
+    'docs/media-lens-classifier-dev-eval.md'
   ];
   for (const doc of docs) {
     const content = await readFile(doc, 'utf8');

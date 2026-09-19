@@ -91,20 +91,25 @@ test('ENABLE_LIVE and ENABLE_LIVE_URL remain default-off; kill switch is off unt
   assert.equal(unset.mode, 'fixture');
   assert.equal(unset.liveEnabled, false);
   assert.equal(unset.liveUrlEnabled, false);
+  assert.equal(unset.classifierDev.enabled, false);
   assert.equal(unset.killSwitch, false);
   assert.equal(isKillSwitchAsserted(unset), false);
+  assert.equal(effectiveLiveFlags(unset).classifierDevEnabled, false);
 
   const live = loadConfig({ MEDIA_LENS_MODE: 'live', MEDIA_LENS_ENABLE_LIVE: 'true', MEDIA_LENS_TYPESAFE_API_KEY: 'x' });
   assert.equal(live.liveUrlEnabled, false);
   assert.equal(effectiveLiveFlags(live).liveUrlEnabled, false);
+  assert.equal(effectiveLiveFlags(live).classifierDevEnabled, false);
 
   const wrongCase = loadConfig({
     MEDIA_LENS_ENABLE_LIVE: 'TRUE',
     MEDIA_LENS_ENABLE_LIVE_URL: 'TRUE',
+    MEDIA_LENS_ENABLE_CLASSIFIER_DEV: 'TRUE',
     MEDIA_LENS_KILL_SWITCH: 'TRUE'
   });
   assert.equal(wrongCase.liveEnabled, false);
   assert.equal(wrongCase.liveUrlEnabled, false);
+  assert.equal(wrongCase.classifierDev.enabled, false);
   assert.equal(isKillSwitchAsserted(wrongCase), false);
 
   for (const value of ['1', 'yes', 'true ', ' true']) {

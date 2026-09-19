@@ -7,6 +7,8 @@
 import { fuse } from './fusion.js';
 import { assembleGraph } from './graph.js';
 import { loadQuestionSet } from './adapters/jev.js';
+import { loadClassifierDevTaxonomy } from './classifier-dev/taxonomy.js';
+import { applyCascadeDispositions, cascadeEngineMeta, runSelectiveCascade } from './classifier-dev/cascade.js';
 
 const SPAN_ROLES_EXCLUDED_FROM_JEV = new Set(['boilerplate', 'byline_meta']);
 const TIMED_OUT = Symbol('media-lens-analysis-timed-out');
@@ -70,11 +72,21 @@ async function buildAbstentionOnlyGraph({ prepared, reason, message, config, use
  * @param {object} args.config - config from worker/config.js
  * @param {object} args.jevAdapter - created by adapters/jev.js createJevAdapter
  * @param {object} args.newsjackAdapter - created by adapters/newsjack.js createNewsjackAdapter
+ * @param {object|null} [args.classifierDevAdapter] - evaluation-only classifier.dev adapter
  * @param {boolean} args.userAssertedPublic
  * @param {string|null} args.consentAt
  * @param {boolean} args.disclosureShown
  */
-export async function analyze({ prepared, config, jevAdapter, newsjackAdapter, userAssertedPublic, consentAt, disclosureShown = true }) {
+export async function analyze({
+  prepared,
+  config,
+  jevAdapter,
+  newsjackAdapter,
+  classifierDevAdapter = null,
+  userAssertedPublic,
+  consentAt,
+  disclosureShown = true
+}) {
   // N1: these early-abstention paths must record the same
   // userAssertedPublic/consentAt as every other graph, not silently drop
   // them back to the buildAbstentionOnlyGraph defaults (true / null).
@@ -143,6 +155,25 @@ export async function analyze({ prepared, config, jevAdapter, newsjackAdapter, u
       newsjackResult
     });
 
+    let cascadeResult = null;
+    const cascadeStarted = Date.now();
+    const classifierDevOn = Boolean(classifierDevAdapter?.enabled);
+    if (classifierDevOn) {
+      const taxonomy = await loadClassifierDevTaxonomy();
+      cascadeResult = await runSelectiveCascade({
+        spans: spansForJev,
+        jevResult,
+        adapter: classifierDevAdapter,
+        taxonomyVersion: taxonomy.versionId,
+        minConfidence: config.classifierDev?.minConfidenceForEscalation,
+        injectedSpanIds: fusionResult.injectedSpanIds,
+        signal: pipelineAbortController.signal,
+        tier: config.classifierDev?.tier
+      });
+      applyCascadeDispositions(fusionResult, cascadeResult);
+    }
+    const cascadeElapsedMs = Date.now() - cascadeStarted;
+
     const completedAt = new Date().toISOString();
     const questionSetHash = await resolveQuestionSetHash();
 
@@ -159,6 +190,14 @@ export async function analyze({ prepared, config, jevAdapter, newsjackAdapter, u
         recipient: 'newsjack CLI (local)',
         data_sent: 'URL/title/published_at matched against operator-provided Newsjack run artifacts already on disk. No network call is made by this worker.',
         occurred: newsjackResult.provenance === 'newsjack_artifacts'
+      });
+    }
+    if (classifierDevOn) {
+      externalProcessing.push({
+        recipient: 'classifier.dev (evaluation-only)',
+        data_sent:
+          'Minimum public span text (capped length) for selective escalation only. Private or pasted sensitive content is prohibited. Upstream retention and training terms are UNVERIFIED.',
+        occurred: (cascadeResult?.networkCalls || 0) > 0
       });
     }
 
@@ -183,6 +222,7 @@ export async function analyze({ prepared, config, jevAdapter, newsjackAdapter, u
           version: null,
           artifacts: newsjackResult.provenance === 'newsjack_artifacts' ? ['candidates.json'] : []
         },
+        classifierDev: cascadeEngineMeta(cascadeResult, { enabled: classifierDevOn, elapsedMs: cascadeElapsedMs }),
         startedAt,
         completedAt
       },

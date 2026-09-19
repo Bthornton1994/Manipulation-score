@@ -169,13 +169,22 @@ async function preparePayload({ payload, config }) {
     if (config.mode !== 'live') {
       throw Object.assign(new Error('URL mode requires the worker to be running in live mode'), { code: 'URL_MODE_REQUIRES_LIVE' });
     }
-    // H2: never call the bare global fetch on a user-supplied URL. This
-    // enforces http(s)-only, rejects loopback/private/link-local hosts
-    // (re-checked at every redirect hop), and bounds both time and bytes.
+    // Issue #118: live Jev (MEDIA_LENS_ENABLE_LIVE) must not open article
+    // fetch. URL retrieval requires the separate exact flag.
+    if (config.liveUrlEnabled !== true) {
+      throw Object.assign(
+        new Error('Live URL fetch is disabled until MEDIA_LENS_ENABLE_LIVE_URL=true is set. This is not a production-ready mode.'),
+        { code: 'live_url_disabled' }
+      );
+    }
+    // Connect-time pin: never call global fetch on a user-supplied URL.
     const { html } = await fetchArticleSafely(payload.url, {
       timeoutMs: config.limits.urlFetchTimeoutMs,
+      connectTimeoutMs: config.limits.urlFetchConnectTimeoutMs,
       maxBytes: config.limits.urlFetchMaxBytes,
-      maxRedirects: config.limits.urlFetchMaxRedirects
+      maxRedirects: config.limits.urlFetchMaxRedirects,
+      maxHeaderBytes: config.limits.urlFetchMaxHeaderBytes,
+      parseTimeoutMs: config.limits.urlFetchParseTimeoutMs
     });
     return prepareFromHtml({ html, kind: payload.kind || 'article', sourceUrl: payload.url, inputMode: 'url' });
   }
@@ -186,7 +195,7 @@ async function preparePayload({ payload, config }) {
 // now" become an abstention graph (HTTP 200) rather than a raw error,
 // matching how every other engine-unavailable condition is reported.
 // Failures that mean "this input is not allowed" are rejected outright.
-const PREPARE_FAILURE_AS_ABSTENTION = new Set(['TIMEOUT', 'FETCH_ERROR', 'TOO_MANY_REDIRECTS']);
+const PREPARE_FAILURE_AS_ABSTENTION = new Set(['TIMEOUT', 'FETCH_ERROR', 'TOO_MANY_REDIRECTS', 'TLS_ERROR']);
 const PREPARE_FAILURE_STATUS = { TOO_LARGE: 413 };
 
 /**

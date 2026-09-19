@@ -55,13 +55,18 @@ test('live mode is disabled by default', () => {
   const config = loadConfig({});
   assert.equal(config.mode, 'fixture');
   assert.equal(config.liveEnabled, false);
+  assert.equal(config.liveUrlEnabled, false);
 
   const liveRequested = loadConfig({ MEDIA_LENS_MODE: 'live' });
   assert.equal(liveRequested.mode, 'live');
   assert.equal(liveRequested.liveEnabled, false);
+  assert.equal(liveRequested.liveUrlEnabled, false);
 
   const truthyButNotExact = loadConfig({ MEDIA_LENS_MODE: 'live', MEDIA_LENS_ENABLE_LIVE: 'TRUE' });
   assert.equal(truthyButNotExact.liveEnabled, false);
+
+  const urlFlagWrongCase = loadConfig({ MEDIA_LENS_ENABLE_LIVE_URL: 'TRUE' });
+  assert.equal(urlFlagWrongCase.liveUrlEnabled, false);
 });
 
 test('live mode cannot start with only an API key', async () => {
@@ -129,6 +134,7 @@ test('createServer accepts live configuration only when ENABLE_LIVE and API key 
     assert.equal(res.status, 200);
     assert.equal(res.body.mode, 'live');
     assert.equal(res.body.liveEnabled, true);
+    assert.equal(res.body.liveUrlEnabled, false);
     assert.equal(res.body.jev.hasApiKey, true);
     assert.doesNotMatch(JSON.stringify(res.body), /test-key-not-used/);
   } finally {
@@ -253,6 +259,8 @@ test('URL mode is marked experimental and not production-ready', async () => {
   const readme = await readFile('media-lens/README.md', 'utf8');
   assert.match(readme, /Live URL mode is still not production-ready/);
   assert.match(readme, /experimental/i);
+  assert.match(readme, /MEDIA_LENS_ENABLE_LIVE_URL/);
+  assert.match(readme, /connect-time destination pinning/i);
 
   const html = await readFile('media-lens/index.html', 'utf8');
   assert.match(html, /experimental/i);
@@ -260,4 +268,61 @@ test('URL mode is marked experimental and not production-ready', async () => {
 
   const js = await readFile('media-lens/media-lens.js', 'utf8');
   assert.match(js, /not production-ready/);
+});
+
+test('live Jev without MEDIA_LENS_ENABLE_LIVE_URL cannot open article fetch', async () => {
+  const config = loadConfig({
+    MEDIA_LENS_MODE: 'live',
+    MEDIA_LENS_ENABLE_LIVE: 'true',
+    MEDIA_LENS_TYPESAFE_API_KEY: 'test-key-not-used',
+    MEDIA_LENS_PORT: '0'
+  });
+  assert.equal(config.liveUrlEnabled, false);
+  const server = await listen(createServer(config));
+  try {
+    const res = await requestJson(server, {
+      method: 'POST',
+      path: '/analyze',
+      body: { user_asserted_public: true, mode: 'url', url: 'http://203.0.113.7/article' }
+    });
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error, 'live_url_disabled');
+  } finally {
+    server.close();
+  }
+});
+
+test('MEDIA_LENS_ENABLE_LIVE_URL=true still rejects live pasted-text and loopback URLs', async () => {
+  const config = loadConfig({
+    MEDIA_LENS_MODE: 'live',
+    MEDIA_LENS_ENABLE_LIVE: 'true',
+    MEDIA_LENS_ENABLE_LIVE_URL: 'true',
+    MEDIA_LENS_TYPESAFE_API_KEY: 'test-key-not-used',
+    MEDIA_LENS_PORT: '0'
+  });
+  assert.equal(config.liveUrlEnabled, true);
+  const server = await listen(createServer(config));
+  try {
+    const health = await requestJson(server, { method: 'GET', path: '/health' });
+    assert.equal(health.body.liveUrlEnabled, true);
+    assert.doesNotMatch(JSON.stringify(health.body), /test-key-not-used/);
+
+    const pasted = await requestJson(server, {
+      method: 'POST',
+      path: '/analyze',
+      body: { user_asserted_public: true, mode: 'pasted_text', text: PUBLIC_PASTED_TEXT }
+    });
+    assert.equal(pasted.status, 400);
+    assert.equal(pasted.body.error, 'live_pasted_text_disabled');
+
+    const loopback = await requestJson(server, {
+      method: 'POST',
+      path: '/analyze',
+      body: { user_asserted_public: true, mode: 'url', url: 'http://127.0.0.1/secret' }
+    });
+    assert.equal(loopback.status, 400);
+    assert.equal(loopback.body.error, 'BLOCKED_HOST');
+  } finally {
+    server.close();
+  }
 });

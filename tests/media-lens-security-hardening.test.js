@@ -181,16 +181,16 @@ test('H2: assertHostIsPublic allows a public-looking address', async () => {
   await assert.doesNotReject(() => assertHostIsPublic('203.0.113.7'));
 });
 
-test('H2: fetchArticleSafely rejects a non-http(s) scheme before ever calling fetch', async () => {
+test('H2: fetchArticleSafely rejects a non-http(s) scheme before ever calling the pinned client', async () => {
   let called = false;
   await assert.rejects(
     () =>
       fetchArticleSafely('file:///etc/passwd', {
         timeoutMs: 1000,
         maxBytes: 1000,
-        fetchImpl: async () => {
+        requestImpl: async () => {
           called = true;
-          return new Response('x');
+          return { status: 200, headers: {}, remoteAddress: '203.0.113.7', body: 'x' };
         }
       }),
     hasCode('BAD_SCHEME')
@@ -204,44 +204,36 @@ test('H2: fetchArticleSafely rejects a loopback URL outright', async () => {
 
 test('H2: fetchArticleSafely re-validates the host after following a redirect', async () => {
   let hop = 0;
-  const fetchImpl = async (url) => {
+  const requestImpl = async ({ parsed, pin }) => {
     hop += 1;
     if (hop === 1) {
-      return { status: 302, headers: { get: (h) => (h === 'location' ? 'http://127.0.0.1:9/internal' : null) }, ok: false };
+      return {
+        status: 302,
+        headers: { location: 'http://127.0.0.1:9/internal' },
+        rawHeaders: ['Location', 'http://127.0.0.1:9/internal'],
+        remoteAddress: pin.address,
+        body: ''
+      };
     }
     throw new Error('should never reach the second (internal) hop');
   };
-  await assert.rejects(() => fetchArticleSafely('http://203.0.113.7/start', { timeoutMs: 1000, maxBytes: 1000, fetchImpl }), hasCode('BLOCKED_HOST'));
+  await assert.rejects(() => fetchArticleSafely('http://203.0.113.7/start', { timeoutMs: 1000, maxBytes: 1000, requestImpl }), hasCode('BLOCKED_HOST'));
+  assert.equal(hop, 1);
 });
 
 test('H2: fetchArticleSafely enforces a byte cap on the response body', async () => {
-  const bigChunk = new TextEncoder().encode('x'.repeat(1000));
-  const fetchImpl = async () => ({
+  const requestImpl = async ({ pin }) => ({
     status: 200,
-    ok: true,
-    headers: { get: () => null },
-    body: {
-      getReader() {
-        let sent = false;
-        return {
-          async read() {
-            if (sent) return { done: true, value: undefined };
-            sent = true;
-            return { done: false, value: bigChunk };
-          },
-          releaseLock() {}
-        };
-      }
-    }
+    headers: { 'content-type': 'text/html' },
+    rawHeaders: ['Content-Type', 'text/html'],
+    remoteAddress: pin.address,
+    body: 'x'.repeat(1000)
   });
-  await assert.rejects(() => fetchArticleSafely('http://203.0.113.7/big', { timeoutMs: 1000, maxBytes: 100, fetchImpl }), hasCode('TOO_LARGE'));
+  await assert.rejects(() => fetchArticleSafely('http://203.0.113.7/big', { timeoutMs: 1000, maxBytes: 100, requestImpl }), hasCode('TOO_LARGE'));
 });
 
 test('H2: fetchArticleSafely times out a hanging fetch within the configured limit', async () => {
-  // A realistic hanging-host mock: like the real global fetch(), it honors
-  // the AbortSignal (rejecting with an AbortError) rather than resolving,
-  // but otherwise never responds on its own.
-  const fetchImpl = (url, { signal } = {}) =>
+  const requestImpl = ({ signal } = {}) =>
     new Promise((resolve, reject) => {
       signal?.addEventListener('abort', () => {
         const err = new Error('The operation was aborted');
@@ -250,7 +242,7 @@ test('H2: fetchArticleSafely times out a hanging fetch within the configured lim
       });
     });
   const startedAt = Date.now();
-  await assert.rejects(() => fetchArticleSafely('http://203.0.113.7/hangs', { timeoutMs: 60, maxBytes: 1000, fetchImpl }), hasCode('TIMEOUT'));
+  await assert.rejects(() => fetchArticleSafely('http://203.0.113.7/hangs', { timeoutMs: 60, maxBytes: 1000, requestImpl }), hasCode('TIMEOUT'));
   assert.ok(Date.now() - startedAt < 2000, 'must not wait anywhere close to the default 8s timeout');
 });
 
@@ -585,6 +577,10 @@ test('N3: media-lens/README.md documents the residual DNS-rebinding risk and IPv
   assert.match(readme, /DNS rebinding/i);
   assert.match(readme, /IPv4-compatible `::\/96`/);
   assert.match(readme, /Live URL mode is still not production-ready/);
+  assert.match(readme, /2001:2::\/48/);
+  assert.match(readme, /64:ff9b:1::\/48/);
+  assert.match(readme, /classifier limit/);
+  assert.match(readme, /WHATWG canonicalization/);
 });
 
 // ---------------------------------------------------------------------------

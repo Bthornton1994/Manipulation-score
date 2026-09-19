@@ -17,7 +17,10 @@ export const DEFAULT_LIMITS = Object.freeze({
   perAnalysisTimeoutMs: 30000,
   urlFetchTimeoutMs: 8000,
   urlFetchMaxBytes: 2 * 1024 * 1024,
-  urlFetchMaxRedirects: 3
+  urlFetchMaxRedirects: 3,
+  urlFetchConnectTimeoutMs: 3000,
+  urlFetchMaxHeaderBytes: 8192,
+  urlFetchParseTimeoutMs: 2000
 });
 
 function readMode(env) {
@@ -29,6 +32,10 @@ function readLiveEnabled(env) {
   return env.MEDIA_LENS_ENABLE_LIVE === 'true';
 }
 
+function readLiveUrlEnabled(env) {
+  return env.MEDIA_LENS_ENABLE_LIVE_URL === 'true';
+}
+
 /**
  * Build a config object from an environment map (defaults to
  * process.env). Never returns key values directly under an obviously
@@ -38,12 +45,14 @@ function readLiveEnabled(env) {
 export function loadConfig(env = process.env) {
   const mode = readMode(env);
   const liveEnabled = readLiveEnabled(env);
+  const liveUrlEnabled = readLiveUrlEnabled(env);
   const typesafeApiKey = env.MEDIA_LENS_TYPESAFE_API_KEY || null;
   const medialystToken = env.MEDIA_LENS_MEDIALYST_TOKEN || null;
 
   return {
     mode,
     liveEnabled,
+    liveUrlEnabled,
     host: env.MEDIA_LENS_HOST || '127.0.0.1',
     port: Number.parseInt(env.MEDIA_LENS_PORT || '8787', 10),
     limits: { ...DEFAULT_LIMITS },
@@ -70,6 +79,7 @@ export function publicConfig(config) {
   return {
     mode: config.mode,
     liveEnabled: Boolean(config.liveEnabled),
+    liveUrlEnabled: Boolean(config.liveUrlEnabled),
     limits: config.limits,
     jev: { mode: config.mode === 'live' ? 'live' : 'fixture', modelRequested: config.jev.modelRequested, hasApiKey: config.jev.hasApiKey },
     newsjack: { artifactsConfigured: Boolean(config.newsjack.artifactsDir) }

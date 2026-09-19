@@ -66,6 +66,8 @@ test('building the Pages artifact copies only allowlisted paths and excludes gov
   const forbiddenRelatives = [
     'docs/NEWSJACK-LICENSE.md',
     'docs/media-lens-build-brief.md',
+    'docs/media-lens-live-url-v2-architecture.md',
+    'docs/media-lens-live-url-v2-implementation-plan.md',
     'media-lens/index.html',
     'media-lens/README.md',
     'tests/pages-artifact-boundary.test.js',
@@ -83,6 +85,8 @@ test('building the Pages artifact copies only allowlisted paths and excludes gov
   }
 
   await access('docs/NEWSJACK-LICENSE.md');
+  await access('docs/media-lens-live-url-v2-architecture.md');
+  await access('docs/media-lens-live-url-v2-implementation-plan.md');
   await access('media-lens/README.md');
   await access('README.md');
 });

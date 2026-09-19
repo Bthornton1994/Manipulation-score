@@ -84,6 +84,34 @@ test('mutation: dropping local-use NAT64 extraction still blocks via unknown-NAT
   assert.equal(mutant.classifyIp('64:ff9b:1:cb00:71:700::').disposition, 'block');
 });
 
+test('mutation: dropping ISATAP detection would allow global-prefix ISATAP as public IPv6', async () => {
+  assert.equal(classifyIp('2001:470:1:2:0:5efe:7f00:1').reason, 'block_loopback_via_isatap');
+  const mutant = await loadMutatedAddressPolicy((src) =>
+    src.replace(
+      'if (isIsatapIid(words)) {\n    return classifyFailClosedEmbedding(hextetToIPv4(words[6], words[7]), 6, canonical, \'isatap\');\n  }',
+      'if (false && isIsatapIid(words)) {\n    return classifyFailClosedEmbedding(hextetToIPv4(words[6], words[7]), 6, canonical, \'isatap\');\n  }'
+    )
+  );
+  assert.equal(mutant.classifyIp('2001:470:1:2:0:5efe:7f00:1').disposition, 'allow_public');
+  assert.equal(mutant.classifyIp('2001:470:1:2:0:5efe:cb00:7107').disposition, 'allow_public');
+});
+
+test('mutation: dropping sparse extra NAT64 would allow 2001:470:1::7f00:1 as public IPv6', async () => {
+  assert.equal(classifyIp('2001:470:1::7f00:1').reason, 'block_loopback_via_nat64_extra');
+  const mutant = await loadMutatedAddressPolicy((src) =>
+    src.replace(
+      `if (
+    words[4] === 0 &&
+    words[5] === 0 &&
+    (words[0] !== 0 || words[1] !== 0 || words[2] !== 0 || words[3] !== 0)
+  ) {`,
+      `if (false && words[4] === 0 && words[5] === 0 && (words[0] !== 0 || words[1] !== 0 || words[2] !== 0 || words[3] !== 0)) {`
+    )
+  );
+  assert.equal(mutant.classifyIp('2001:470:1::7f00:1').disposition, 'allow_public');
+  assert.equal(mutant.classifyIp('2001:470:1::cb00:7107').disposition, 'allow_public');
+});
+
 test('mutation: dropping unknown NAT64 catch-all would allow 64:ff9b:2::1 as public IPv6', async () => {
   assert.equal(classifyIp('64:ff9b:2::1').reason, 'block_nat64_unknown');
   const mutant = await loadMutatedAddressPolicy((src) =>

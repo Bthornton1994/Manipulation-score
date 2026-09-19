@@ -246,8 +246,10 @@ Extract an embedded IPv4 when the prefix is a **known embedding**. Apply the IPv
 | Discard | `100::/64` | block |
 | IPv4-mapped | `::ffff:0:0/96` (e.g. `::ffff:127.0.0.1`, `::ffff:7f00:1`, expanded `0:0:0:0:0:ffff:7f00:1`) | extract IPv4 → IPv4 policy |
 | SIIT IPv4-translated | `::ffff:0:0:0/96` (e.g. `::ffff:0:7f00:1`, `::ffff:0:127.0.0.1`) | extract IPv4 → IPv4 policy |
-| NAT64 well-known | `64:ff9b::/96` (RFC 6052) | extract IPv4 → IPv4 policy |
-| NAT64 extra prefixes | none by default | **block** unless an operator allowlist env names a prefix **and** the extracted IPv4 is `allow_public` |
+| NAT64 well-known | `64:ff9b::/96` (RFC 6052) | extract IPv4 → IPv4 policy. **This is the only NAT64 form that may be `allow_public`**, and only when that IPv4 is `allow_public`. |
+| NAT64 extra prefixes | RFC 8215 local-use `64:ff9b:1::/48`; remainder of `64:ff9b::/32` | **block**. No extra-prefix allowlist env is implemented; fail closed. |
+| Sparse custom NAT64 `/96` | non-zero prefix, bits 64–95 are 0, bits 96–127 decode to an IPv4 whose first octet is not 0 | **block**. Distinct from well-known `64:ff9b::/96` and from deprecated `::/96`. |
+| ISATAP | IID `0000:5efe:IPv4` or `0200:5efe:IPv4` (RFC 5214), any unicast prefix | **block** (tunnel embedding; do not allow even if the embedded IPv4 is public) |
 | IPv4-compatible (deprecated) | `::/96` excluding `::` and `::1` (e.g. `::7f00:1`, `::127.0.0.1`) | extract IPv4 → IPv4 policy |
 | 6to4 | `2002::/16` | extract IPv4 from bits 16–47 → IPv4 policy |
 | Teredo | `2001:0::/32` | **block** (tunnel obfuscation; do not attempt to decode client IPv4 in v2) |
@@ -255,6 +257,23 @@ Extract an embedded IPv4 when the prefix is a **known embedding**. Apply the IPv
 | Native global unicast otherwise | | allow_public |
 
 Canonicalization: run every IPv6 literal through the same WHATWG `http://[addr]/` hostname path used in v1 R1, then classify the canonical form. Unparsable mapped values fail closed.
+
+NAT64 / ISATAP worked examples (classifier only; live URL remains disabled):
+
+| Id | Address | Disposition |
+| --- | --- | --- |
+| `nat64-wk-public` | `64:ff9b::cb00:7107` (`203.0.113.7`) | **allow_public** (well-known prefix, public IPv4) |
+| `nat64-wk-loopback` | `64:ff9b::7f00:1` | block |
+| `nat64-wk-imds` | `64:ff9b::a9fe:a9fe` | block |
+| `nat64-local-public` | `64:ff9b:1:cb00:71:700::` | block (extra prefix) |
+| `nat64-unknown-32` | `64:ff9b:2::1` | block |
+| `nat64-extra-sparse-loopback` | `2001:470:1::7f00:1` | block |
+| `nat64-extra-sparse-public` | `2001:470:1::cb00:7107` | block |
+| `isatap-loopback` | `2001:470:1:2:0:5efe:7f00:1` | block |
+| `isatap-public` | `2001:470:1:2:0:5efe:cb00:7107` | block |
+| `isatap-ulbit-imds` | `2001:470:1:2:200:5efe:a9fe:a9fe` | block |
+
+A custom NAT64 `/96` whose bits 64–95 are non-zero is not a recognizable embedding and is classified as native unicast unless it matches another row (ISATAP IID, `64:ff9b::/32`, documentation, and so on).
 
 ### 6.3 Ambiguous and dual-stack
 
@@ -760,6 +779,7 @@ Mitigations: concept separation, banned phrases, no score, consent copy, accepta
 - TypeSafe server-side retention is not under this repo's control.
 - IDN homographs can fool **users**; they are not treated as SSRF if DNS is public.
 - Fixture/adversarial tests are not a pentest substitute. Independent security review remains a gate.
+- Custom NAT64 prefixes that do not match well-known `64:ff9b::/96`, `64:ff9b::/32`, RFC 8215 local-use, ISATAP IID, or sparse `/96` (zero bits 64–95) remain indistinguishable from native unicast.
 
 ---
 

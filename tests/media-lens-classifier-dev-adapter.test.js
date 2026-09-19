@@ -5,9 +5,12 @@ import { readFile } from 'node:fs/promises';
 import {
   CLASSIFY_PATH,
   DEFAULT_BASE_URL,
+  FETCH_REDIRECT_MODE,
+  ALLOWED_CLASSIFIER_DEV_CALIBRATION_MODELS,
   STATIC_INSTRUCTIONS,
   buildClassifyRequest,
   classifyUrl,
+  isAllowedClassifierDevModel,
   isRetryableClassifierDevStatus,
   parseRetryAfterMs,
   resolveClassifierDevBaseUrl,
@@ -41,7 +44,7 @@ function readJsonBody(req) {
   });
 }
 
-function okBody({ label = 'no_detected_signal', confidence = 0.9, model = 'jev-eval', tier = 'smart' } = {}) {
+function okBody({ label = 'no_detected_signal', confidence = 0.9, model = 'jev-1.13.0', tier = 'smart' } = {}) {
   return {
     tier,
     model,
@@ -81,21 +84,22 @@ test('response schema requires matching results, a model, and in-taxonomy labels
   const valid = validateClassifyResponse(
     {
       tier: 'fast',
-      model: 'jev-eval',
+      model: 'jev-1.13.0',
       results: [{ label: 'alpha', confidence: 0.8, scores: { alpha: 0.8 } }]
     },
     { inputs, labels, requestedTier: 'fast' }
   );
   assert.equal(valid.ok, true);
   assert.equal(valid.body.modelMatch, true);
+  assert.equal(valid.body.modelAllowlisted, true);
 
   assert.equal(
-    validateClassifyResponse({ tier: 'fast', model: 'jev-eval', results: [] }, { inputs, labels, requestedTier: 'fast' }).ok,
+    validateClassifyResponse({ tier: 'fast', model: 'jev-1.13.0', results: [] }, { inputs, labels, requestedTier: 'fast' }).ok,
     false
   );
   assert.equal(
     validateClassifyResponse(
-      { tier: 'fast', model: 'jev-eval', results: [{ label: 'gamma', confidence: 0.9 }] },
+      { tier: 'fast', model: 'jev-1.13.0', results: [{ label: 'gamma', confidence: 0.9 }] },
       { inputs, labels, requestedTier: 'fast' }
     ).reason,
     'label_not_in_request'
@@ -107,6 +111,21 @@ test('response schema requires matching results, a model, and in-taxonomy labels
     ).body.modelMatch,
     false
   );
+  const unknown = validateClassifyResponse(
+    {
+      tier: 'smart',
+      model: 'mystery-llm',
+      results: [{ label: 'alpha', confidence: 0.9, scores: { alpha: 0.9 } }]
+    },
+    { inputs, labels, requestedTier: 'smart' }
+  );
+  assert.equal(unknown.ok, true);
+  assert.equal(unknown.body.modelMatch, true);
+  assert.equal(unknown.body.modelAllowlisted, false);
+  assert.equal(isAllowedClassifierDevModel('jev-1.13.0'), true);
+  assert.equal(isAllowedClassifierDevModel('mystery-llm'), false);
+  assert.equal(isAllowedClassifierDevModel('jev-latest'), false);
+  assert.deepEqual([...ALLOWED_CLASSIFIER_DEV_CALIBRATION_MODELS], ['jev-1.13.0']);
 });
 
 test('retryable statuses are 429 and selected 502 codes only', () => {
@@ -121,11 +140,18 @@ test('retryable statuses are 429 and selected 502 codes only', () => {
   assert.equal(parseRetryAfterMs({ get: (name) => (name.toLowerCase() === 'retry-after' ? '2' : null) }), 2000);
 });
 
-test('base URL rejects credentials and non-loopback http', () => {
+test('base URL allowlists https://classifier.dev and loopback http only', () => {
   assert.equal(resolveClassifierDevBaseUrl('https://classifier.dev').ok, true);
+  assert.equal(resolveClassifierDevBaseUrl('https://classifier.dev').href, 'https://classifier.dev');
   assert.equal(resolveClassifierDevBaseUrl('https://user:pass@classifier.dev').ok, false);
   assert.equal(resolveClassifierDevBaseUrl('http://example.com').ok, false);
   assert.equal(resolveClassifierDevBaseUrl('http://127.0.0.1:9').ok, true);
+  assert.equal(resolveClassifierDevBaseUrl('https://evil.example').ok, false);
+  assert.equal(resolveClassifierDevBaseUrl('https://evil.example').reason, 'host_not_allowlisted');
+  assert.equal(resolveClassifierDevBaseUrl('https://classifier.dev.evil.com').ok, false);
+  assert.equal(resolveClassifierDevBaseUrl('https://www.classifier.dev').ok, false);
+  assert.equal(resolveClassifierDevBaseUrl('https://classifier.dev:8443').ok, false);
+  assert.equal(classifyUrl(DEFAULT_BASE_URL), 'https://classifier.dev/v1/classify');
 });
 
 test('MEDIA_LENS_ENABLE_CLASSIFIER_DEV default-off makes zero network calls', async () => {
@@ -160,6 +186,97 @@ test('kill switch makes zero network calls even when the enable flag is true', a
   assert.equal(hits, 0);
   assert.equal(result.networkCalls, 0);
   assert.equal(result.results[0].reason, 'killed');
+});
+
+test('unexpected https base host is blocked before any fetch', async () => {
+  let hits = 0;
+  const adapter = createClassifierDevAdapter({
+    enabled: true,
+    baseUrl: 'https://evil.example',
+    fetchImpl: async () => {
+      hits += 1;
+      throw new Error('unexpected host must not fetch');
+    }
+  });
+  const result = await adapter.classify({ inputs: ['The committee met on Tuesday.'], labels: ['alpha', 'beta'] });
+  assert.equal(hits, 0);
+  assert.equal(result.networkCalls, 0);
+  assert.equal(result.results[0].reason, 'host_not_allowlisted');
+});
+
+test('302 to an off-allowlist host is fail-closed and not followed', async () => {
+  let attackerHits = 0;
+  const attacker = http.createServer((req, res) => {
+    attackerHits += 1;
+    req.resume();
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify(okBody()));
+  });
+  await new Promise((resolve) => attacker.listen(0, '127.0.0.1', resolve));
+  const attackerUrl = `http://127.0.0.1:${attacker.address().port}/steal`;
+  try {
+    let originHits = 0;
+    const seen = [];
+    await withMockServer(
+      async (req, res) => {
+        originHits += 1;
+        await readJsonBody(req);
+        res.writeHead(302, { location: attackerUrl });
+        res.end('redirect');
+      },
+      async (base) => {
+        const adapter = createClassifierDevAdapter({
+          enabled: true,
+          baseUrl: base,
+          fetchImpl: async (url, init) => {
+            seen.push({ url: String(url), redirect: init?.redirect });
+            return globalThis.fetch(url, init);
+          }
+        });
+        const result = await adapter.classify({
+          inputs: ['The committee met on Tuesday.'],
+          labels: CDEV_LABEL_IDS
+        });
+        assert.equal(result.ok, false);
+        assert.equal(result.results[0].reason, 'redirect_rejected');
+        assert.equal(originHits, 1);
+        assert.equal(attackerHits, 0);
+        assert.equal(seen.length, 1);
+        assert.equal(seen[0].redirect, FETCH_REDIRECT_MODE);
+        assert.match(seen[0].url, /\/v1\/classify$/);
+        assert.doesNotMatch(seen[0].url, /steal/);
+      }
+    );
+
+    const offAllowlistSeen = [];
+    await withMockServer(
+      async (req, res) => {
+        await readJsonBody(req);
+        res.writeHead(302, { location: 'https://evil.example/v1/classify' });
+        res.end('redirect');
+      },
+      async (base) => {
+        const adapter = createClassifierDevAdapter({
+          enabled: true,
+          baseUrl: base,
+          fetchImpl: async (url, init) => {
+            offAllowlistSeen.push(String(url));
+            return globalThis.fetch(url, init);
+          }
+        });
+        const result = await adapter.classify({
+          inputs: ['The committee met on Tuesday.'],
+          labels: CDEV_LABEL_IDS
+        });
+        assert.equal(result.results[0].reason, 'redirect_rejected');
+        assert.equal(offAllowlistSeen.length, 1);
+        assert.doesNotMatch(offAllowlistSeen.join('\n'), /evil\.example/);
+      }
+    );
+  } finally {
+    if (typeof attacker.closeAllConnections === 'function') attacker.closeAllConnections();
+    await new Promise((resolve) => attacker.close(resolve));
+  }
 });
 
 test('mock /v1/classify succeeds; unversioned / is not used', async () => {
@@ -275,7 +392,7 @@ test('malformed JSON and result-length mismatch fail closed without retry', asyn
     async (req, res) => {
       await readJsonBody(req);
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ tier: 'smart', model: 'jev-eval', results: [] }));
+      res.end(JSON.stringify({ tier: 'smart', model: 'jev-1.13.0', results: [] }));
     },
     async (base) => {
       const adapter = createClassifierDevAdapter({ enabled: true, baseUrl: base });
@@ -303,6 +420,31 @@ test('model mismatch is recorded and not treated as a silent success', async () 
       const result = await adapter.classify({ inputs: ['The committee met on Tuesday.'], labels: CDEV_LABEL_IDS });
       assert.equal(result.results[0].ok, true);
       assert.equal(result.results[0].reason, 'model_mismatch');
+      assert.equal(result.results[0].modelMatch, false);
+    }
+  );
+});
+
+test('unknown model name is recorded and is not treated as calibrated agreement', async () => {
+  await withMockServer(
+    async (req, res) => {
+      await readJsonBody(req);
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          tier: 'smart',
+          model: 'mystery-llm',
+          results: [{ label: 'no_detected_signal', confidence: 0.9, scores: { no_detected_signal: 0.9 }, model: 'mystery-llm' }]
+        })
+      );
+    },
+    async (base) => {
+      const adapter = createClassifierDevAdapter({ enabled: true, baseUrl: base });
+      const result = await adapter.classify({ inputs: ['The committee met on Tuesday.'], labels: CDEV_LABEL_IDS });
+      assert.equal(result.results[0].ok, true);
+      assert.equal(result.results[0].model, 'mystery-llm');
+      assert.equal(result.meta.model, 'mystery-llm');
+      assert.equal(result.results[0].reason, 'unknown_model');
       assert.equal(result.results[0].modelMatch, false);
     }
   );
@@ -339,7 +481,7 @@ test('batch limit splits requests; daily budget fail-closes leftover inputs', as
       res.end(
         JSON.stringify({
           tier: 'smart',
-          model: 'jev-eval',
+          model: 'jev-1.13.0',
           results: [{ label: 'no_detected_signal', confidence: 0.9, scores: { no_detected_signal: 0.9 } }],
           usage: { classifications: 1 }
         })
@@ -397,13 +539,14 @@ test('circuit breaker opens after repeated timeouts and then makes zero calls', 
 test('redacted audit never keeps raw text, bearer tokens, or Authorization', () => {
   const dropped = redactAuditRecord({
     event: AUDIT_EVENTS.CLASSIFIER_DEV_CASCADE,
-    cdev_model: 'jev-eval',
+    cdev_model: 'mystery-llm',
     text: 'secret article body',
     Authorization: 'Bearer sk-super-secret-value',
     cdev_calls: 1
   });
   assert.equal(dropped.event, AUDIT_EVENTS.CLASSIFIER_DEV_CASCADE);
   assert.equal(dropped.cdev_calls, 1);
+  assert.equal(dropped.cdev_model, 'mystery-llm');
   assert.equal(Object.hasOwn(dropped, 'text'), false);
   assert.equal(Object.hasOwn(dropped, 'Authorization'), false);
   const lines = [];
@@ -421,4 +564,5 @@ test('adapter source never logs request bodies or Authorization headers', async 
   assert.doesNotMatch(src, /console\.(log|info|debug)\(/);
   assert.doesNotMatch(src, /['"`]authorization['"`]\s*:/i);
   assert.doesNotMatch(src, /authorization:\s*`Bearer/i);
+  assert.match(src, /redirect:\s*FETCH_REDIRECT_MODE/);
 });

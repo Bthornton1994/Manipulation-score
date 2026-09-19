@@ -7,7 +7,12 @@
 import { JEV_SIGNAL_QUESTION_ID, JEV_QUOTED_QUESTION_ID, JEV_MAX_SPAN_CHARS } from '../adapters/jev.js';
 import { THRESHOLDS } from '../fusion.js';
 import { CDEV_LABEL_IDS, isAbstentionLabel } from './taxonomy.js';
-import { DEFAULT_MIN_CONFIDENCE_FOR_ESCALATION, DEFAULT_TIER, isValidUnitInterval } from './contract.js';
+import {
+  DEFAULT_MIN_CONFIDENCE_FOR_ESCALATION,
+  DEFAULT_TIER,
+  isAllowedClassifierDevModel,
+  isValidUnitInterval
+} from './contract.js';
 import { canonicalStringify } from '../jev/canonical-json.js';
 
 export const CASCADE_POLICY_VERSION = 'cdev-cascade-1.0.0';
@@ -105,8 +110,17 @@ export function minimumSpanText(span, maxChars = JEV_MAX_SPAN_CHARS) {
   return text.length > maxChars ? text.slice(0, maxChars) : text;
 }
 
-export function calibrationSupported({ jevChoice, cdevLabel, jevConfidence, cdevConfidence, cdevOk, modelMatch }) {
+export function calibrationSupported({
+  jevChoice,
+  cdevLabel,
+  jevConfidence,
+  cdevConfidence,
+  cdevOk,
+  modelMatch,
+  model
+}) {
   if (!cdevOk) return false;
+  if (!isAllowedClassifierDevModel(model)) return false;
   if (modelMatch === false) return false;
   if (!labelsAgree(jevChoice, cdevLabel)) return false;
   if (isAbstentionLabel(cdevLabel)) return false;
@@ -129,6 +143,10 @@ export function decideDisposition({
   if (isAbstentionLabel(cdev.label) || cdev.label == null) {
     return { disposition: 'abstain', calibrated: false, escalateReason };
   }
+  if (cdev.reason === 'unknown_model' || !isAllowedClassifierDevModel(cdev.model)) {
+    const reason = cdev.model === 'mixed' || cdev.reason === 'model_mismatch' ? 'model_mismatch' : 'unknown_model';
+    return { disposition: 'disagree_review', calibrated: false, escalateReason: escalateReason || reason };
+  }
   if (cdev.reason === 'model_mismatch' || cdev.modelMatch === false) {
     return { disposition: 'disagree_review', calibrated: false, escalateReason: escalateReason || 'model_mismatch' };
   }
@@ -142,7 +160,8 @@ export function decideDisposition({
     jevConfidence,
     cdevConfidence: cdev.confidence,
     cdevOk: true,
-    modelMatch: cdev.modelMatch
+    modelMatch: cdev.modelMatch,
+    model: cdev.model
   });
   if (supported) {
     return { disposition: 'agree_calibrated', calibrated: true, escalateReason };
@@ -359,7 +378,12 @@ export function cascadeEngineMeta(cascadeResult, { enabled, elapsedMs }) {
     policy_version: CASCADE_POLICY_VERSION,
     api_version: cascadeResult?.meta?.api_version || null,
     model_reported: cascadeResult?.meta?.model || null,
-    model_match: cascadeResult?.meta?.model == null ? null : cascadeResult.meta.reason !== 'model_mismatch',
+    model_match:
+      cascadeResult?.meta?.model == null
+        ? null
+        : isAllowedClassifierDevModel(cascadeResult.meta.model) &&
+          cascadeResult.meta.reason !== 'model_mismatch' &&
+          cascadeResult.meta.reason !== 'unknown_model',
     tier_requested: cascadeResult?.meta?.tier || DEFAULT_TIER,
     calls: cascadeResult?.networkCalls || 0,
     classifications: cascadeResult?.meta?.classifications || 0,

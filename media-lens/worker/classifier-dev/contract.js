@@ -5,6 +5,20 @@
 
 export const CLASSIFY_PATH = '/v1/classify';
 export const DEFAULT_BASE_URL = 'https://classifier.dev';
+export const PRODUCTION_CLASSIFIER_DEV_ORIGIN = 'https://classifier.dev';
+export const PRODUCTION_CLASSIFIER_DEV_HOST = 'classifier.dev';
+export const FETCH_REDIRECT_MODE = 'manual';
+
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
+
+/**
+ * Models that may produce agree_calibrated. Aliases (jev-latest), mixed
+ * unmarked batches, and any other reported id fail closed to review.
+ * Reported names are still stored on the result and in redacted audit.
+ * Smart-tier reasoning model names from provider docs remain UNVERIFIED
+ * and are not on this list.
+ */
+export const ALLOWED_CLASSIFIER_DEV_CALIBRATION_MODELS = Object.freeze(['jev-1.13.0']);
 export const DOCUMENTED_MAX_INPUTS = 1000;
 export const DOCUMENTED_MAX_CHARS = 32000;
 export const DOCUMENTED_MIN_LABELS = 2;
@@ -47,6 +61,24 @@ export function normalizeTier(raw, fallback = DEFAULT_TIER) {
   return tier === 'fast' || tier === 'smart' ? tier : fallback;
 }
 
+export function normalizeClassifierDevHostname(hostname) {
+  return String(hostname || '')
+    .replace(/\.$/, '')
+    .toLowerCase();
+}
+
+export function isAllowedClassifierDevModel(model) {
+  return typeof model === 'string' && ALLOWED_CLASSIFIER_DEV_CALIBRATION_MODELS.includes(model);
+}
+
+export function isClassifierDevRedirectResponse(response) {
+  if (!response || typeof response !== 'object') return false;
+  if (response.redirected === true) return true;
+  if (response.type === 'opaqueredirect') return true;
+  const status = response.status;
+  return Number.isInteger(status) && status >= 300 && status < 400;
+}
+
 export function resolveClassifierDevBaseUrl(raw) {
   const value = typeof raw === 'string' && raw.trim() ? raw.trim() : DEFAULT_BASE_URL;
   let parsed;
@@ -58,18 +90,40 @@ export function resolveClassifierDevBaseUrl(raw) {
   if (parsed.username || parsed.password) {
     return { ok: false, reason: 'credentials_in_url', href: null, host: null };
   }
-  const host = parsed.hostname.toLowerCase();
-  const loopback = host === '127.0.0.1' || host === 'localhost' || host === '::1';
+  const host = normalizeClassifierDevHostname(parsed.hostname);
   if (parsed.protocol === 'http:') {
-    if (!loopback) return { ok: false, reason: 'http_not_loopback', href: null, host: null };
-  } else if (parsed.protocol !== 'https:') {
+    if (!LOOPBACK_HOSTS.has(host)) return { ok: false, reason: 'http_not_loopback', href: null, host: null };
+    return { ok: true, href: `${parsed.protocol}//${parsed.host}`, host };
+  }
+  if (parsed.protocol !== 'https:') {
     return { ok: false, reason: 'bad_scheme', href: null, host: null };
   }
-  return { ok: true, href: `${parsed.protocol}//${parsed.host}`, host };
+  if (host !== PRODUCTION_CLASSIFIER_DEV_HOST || (parsed.port && parsed.port !== '443')) {
+    return { ok: false, reason: 'host_not_allowlisted', href: null, host: null };
+  }
+  return { ok: true, href: PRODUCTION_CLASSIFIER_DEV_ORIGIN, host: PRODUCTION_CLASSIFIER_DEV_HOST };
 }
 
 export function classifyUrl(baseHref) {
   return `${String(baseHref).replace(/\/$/, '')}${CLASSIFY_PATH}`;
+}
+
+export function resolveClassifierDevClassifyUrl(baseHref) {
+  const resolved = resolveClassifierDevBaseUrl(baseHref);
+  if (!resolved.ok) return resolved;
+  const href = classifyUrl(resolved.href);
+  let parsed;
+  try {
+    parsed = new URL(href);
+  } catch {
+    return { ok: false, reason: 'bad_base_url', href: null, host: null };
+  }
+  if (parsed.pathname !== CLASSIFY_PATH) {
+    return { ok: false, reason: 'bad_path', href: null, host: null };
+  }
+  const originCheck = resolveClassifierDevBaseUrl(`${parsed.protocol}//${parsed.host}`);
+  if (!originCheck.ok) return originCheck;
+  return { ok: true, href, host: originCheck.host };
 }
 
 export function buildClassifyRequest({ inputs, labels, tier = DEFAULT_TIER, instructions = STATIC_INSTRUCTIONS, multi = false }) {
@@ -204,6 +258,10 @@ export function validateClassifyResponse(body, { inputs, labels, requestedTier }
   const singleInputMixed = inputs.length === 1 && model === 'mixed';
   const resultModelMismatch = sanitized.some((item) => item.model && item.model !== model && model !== 'mixed');
   const modelMatch = !singleInputMixed && !resultModelMismatch;
+  const modelAllowlisted =
+    isAllowedClassifierDevModel(model) &&
+    (modelsUsed == null || modelsUsed.every((item) => isAllowedClassifierDevModel(item))) &&
+    sanitized.every((item) => !item.model || isAllowedClassifierDevModel(item.model));
   const usage = isPlainObject(body.usage) ? { classifications: body.usage.classifications ?? inputs.length } : { classifications: inputs.length };
   return {
     ok: true,
@@ -214,6 +272,7 @@ export function validateClassifyResponse(body, { inputs, labels, requestedTier }
       results: sanitized,
       usage,
       modelMatch,
+      modelAllowlisted,
       tierMatch: tier === requestedTier
     }
   };

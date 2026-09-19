@@ -216,7 +216,7 @@ Default-off. Versioned path only: `POST /v1/classify`. Browser pages must not ca
 | Control | Default | Effect |
 | --- | --- | --- |
 | `MEDIA_LENS_ENABLE_CLASSIFIER_DEV` | unset / false | Exact `true` required for any outbound classify call |
-| `MEDIA_LENS_CLASSIFIER_DEV_BASE_URL` | `https://classifier.dev` | Tests point this at loopback mocks. Credentials in the URL are rejected |
+| `MEDIA_LENS_CLASSIFIER_DEV_BASE_URL` | `https://classifier.dev` | Exact production origin `https://classifier.dev` and path `POST /v1/classify`. Other hosts fail closed before connect. Tests may use loopback HTTP. Credentials in the URL are rejected. Redirects are not followed |
 | `MEDIA_LENS_CLASSIFIER_DEV_TIER` | `smart` | Escalation uses smart; eval harness may record fast separately |
 | `MEDIA_LENS_CLASSIFIER_DEV_TIMEOUT_MS` | 12000 | AbortController timeout; timeouts are not retried |
 | `MEDIA_LENS_CLASSIFIER_DEV_MAX_BATCH` | 8 | Local cap below the documented 1000-input ceiling |
@@ -225,7 +225,9 @@ Default-off. Versioned path only: `POST /v1/classify`. Browser pages must not ca
 | Circuit breaker | 3 consecutive 502/timeout-class failures | Further spans are `circuit_open` with zero additional calls until reset |
 | Kill switch | off | Zero classifier.dev calls, including when the enable flag is true |
 
-Retries: HTTP **429** and **selected 502** codes only (`typesafe`, `typesafe_NNN`, `openrouter_NNN`, `chain_exhausted`, `timeout`, `batch_unavailable`, `upstream_other`), honoring `Retry-After` with exponential backoff capped at 5s. Malformed bodies fail closed. Unavailable escalation is explicit review/unavailable; Jev is never silently replaced.
+Retries: HTTP **429** and **selected 502** codes only (`typesafe`, `typesafe_NNN`, `openrouter_NNN`, `chain_exhausted`, `timeout`, `batch_unavailable`, `upstream_other`), honoring `Retry-After` with exponential backoff capped at 5s. HTTP 3xx is **not** followed (`redirect: manual`); off-allowlist `Location` is fail-closed. Malformed bodies fail closed. Unavailable escalation is explicit review/unavailable; Jev is never silently replaced.
+
+`agree_calibrated` requires the reported provider model id to be on the evaluation allowlist (`jev-1.13.0` only). `mixed`, `jev-latest`, unmarked reasoning models, and any other id become review, not calibrated agreement. The reported name is still stored as redacted `cdev_model`.
 
 To disable classifier.dev without touching Jev:
 

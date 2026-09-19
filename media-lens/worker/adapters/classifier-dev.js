@@ -18,12 +18,14 @@ import {
   API_MAJOR,
   STATIC_INSTRUCTIONS,
   buildClassifyRequest,
-  classifyUrl,
+  FETCH_REDIRECT_MODE,
+  isClassifierDevRedirectResponse,
   isRetryableClassifierDevStatus,
   parseRetryAfterMs,
   readErrorCode,
   redactedCallMeta,
   resolveClassifierDevBaseUrl,
+  resolveClassifierDevClassifyUrl,
   validateClassifyResponse,
   looksLikeSecret
 } from '../classifier-dev/contract.js';
@@ -119,14 +121,38 @@ async function postClassify({
     outerSignal?.addEventListener('abort', onOuterAbort, { once: true });
 
     try {
-      const response = await fetchImpl(classifyUrl(href), {
+      const target = resolveClassifierDevClassifyUrl(href);
+      if (!target.ok) {
+        return {
+          ok: false,
+          error: target.reason || 'host_not_allowlisted',
+          status: lastStatus,
+          apiVersion: lastApiVersion,
+          retries,
+          latencyMs: now() - started,
+          networkAttempted: false
+        };
+      }
+      const response = await fetchImpl(target.href, {
         method: 'POST',
         headers: { 'content-type': 'application/json', accept: 'application/json' },
         body: JSON.stringify(body),
-        signal: controller.signal
+        signal: controller.signal,
+        redirect: FETCH_REDIRECT_MODE
       });
       lastStatus = response.status;
       lastApiVersion = response.headers?.get?.('x-api-version') || lastApiVersion;
+
+      if (isClassifierDevRedirectResponse(response)) {
+        return {
+          ok: false,
+          error: 'redirect_rejected',
+          status: lastStatus,
+          apiVersion: lastApiVersion,
+          retries,
+          latencyMs: now() - started
+        };
+      }
 
       if (response.ok) {
         let parsed;
@@ -162,7 +188,12 @@ async function postClassify({
       if (outerSignal?.aborted) {
         return { ok: false, error: 'aborted', status: lastStatus, apiVersion: lastApiVersion, retries, latencyMs: now() - started };
       }
-      lastError = timedOut ? 'timeout' : 'transport_error';
+      const message = String(err && err.message ? err.message : err);
+      if (/redirect/i.test(message)) {
+        lastError = 'redirect_rejected';
+      } else {
+        lastError = timedOut ? 'timeout' : 'transport_error';
+      }
       circuit.recordFailure();
       return { ok: false, error: lastError, status: lastStatus, apiVersion: lastApiVersion, retries, latencyMs: now() - started };
     } finally {
@@ -282,7 +313,9 @@ export function createClassifierDevAdapter({
       } finally {
         gate.exit();
       }
-      networkCalls += 1;
+      if (posted.networkAttempted !== false) {
+        networkCalls += 1;
+      }
       retries += posted.retries || 0;
       apiVersion = posted.apiVersion || apiVersion;
       status = posted.status;
@@ -310,7 +343,13 @@ export function createClassifierDevAdapter({
       model = validated.body.model;
       modelsUsed = validated.body.modelsUsed;
       classifications += chunk.length;
-      const modelMatch = validated.body.modelMatch && validated.body.tierMatch;
+      const internallyMatched = validated.body.modelMatch && validated.body.tierMatch;
+      const allowlisted = validated.body.modelAllowlisted === true;
+      let resultReason = null;
+      if (!internallyMatched) resultReason = 'model_mismatch';
+      else if (!allowlisted) resultReason = 'unknown_model';
+      const modelMatch = resultReason == null;
+      if (resultReason) lastReason = resultReason;
       for (const item of validated.body.results) {
         combined.push({
           ok: true,
@@ -322,7 +361,7 @@ export function createClassifierDevAdapter({
           escalated: item.escalated,
           unscored: item.unscored,
           ms: item.ms,
-          reason: modelMatch ? null : 'model_mismatch',
+          reason: resultReason,
           modelMatch
         });
       }

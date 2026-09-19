@@ -101,7 +101,7 @@ test('agreement is calibrated only when supported; disagreement and unavailabili
     decideDisposition({
       jevChoice: 'none',
       jevConfidence: 0.9,
-      cdev: { ok: true, label: 'no_detected_signal', confidence: 0.88, modelMatch: true }
+      cdev: { ok: true, label: 'no_detected_signal', confidence: 0.88, modelMatch: true, model: 'jev-1.13.0' }
     }).disposition,
     'agree_calibrated'
   );
@@ -109,7 +109,7 @@ test('agreement is calibrated only when supported; disagreement and unavailabili
     decideDisposition({
       jevChoice: 'none',
       jevConfidence: 0.9,
-      cdev: { ok: true, label: 'personal_attack', confidence: 0.8, modelMatch: true }
+      cdev: { ok: true, label: 'personal_attack', confidence: 0.8, modelMatch: true, model: 'jev-1.13.0' }
     }).disposition,
     'disagree_review'
   );
@@ -128,9 +128,49 @@ test('agreement is calibrated only when supported; disagreement and unavailabili
       jevConfidence: 0.4,
       cdevConfidence: 0.9,
       cdevOk: true,
-      modelMatch: true
+      modelMatch: true,
+      model: 'jev-1.13.0'
     }),
     false
+  );
+});
+
+test('unknown or mixed models never produce agree_calibrated; pinned jev-1.13.0 still can', () => {
+  const unknown = decideDisposition({
+    jevChoice: 'none',
+    jevConfidence: 0.9,
+    cdev: { ok: true, label: 'no_detected_signal', confidence: 0.88, modelMatch: true, model: 'mystery-llm' }
+  });
+  assert.equal(unknown.disposition, 'disagree_review');
+  assert.equal(unknown.calibrated, false);
+  assert.equal(unknown.escalateReason, 'unknown_model');
+  assert.equal(
+    calibrationSupported({
+      jevChoice: 'none',
+      cdevLabel: 'no_detected_signal',
+      jevConfidence: 0.9,
+      cdevConfidence: 0.88,
+      cdevOk: true,
+      modelMatch: true,
+      model: 'mystery-llm'
+    }),
+    false
+  );
+  assert.equal(
+    decideDisposition({
+      jevChoice: 'none',
+      jevConfidence: 0.9,
+      cdev: { ok: true, label: 'no_detected_signal', confidence: 0.88, modelMatch: false, model: 'mixed' }
+    }).disposition,
+    'disagree_review'
+  );
+  assert.equal(
+    decideDisposition({
+      jevChoice: 'none',
+      jevConfidence: 0.9,
+      cdev: { ok: true, label: 'no_detected_signal', confidence: 0.88, modelMatch: true, model: 'jev-1.13.0' }
+    }).disposition,
+    'agree_calibrated'
   );
 });
 
@@ -150,11 +190,11 @@ test('cascade is deterministic for the same inputs, versions, and policy', async
             ok: true,
             label: 'fear_urgency',
             confidence: 0.8,
-            model: 'jev-eval',
+            model: 'jev-1.13.0',
             modelMatch: true
           }
         ],
-        meta: { classifications: 1, model: 'jev-eval', tier: 'smart' },
+        meta: { classifications: 1, model: 'jev-1.13.0', tier: 'smart' },
         networkCalls: 1
       };
     }
@@ -233,7 +273,7 @@ test('selective cascade behind ENABLE_CLASSIFIER_DEV records evaluation metadata
         async json() {
           return {
             tier: 'smart',
-            model: 'jev-eval',
+            model: 'jev-1.13.0',
             results: [{ label: 'no_detected_signal', confidence: 0.9, scores: { no_detected_signal: 0.9 } }]
           };
         }

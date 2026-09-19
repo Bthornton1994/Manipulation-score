@@ -65,6 +65,9 @@ test('runbook can disable classifier.dev independently of Jev and fail closed wh
   assert.match(body, /circuit_open/);
   assert.match(body, /not a second independent model/i);
   assert.match(body, /every external Jev-capable path, including isolated pin verification and classifier\.dev/);
+  assert.match(body, /Redirects are not followed/);
+  assert.match(body, /agree_calibrated/);
+  assert.match(body, /jev-1\.13\.0/);
 });
 
 test('browser Media Lens files never call classifier.dev', async () => {

@@ -260,6 +260,7 @@ test('URL mode is marked experimental and not production-ready', async () => {
   assert.match(readme, /Live URL mode is still not production-ready/);
   assert.match(readme, /experimental/i);
   assert.match(readme, /MEDIA_LENS_ENABLE_LIVE_URL/);
+  assert.match(readme, /MEDIA_LENS_KILL_SWITCH/);
   assert.match(readme, /connect-time destination pinning/i);
 
   const html = await readFile('media-lens/index.html', 'utf8');

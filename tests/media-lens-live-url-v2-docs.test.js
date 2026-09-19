@@ -14,6 +14,7 @@ import { join } from 'node:path';
 
 const ARCHITECTURE = 'docs/media-lens-live-url-v2-architecture.md';
 const PLAN = 'docs/media-lens-live-url-v2-implementation-plan.md';
+const RUNBOOK = 'docs/media-lens-ops-runbook-v2.md';
 
 const CONCEPTS = [
   'Factual verification',
@@ -29,17 +30,21 @@ const CONCEPTS = [
 test('Live URL v2 Phase 1 design artifacts exist and stay off GitHub Pages', async () => {
   await access(ARCHITECTURE);
   await access(PLAN);
+  await access(RUNBOOK);
   assert.ok(PAGES_FORBIDDEN_NAMES.includes('docs'), 'docs/ must remain on the Pages forbidden list');
   assert.equal(isAllowedSitePath(ARCHITECTURE), false);
   assert.equal(isAllowedSitePath(PLAN), false);
+  assert.equal(isAllowedSitePath(RUNBOOK), false);
   assert.equal(isForbiddenSitePath(ARCHITECTURE), true);
   assert.equal(isForbiddenSitePath(PLAN), true);
+  assert.equal(isForbiddenSitePath(RUNBOOK), true);
 
   const dest = await mkdtemp(join(tmpdir(), 'clarity-pages-live-url-v2-docs-'));
   await buildPagesSite(dest);
   const files = await listSiteFiles(dest);
   assert.equal(files.includes(ARCHITECTURE), false);
   assert.equal(files.includes(PLAN), false);
+  assert.equal(files.includes(RUNBOOK), false);
 });
 
 test('Live URL v2 design docs link Issue #118, stay disabled-by-default, and do not claim production readiness', async () => {

@@ -143,7 +143,7 @@ async function buildAdapters({ config, payload, classifierDevFetch }) {
     timeoutMs: config.classifierDev.timeoutMs,
     maxBatch: config.classifierDev.maxBatch,
     maxDailyClassifications: config.classifierDev.maxDailyClassifications,
-    fetchImpl: classifierDevFetch || globalThis.fetch
+    fetchImpl: classifierDevFetch || undefined
   });
 
   return { jevAdapter, newsjackAdapter, classifierDevAdapter };

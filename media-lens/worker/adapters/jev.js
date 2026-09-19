@@ -1,6 +1,7 @@
 // Jev (TypeSafe) adapter. Fixture mode reads pre-recorded answers from
 // fixtures/jev/<id>.answers.json; live mode (shipped but not exercised by
-// default or in CI) calls TypeSafe's /v1/systemone endpoint.
+// default or in CI) calls TypeSafe's /v1/systemone endpoint with connect-time
+// destination pinning and does not follow redirects.
 //
 // Retry/backoff shape and the engine disclosure block layout are ported
 // from Newsjack (https://github.com/elvisun/newsjack) coarse_filter.go,
@@ -26,6 +27,12 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { canonicalStringify } from '../jev/canonical-json.js';
+import {
+  createProviderPinnedFetch,
+  isProviderRedirectResponse,
+  isProviderFailClosedError,
+  mapProviderTransportError
+} from '../provider-pinned-fetch.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const QUESTIONS_PATH = join(__dirname, '..', 'jev', 'questions.v1.json');
@@ -361,10 +368,15 @@ async function callLive({ baseUrl, apiKey, fetchImpl, timeoutMs, state, question
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
         body: JSON.stringify({ model: MODEL_REQUESTED, state, questions }),
-        signal: controller.signal
+        signal: controller.signal,
+        redirect: 'manual'
       });
       clearTimeout(timer);
       if (outerSignal?.aborted) return { ok: false, error: 'aborted' };
+
+      if (isProviderRedirectResponse(response)) {
+        return { ok: false, error: 'redirect_rejected' };
+      }
 
       if (response.ok) {
         let body;
@@ -388,11 +400,8 @@ async function callLive({ baseUrl, apiKey, fetchImpl, timeoutMs, state, question
     } catch (err) {
       clearTimeout(timer);
       if (outerSignal?.aborted) return { ok: false, error: 'aborted' };
-      if (timedOut) {
-        lastError = 'timeout';
-      } else {
-        lastError = `transport_error:${err?.message || 'unknown'}`;
-      }
+      lastError = mapProviderTransportError(err, timedOut);
+      if (isProviderFailClosedError(lastError)) return { ok: false, error: lastError };
       if (attempt < MAX_RETRY_ATTEMPTS - 1) {
         await sleep(RETRY_BASE_DELAY_MS * 2 ** attempt, outerSignal);
         continue;
@@ -422,7 +431,8 @@ async function runWithConcurrency(items, limit, worker) {
 /**
  * Create a Jev adapter bound to a mode. Fixture mode never touches the
  * network. Live mode is only reachable when explicitly configured; it is
- * not exercised in CI or by any default test.
+ * not exercised in CI or by any default test. When fetchImpl is omitted,
+ * live HTTPS uses connect-time destination pinning.
  */
 export function createJevAdapter({
   mode,
@@ -430,10 +440,24 @@ export function createJevAdapter({
   fixtureDir = null,
   baseUrl = null,
   apiKey = null,
-  fetchImpl = globalThis.fetch,
+  fetchImpl = null,
   timeoutMs = DEFAULT_TIMEOUT_MS,
-  concurrency = DEFAULT_CONCURRENCY
+  concurrency = DEFAULT_CONCURRENCY,
+  lookupImpl = undefined,
+  classifyImpl = undefined,
+  createConnectionImpl = undefined,
+  tlsCa = undefined
 }) {
+  const liveFetch =
+    typeof fetchImpl === 'function'
+      ? fetchImpl
+      : createProviderPinnedFetch({
+          lookupImpl,
+          classifyImpl,
+          createConnectionImpl,
+          tlsCa,
+          timeoutMs
+        });
   async function analyzeSpans(spans, artifact, { signal } = {}) {
     const startedAt = Date.now();
     if (mode === 'disabled') {
@@ -483,7 +507,7 @@ export function createJevAdapter({
         const result = await callLive({
           baseUrl,
           apiKey,
-          fetchImpl,
+          fetchImpl: liveFetch,
           timeoutMs,
           state,
           questions: questionSet.questions,

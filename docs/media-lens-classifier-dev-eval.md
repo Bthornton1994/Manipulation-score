@@ -18,7 +18,7 @@ Fixture-only paths in `media-lens/worker/classifier-dev/eval-harness.js`, seeded
 
 Default CI never calls classifier.dev. Live URL and live pasted-text stay disabled.
 
-Production HTTPS calls, when the evaluation flag is on, use only `POST https://classifier.dev/v1/classify`. Other `MEDIA_LENS_CLASSIFIER_DEV_BASE_URL` hosts fail closed before connect. Redirects are not followed. `agree_calibrated` requires reported model `jev-1.13.0`; unknown or mixed models are review, not calibrated agreement.
+Production HTTPS calls, when the evaluation flag is on, use only `POST https://classifier.dev/v1/classify` with connect-time IP pinning. Other `MEDIA_LENS_CLASSIFIER_DEV_BASE_URL` hosts fail closed before connect. Redirects are not followed. `agree_calibrated` requires reported model `jev-1.13.0`; unknown or mixed models are review, not calibrated agreement.
 
 ## Placeholder metrics
 

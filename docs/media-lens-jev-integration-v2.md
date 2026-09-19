@@ -109,7 +109,7 @@ Assumed / not independently archived in this repo:
 - Exact retention hours for non-ZDR accounts.
 - Whether a future `jev-latest` alias move would still accept `jev-1.13.0` (docs currently say versioned ids remain accepted).
 
-This worker does not depend on `@typesafe-ai/sdk`. HTTP is issued with `fetch` so the worker stays zero-dependency. Retry statuses and `Retry-After` behavior were copied from the public SDK docs, with a 5s cap on honored retry delay so CI cannot be stalled by a huge header.
+This worker does not depend on `@typesafe-ai/sdk`. Live TypeSafe HTTPS uses the repository-owned pinned HTTP client (connect-time IP pin, no redirect follow, zero new dependencies), not global `fetch` on the hostname. Retry statuses and `Retry-After` behavior were copied from the public SDK docs, with a 5s cap on honored retry delay so CI cannot be stalled by a huge header.
 
 Newsjack: only the existing retry-attempt shape is ported (MIT, Elvis Sun, commit `bdb41b8`). The question set is Media Lens’s, not Newsjack’s PR-relevance questions. See `docs/NEWSJACK-LICENSE.md`.
 
@@ -153,4 +153,5 @@ The gate sends `model: "jev-1.13.0"` with invented spans from `media-lens/fixtur
 | Exact `confidence` formula | Unverified (docs say it is derived from `probabilities`; we threshold the returned number) |
 | Production TypeSafe response for our question set | Unverified in this environment (no API key; optional live test skipped) |
 | Real-world FP/FN of influence classification | Unverified; synthetic fixtures only |
-| DNS rebinding / connect-time pinning for article fetch | Out of scope (Phase 3 / `safe-fetch.js`) |
+| DNS rebinding / connect-time pinning for article fetch | Implemented in `safe-fetch.js` (still default-off; not production-ready) |
+| DNS rebinding / connect-time pinning for live Jev and classifier.dev | Implemented in `provider-pinned-fetch.js` for network paths only (still default-off; not production-ready) |

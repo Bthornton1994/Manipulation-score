@@ -194,6 +194,7 @@ test('docs and runbook state the default classifier.dev tier is fast', async () 
   assert.doesNotMatch(runbook, /MEDIA_LENS_CLASSIFIER_DEV_TIER` \| `smart`/);
   assert.match(mediaLensReadme, /unset\/empty → `fast`/);
   assert.match(rootReadme, /default requested tier is `fast`/);
+  assert.match(evalDoc, /default requested tier is `fast`/);
   const src = await readFile('media-lens/worker/classifier-dev/contract.js', 'utf8');
   assert.match(src, /export const DEFAULT_TIER = 'fast'/);
   assert.doesNotMatch(src, /export const DEFAULT_TIER = 'smart'/);

@@ -23,12 +23,13 @@
     </header>
     <main class="legal-content">
       <h1>Privacy Policy</h1>
-      <p class="legal-updated">Last updated: August 2, 2026</p>
+      <p class="legal-updated">Last updated: September 19, 2026</p>
 
       <h2>Summary</h2>
       <p>Clarity is designed so your messages stay on your device. We do not operate accounts, servers that receive your pasted text, or analytics that track what you analyze.</p>
 
       <h2>What we do not collect</h2>
+      <p>For Clarity:</p>
       <ul>
         <li>Messages you paste or type into the analyzer (we do not receive them on any server)</li>
         <li>Analysis results or scores sent to Clarity</li>
@@ -38,9 +39,25 @@
 
       <h2>How analysis works</h2>
       <p>When you analyze a message, processing happens entirely in your browser using local JavaScript. Nothing is uploaded to Clarity or any third-party service for analysis.</p>
+      <p>The Summary and How analysis works sections describe Clarity, the private message analyzer.</p>
 
       <h2>Media Lens preview</h2>
       <p>Media Lens is an unreleased, separate preview for public articles, advertisements, speeches, and campaign material. It is not deployed on this site. Its default fixture mode uses local example material and makes no network calls. Do not enter private messages or material you are not authorized to review. Any future live mode that sends prepared public text to an external service will require separate informed consent, an updated privacy notice, and additional security review before enablement. Clarity’s private analyzer remains governed by the on-device behavior described above.</p>
+
+      <h2>Future Media Lens live URL (not available)</h2>
+      <p>Live URL analysis is not available on this site today. It is disabled by default, not deployed, and not production-ready.</p>
+      <p>If live URL is later enabled after security, privacy, and owner review, it would apply only to Media Lens. Clarity message analysis would stay on your device, as described above.</p>
+      <p>The worker would run on a computer you or an operator control, usually the same machine and only as a local process. This site does not host that worker. A hosted or multi-tenant worker is not the current design and would need a separate privacy, tenant, and abuse review before anyone could claim that arrangement.</p>
+      <p>A consented live URL analysis would involve two separate network events:</p>
+      <ul>
+        <li>The worker would request the public page at the URL you submitted. The destination site and its content network would see the worker's network address, usually your computer.</li>
+        <li>Prepared public span text from that page could be sent to TypeSafe's Jev typed classifier. TypeSafe would not fetch the URL. Newsjack provenance files, if used, would remain local.</li>
+      </ul>
+      <p>Live pasted-text analysis would stay disabled. Private messages belong in Clarity and must not be submitted to Media Lens as a URL or as live paste.</p>
+      <p>Before any such request, you would have to confirm that the material is public and that you are allowed to review it. The worker would reject a live URL without that confirmation. That consent would cover contacting the origin and sending prepared public spans to TypeSafe.</p>
+      <p>By default the worker would not keep full article text, would not write Media Lens history, and would not create an account. Retention would be none unless you export a result yourself. Shutting down the worker and deleting any files you exported would remove local copies. This policy does not claim that TypeSafe retains nothing, deletes on request, or offers zero data retention. Prepared public spans would be processed under TypeSafe's own policy.</p>
+      <p>Do not submit private messages, passwords, medical or financial records, information about children, or any URL you are not authorized to fetch. Do not use a URL to reach internal, loopback, or other non-public systems. Paywalled pages would be left unanalyzed rather than bypassed.</p>
+      <p>This notice does not enable live URL or change any defaults.</p>
 
       <h2>Local storage on your device</h2>
       <p>Clarity may store two kinds of data locally in your browser:</p>

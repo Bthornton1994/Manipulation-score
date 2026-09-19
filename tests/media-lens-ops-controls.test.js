@@ -512,6 +512,9 @@ test('ops runbook exists, stays off Pages, and does not claim production readine
   assert.doesNotMatch(body, PRODUCTION_READY_CLAIM);
   assert.doesNotMatch(body, /sk-[A-Za-z0-9]{16,}/);
   assert.doesNotMatch(body, /this runbook authorizes live enablement/i);
+  assert.match(body, /media-lens-canary-drill-v1\.md/);
+  assert.match(body, /DRILL_PACKET_ONLY/);
+  assert.match(body, /does \*\*not\*\* grant `READY_FOR_CANARY`/);
 
   assert.ok(PAGES_FORBIDDEN_NAMES.includes('docs'));
   assert.equal(isAllowedSitePath(RUNBOOK), false);

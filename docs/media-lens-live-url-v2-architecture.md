@@ -728,6 +728,8 @@ Public communications must not claim that Media Lens "detected an attack" agains
 
 If pinning tests fail, if any adversarial fixture fails, if `model_match` is false on the pinned id, or if Pages allowlist drifts, canary stops. That is not a production incident because production live URL is off.
 
+Operator rehearsal steps, kill-file expectations, and the evidence template are in `docs/media-lens-canary-drill-v1.md` (Issue #118 E). That packet is **DRILL_PACKET_ONLY**: not production-ready, does not authorize live enablement, and does **not** grant `READY_FOR_CANARY`.
+
 ---
 
 ## 21. Threat model

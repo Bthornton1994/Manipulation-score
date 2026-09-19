@@ -66,7 +66,12 @@ test('no served code file outside media-lens/worker contains secret-related iden
 });
 
 test('architecture docs may name the env var but never an actual key value', async () => {
-  const docs = ['docs/media-lens-build-brief.md', 'docs/media-lens-influence-graph-plan.md'];
+  const docs = [
+    'docs/media-lens-build-brief.md',
+    'docs/media-lens-influence-graph-plan.md',
+    'docs/media-lens-live-url-v2-architecture.md',
+    'docs/media-lens-live-url-v2-implementation-plan.md'
+  ];
   for (const doc of docs) {
     const content = await readFile(doc, 'utf8');
     assert.doesNotMatch(content, /sk-[A-Za-z0-9]{16,}/, `${doc} appears to contain a live-looking secret value`);

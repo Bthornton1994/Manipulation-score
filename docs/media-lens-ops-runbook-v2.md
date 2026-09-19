@@ -25,7 +25,7 @@ Repository and CI defaults:
 | `MEDIA_LENS_ENABLE_CLASSIFIER_DEV` | unset / false | Exact string `true` required before the evaluation-only classifier.dev adapter may make outbound calls. Default-off. Not a second independent model |
 | `MEDIA_LENS_KILL_SWITCH` | unset / false | Exact string `true` only (same rule as the ENABLE flags). Forces live URL, live Jev, isolated pin verification, and classifier.dev off |
 | `MEDIA_LENS_KILL_SWITCH_FILE` | unset | If set and the path exists, same as kill switch |
-| `MEDIA_LENS_URL_ALLOWLIST` | empty | Empty means public-address policy only. Canary should set exact hostnames |
+| `MEDIA_LENS_URL_ALLOWLIST` | empty | Empty means public-address policy only. Canary should set exact hostnames. When set, every redirect hop is re-checked before pin/connect; off-list hops are `live_url_not_allowlisted` |
 
 Misspellings and `TRUE` / `1` / `yes` do not enable anything. They also do not assert the kill switch; use exact `true` or `touch` the kill file.
 
@@ -168,7 +168,7 @@ The worker writes one JSON object per event to stderr (tests may capture a sink)
 
 | `event` | When |
 | --- | --- |
-| `live_url_blocked` | URL fetch refused (`live_url_disabled`, allowlist miss, URL mode without live) |
+| `live_url_blocked` | URL fetch refused (`live_url_disabled`, allowlist miss including redirect hops, URL mode without live) |
 | `ssrf_block` | Policy denial (`BLOCKED_HOST`, `BAD_SCHEME`, `BAD_URL`, `REDIRECT_DOWNGRADE`, `PIN_MISMATCH`) |
 | `kill_switch` | Kill switch asserted on a live-mode `/analyze` (`503 live_killed`). Fixture `mode: "url"` is `live_url_blocked` / `URL_MODE_REQUIRES_LIVE` first, not `kill_switch` |
 | `rate_limit` | Analyze, live-URL, per-host, or concurrent budget exhausted |

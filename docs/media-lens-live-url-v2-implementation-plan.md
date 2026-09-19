@@ -258,6 +258,8 @@ For `rebind-ttl`, the **normative** architecture is: one lookup, classify all, p
 | `redir-mapped-hex` | → `http://[::ffff:7f00:1]/` | `BLOCKED_HOST` |
 | `redir-downgrade` | `https://203.0.113.7/` → `http://203.0.113.8/` | `REDIRECT_DOWNGRADE` |
 | `redir-relative` | `Location: /next` then still public | followed with re-pin of same host |
+| `redir-allowlist-relative` | allowlisted host, `Location: /next` | followed; hop host remains allowlisted |
+| `redir-off-allowlist` | allowlisted initial → `http://other.example/` | `live_url_not_allowlisted` before second connect; hop must not return 200 |
 | `redir-protocol-relative` | `Location: //127.0.0.1/x` | `BLOCKED_HOST` |
 | `redir-missing-location` | 302 no header | `FETCH_ERROR` |
 | `redir-loop` | 4 hops | `TOO_MANY_REDIRECTS` |

@@ -44,6 +44,7 @@ async function loadMutatedFetchStack({ mutatePinned = (src) => src, mutateFetch 
   const policy = await readFile('media-lens/worker/address-policy.js', 'utf8');
   const pinnedOriginal = await readFile('media-lens/worker/pinned-http.js', 'utf8');
   const fetchOriginal = await readFile('media-lens/worker/safe-fetch.js', 'utf8');
+  const hostKey = await readFile('media-lens/worker/host-key.js', 'utf8');
   const pinned = mutatePinned(pinnedOriginal);
   const fetchSrc = mutateFetch(fetchOriginal);
   assert.ok(pinned !== pinnedOriginal || fetchSrc !== fetchOriginal, 'mutator must change the fetch stack');
@@ -51,6 +52,7 @@ async function loadMutatedFetchStack({ mutatePinned = (src) => src, mutateFetch 
   await writeFile(join(dir, 'address-policy.js'), policy);
   await writeFile(join(dir, 'pinned-http.js'), pinned);
   await writeFile(join(dir, 'safe-fetch.js'), fetchSrc);
+  await writeFile(join(dir, 'host-key.js'), hostKey);
   return import(pathToFileURL(join(dir, 'safe-fetch.js')).href);
 }
 

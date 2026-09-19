@@ -22,13 +22,13 @@ Repository and CI defaults:
 | `MEDIA_LENS_MODE` | `fixture` | Only `live` if the exact value `live` |
 | `MEDIA_LENS_ENABLE_LIVE` | unset / false | Exact string `true` required to *start* live mode |
 | `MEDIA_LENS_ENABLE_LIVE_URL` | unset / false | Exact string `true` required **in addition** before `mode: "url"` may fetch |
-| `MEDIA_LENS_KILL_SWITCH` | unset / false | Exact string `true` only (same rule as the ENABLE flags). Forces live URL and live Jev off |
+| `MEDIA_LENS_KILL_SWITCH` | unset / false | Exact string `true` only (same rule as the ENABLE flags). Forces live URL, live Jev, and isolated pin verification off |
 | `MEDIA_LENS_KILL_SWITCH_FILE` | unset | If set and the path exists, same as kill switch |
 | `MEDIA_LENS_URL_ALLOWLIST` | empty | Empty means public-address policy only. Canary should set exact hostnames |
 
 Misspellings and `TRUE` / `1` / `yes` do not enable anything. They also do not assert the kill switch; use exact `true` or `touch` the kill file.
 
-`/health` reports configured `liveEnabled` / `liveUrlEnabled` plus `killSwitch` (current assertion). If `killSwitch` is true, live URL fetch and live Jev do not run, even when the enable flags are true.
+`/health` reports configured `liveEnabled` / `liveUrlEnabled` plus `killSwitch` (current assertion). If `killSwitch` is true, live URL fetch, live Jev, and isolated pin verification do not run, even when the enable flags or `MEDIA_LENS_JEV_VERIFY=true` are set.
 
 ---
 
@@ -112,15 +112,16 @@ Other existing caps: 512 KiB request body, 60k prepared chars, 200 spans, 8s Jev
 
 ## 4. Kill switch
 
-Two equivalent controls, re-checked on each `/analyze` (and kill-file `stat` each time):
+Two equivalent controls, re-checked on each `/analyze` (and kill-file `stat` each time). Isolated pin verification uses the same assertion before any TypeSafe call:
 
 1. `MEDIA_LENS_KILL_SWITCH=true` — the exact string `true` only, same rule as `MEDIA_LENS_ENABLE_LIVE` and `MEDIA_LENS_ENABLE_LIVE_URL`. `TRUE`, `1`, and `yes` do not assert the kill switch.
 2. `touch` the path in `MEDIA_LENS_KILL_SWITCH_FILE` (existence, not file contents)
 
-Effect:
+The kill switch stops every external Jev-capable path, including isolated pin verification:
 
 - Live URL fetch does not run (no DNS, no connect).
 - Live Jev does not run.
+- Isolated pin verification (`scripts/jev-pin-verify.js`) fail-closes immediately with reason `verify_kill_switch`, exit nonzero, and zero network calls. It does not invoke the TypeSafe adapter. This applies even when `MEDIA_LENS_JEV_VERIFY=true` and a key are set.
 - If `MEDIA_LENS_MODE=live`, `/analyze` returns `503 live_killed` (before the body is read).
 - Fixture `mode: "fixture"` continues to serve local examples.
 - Fixture `mode: "url"` is `400 URL_MODE_REQUIRES_LIVE` even when the kill switch is on. The kill check runs after that gate.
@@ -133,7 +134,7 @@ Effect:
 
 No history rewrite. Do not rebase or force-push PR #117 / `9cca564`.
 
-1. Assert the kill switch (`MEDIA_LENS_KILL_SWITCH=true` or `touch` the kill file). Confirm live `/analyze` is `503` or fixture-only.
+1. Assert the kill switch (`MEDIA_LENS_KILL_SWITCH=true` or `touch` the kill file). Confirm live `/analyze` is `503` or fixture-only, and that `scripts/jev-pin-verify.js` exits nonzero with `verify_kill_switch`.
 2. Unset `MEDIA_LENS_ENABLE_LIVE_URL` and/or `MEDIA_LENS_ENABLE_LIVE`. Restart the worker.
 3. Forward-fix or `git revert` the implementation PR on `main`.
 4. Rotate `MEDIA_LENS_TYPESAFE_API_KEY` if logs or a proxy might have seen it.

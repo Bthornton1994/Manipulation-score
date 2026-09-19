@@ -11,6 +11,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { prepareFromHtml } from './prepare.js';
+import { isKillSwitchAsserted, loadConfig } from './config.js';
 import {
   createJevAdapter,
   loadQuestionSet,
@@ -34,6 +35,7 @@ export const JEV_PIN_VERIFY_KIND = 'jev-pin-verify';
 export const JEV_PIN_VERIFY_REASONS = Object.freeze({
   FLAG_OFF: 'verify_flag_off',
   NO_KEY: 'verify_key_missing',
+  KILL_SWITCH: 'verify_kill_switch',
   MODEL_MISMATCH: 'model_mismatch',
   MODEL_MISSING: 'model_missing',
   FALLBACK_FORBIDDEN: 'jev_latest_fallback_forbidden',
@@ -48,6 +50,9 @@ export const JEV_PIN_VERIFY_REASONS = Object.freeze({
 });
 
 export function evaluateJevVerifyGate(env = {}) {
+  if (isKillSwitchAsserted(loadConfig(env))) {
+    return { allowed: false, reason: JEV_PIN_VERIFY_REASONS.KILL_SWITCH, apiKey: null };
+  }
   const flagOn = env.MEDIA_LENS_JEV_VERIFY === 'true';
   const rawKey = typeof env.MEDIA_LENS_TYPESAFE_API_KEY === 'string' ? env.MEDIA_LENS_TYPESAFE_API_KEY : '';
   const apiKey = rawKey.trim();
@@ -281,8 +286,9 @@ async function parseResponseCopy(response) {
 
 /**
  * Run isolated pin verification. Live HTTP happens only when
- * MEDIA_LENS_JEV_VERIFY=true and a key is present. The gate never falls
- * back to jev-latest. Default CI must call this with a mock fetchImpl.
+ * MEDIA_LENS_JEV_VERIFY=true and a key is present, and the kill switch is
+ * not asserted. The gate never falls back to jev-latest. Default CI must
+ * call this with a mock fetchImpl.
  */
 export async function runJevPinVerify(options = {}) {
   const env = options.env || {};

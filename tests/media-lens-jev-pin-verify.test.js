@@ -144,6 +144,52 @@ test('pin-verify gate does not call the network when the flag is on but no key i
   assert.equal(report.networkCalls, 0);
 });
 
+test('kill switch env var fail-closes pin-verify with zero network calls even when flag and key are set', async () => {
+  assert.equal(
+    evaluateJevVerifyGate({ ...VERIFY_ENV, MEDIA_LENS_KILL_SWITCH: 'true' }).reason,
+    JEV_PIN_VERIFY_REASONS.KILL_SWITCH
+  );
+  assert.equal(evaluateJevVerifyGate({ ...VERIFY_ENV, MEDIA_LENS_KILL_SWITCH: 'TRUE' }).allowed, true);
+  assert.equal(evaluateJevVerifyGate({ ...VERIFY_ENV, MEDIA_LENS_KILL_SWITCH: '1' }).allowed, true);
+  assert.equal(evaluateJevVerifyGate({ ...VERIFY_ENV, MEDIA_LENS_KILL_SWITCH: 'yes' }).allowed, true);
+
+  const report = await runJevPinVerify({
+    env: { ...VERIFY_ENV, MEDIA_LENS_KILL_SWITCH: 'true', MEDIA_LENS_TYPESAFE_BASE_URL: 'http://127.0.0.1:9' },
+    fetchImpl: forbiddenNetwork(),
+    commitSha: 'test-sha-kill-switch'
+  });
+  assert.equal(report.pass, false);
+  assert.equal(report.reason, JEV_PIN_VERIFY_REASONS.KILL_SWITCH);
+  assert.equal(report.networkCalls, 0);
+  assert.equal(report.production_ready, false);
+});
+
+test('kill switch file fail-closes pin-verify with zero network calls even when flag and key are set', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'jev-pin-verify-kill-'));
+  const killFile = join(dir, 'KILL');
+  const missingFile = join(dir, 'missing-KILL');
+
+  assert.equal(
+    evaluateJevVerifyGate({ ...VERIFY_ENV, MEDIA_LENS_KILL_SWITCH_FILE: missingFile }).allowed,
+    true
+  );
+
+  await writeFile(killFile, '');
+  assert.equal(
+    evaluateJevVerifyGate({ ...VERIFY_ENV, MEDIA_LENS_KILL_SWITCH_FILE: killFile }).reason,
+    JEV_PIN_VERIFY_REASONS.KILL_SWITCH
+  );
+
+  const report = await runJevPinVerify({
+    env: { ...VERIFY_ENV, MEDIA_LENS_KILL_SWITCH_FILE: killFile, MEDIA_LENS_TYPESAFE_BASE_URL: 'http://127.0.0.1:9' },
+    fetchImpl: forbiddenNetwork(),
+    commitSha: 'test-sha-kill-file'
+  });
+  assert.equal(report.pass, false);
+  assert.equal(report.reason, JEV_PIN_VERIFY_REASONS.KILL_SWITCH);
+  assert.equal(report.networkCalls, 0);
+});
+
 test('CI default environment does not enable isolated Jev pin verify', () => {
   assert.notEqual(process.env.MEDIA_LENS_JEV_VERIFY, 'true');
   assert.notEqual(process.env.MEDIA_LENS_ENABLE_LIVE, 'true');
@@ -451,6 +497,28 @@ test('optional diagnostic diff compares live choices to fixture answers without 
   );
 });
 
+test('CLI exits 1 when the kill switch is asserted even with verify flag and key', async () => {
+  const dest = await mkdtemp(join(tmpdir(), 'jev-pin-verify-cli-kill-'));
+  const artifactPath = join(dest, 'report.json');
+  const result = await runCli(
+    {
+      ...process.env,
+      MEDIA_LENS_JEV_VERIFY: 'true',
+      MEDIA_LENS_TYPESAFE_API_KEY: PIN_VERIFY_KEY,
+      MEDIA_LENS_KILL_SWITCH: 'true',
+      MEDIA_LENS_ENABLE_LIVE: '',
+      MEDIA_LENS_ENABLE_LIVE_URL: ''
+    },
+    ['--artifact', artifactPath]
+  );
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /verify_kill_switch/);
+  const saved = JSON.parse(await readFile(artifactPath, 'utf8'));
+  assert.equal(saved.pass, false);
+  assert.equal(saved.reason, JEV_PIN_VERIFY_REASONS.KILL_SWITCH);
+  assert.equal(saved.networkCalls, 0);
+});
+
 test('CLI exits 1 when the verify flag is off and writes a local artifact, not a docs claim', async () => {
   const dest = await mkdtemp(join(tmpdir(), 'jev-pin-verify-cli-'));
   const artifactPath = join(dest, 'report.json');
@@ -480,14 +548,23 @@ test('operator notes describe pin-verify as evidence plumbing, not a quality stu
   assert.match(readme, /not a quality study/i);
   assert.match(readme, /not production-ready/i);
   assert.match(readme, /does not enable live URL/i);
+  assert.match(readme, /verify_kill_switch/);
+  assert.match(readme, /every external Jev-capable path/i);
 
   const notes = await readFile('docs/media-lens-jev-integration-v2.md', 'utf8');
   assert.match(notes, /MEDIA_LENS_JEV_VERIFY/);
   assert.match(notes, /not a quality study/i);
+  assert.match(notes, /verify_kill_switch/);
   assert.doesNotMatch(notes, /sk-[A-Za-z0-9]{16,}/);
   assert.doesNotMatch(notes, /production-ready live URL/i);
+
+  const runbook = await readFile('docs/media-lens-ops-runbook-v2.md', 'utf8');
+  assert.match(runbook, /isolated pin verification/i);
+  assert.match(runbook, /verify_kill_switch/);
+  assert.match(runbook, /every external Jev-capable path|does not invoke the TypeSafe adapter/i);
 
   const root = await readFile('README.md', 'utf8');
   assert.match(root, /MEDIA_LENS_JEV_VERIFY/);
   assert.match(root, /not a quality study/i);
+  assert.match(root, /isolated pin verification/i);
 });

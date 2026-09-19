@@ -139,7 +139,7 @@ Live URL fetch remains disabled by default. `MEDIA_LENS_TYPESAFE_BASE_URL` may p
 
 ### Isolated pin verify (Phase 4)
 
-`scripts/jev-pin-verify.js` is a separate fail-closed gate. It runs only when `MEDIA_LENS_JEV_VERIFY=true` (exact string) **and** `MEDIA_LENS_TYPESAFE_API_KEY` is set. Default `node --test tests/*.test.js` CI does not set that flag and uses mock servers only.
+`scripts/jev-pin-verify.js` is a separate fail-closed gate. It runs only when `MEDIA_LENS_JEV_VERIFY=true` (exact string) **and** `MEDIA_LENS_TYPESAFE_API_KEY` is set, and the kill switch is not asserted. `MEDIA_LENS_KILL_SWITCH=true` (exact) or an existing `MEDIA_LENS_KILL_SWITCH_FILE` stops this path immediately (`verify_kill_switch`, no TypeSafe adapter, zero network calls). Default `node --test tests/*.test.js` CI does not set that flag and uses mock servers only.
 
 The gate sends `model: "jev-1.13.0"` with invented spans from `media-lens/fixtures/articles/`. It asserts `response.model === "jev-1.13.0"`. If the API rejects the versioned id, the gate fails. It does not fall back to `jev-latest`. Answers must match the typed adapter shape; extra keys are ignored; out-of-taxonomy choices fail closed through the existing adapter. The JSON report (commit SHA, timestamp, pass/fail, optional diagnostic diff vs fixture answers) is a local or CI artifact. It is not an accuracy claim, not a quality study, and not production-ready. Do not copy that report into `docs/`. Optional workflow: `.github/workflows/jev-pin-verify.yml` (`workflow_dispatch` only).
 

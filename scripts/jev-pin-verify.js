@@ -2,9 +2,9 @@
 // Isolated Jev jev-1.13.0 pin verification CLI (Issue #118 Phase 4).
 //
 // Live HTTP runs only when MEDIA_LENS_JEV_VERIFY=true (exact) and
-// MEDIA_LENS_TYPESAFE_API_KEY is set. This does not enable live URL or
-// live pasted-text. A pass is pin evidence, not an accuracy claim, and
-// not production-ready.
+// MEDIA_LENS_TYPESAFE_API_KEY is set, and MEDIA_LENS_KILL_SWITCH is not
+// asserted. This does not enable live URL or live pasted-text. A pass is
+// pin evidence, not an accuracy claim, and not production-ready.
 
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';

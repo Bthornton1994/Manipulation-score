@@ -488,6 +488,8 @@ test('ops runbook exists, stays off Pages, and does not claim production readine
   assert.match(body, /MEDIA_LENS_KILL_SWITCH/);
   assert.match(body, /exact string `true` only/);
   assert.match(body, /do not assert the kill switch/);
+  assert.match(body, /isolated pin verification/);
+  assert.match(body, /verify_kill_switch/);
   assert.match(body, /MEDIA_LENS_ENABLE_LIVE_URL/);
   assert.match(body, /live_url_blocked/);
   assert.match(body, /ssrf_block/);

@@ -635,3 +635,50 @@ test('script tags in fetched HTML are data, and worker fetch modules do not eval
     assert.doesNotMatch(src, /vm\.runIn/);
   }
 });
+
+test('canary urlAllowlist blocks off-list redirect hops before connect', async () => {
+  const hostsHit = [];
+  await assert.rejects(
+    () =>
+      fetchArticleSafely('http://allowed.example/start', {
+        timeoutMs: 1000,
+        maxBytes: 4000,
+        urlAllowlist: ['allowed.example'],
+        lookupImpl: PUBLIC_LOOKUP,
+        requestImpl: async ({ parsed, pin }) => {
+          hostsHit.push(parsed.hostname);
+          if (parsed.pathname === '/start') return redirectResponse(pin, 'http://evil.example/payload');
+          throw new Error('must not fetch evil.example');
+        }
+      }),
+    hasCode('live_url_not_allowlisted')
+  );
+  assert.deepEqual(hostsHit, ['allowed.example']);
+
+  // Same-list redirects still work.
+  const ok = await fetchArticleSafely('http://allowed.example/start', {
+    timeoutMs: 1000,
+    maxBytes: 4000,
+    urlAllowlist: ['allowed.example'],
+    lookupImpl: PUBLIC_LOOKUP,
+    requestImpl: async ({ parsed, pin }) => {
+      if (parsed.pathname === '/start') return redirectResponse(pin, 'http://allowed.example/article');
+      return htmlResponse(pin, '<!doctype html><html><body><p>Allowlisted article.</p></body></html>');
+    }
+  });
+  assert.match(ok.html, /Allowlisted article/);
+  assert.equal(ok.finalUrl, 'http://allowed.example/article');
+
+  // Empty allowlist remains policy-only (any public host).
+  const open = await fetchArticleSafely('http://allowed.example/start', {
+    timeoutMs: 1000,
+    maxBytes: 4000,
+    urlAllowlist: [],
+    lookupImpl: PUBLIC_LOOKUP,
+    requestImpl: async ({ parsed, pin }) => {
+      if (parsed.pathname === '/start') return redirectResponse(pin, 'http://other.example/article');
+      return htmlResponse(pin);
+    }
+  });
+  assert.match(open.html, /Public article fixture/);
+});

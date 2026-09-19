@@ -27,6 +27,7 @@ test('the Pages allowlist is Clarity site files only', () => {
   for (const name of [
     'docs',
     'media-lens',
+    'artifacts',
     'tests',
     '.agents',
     '.claude',
@@ -80,7 +81,9 @@ test('building the Pages artifact copies only allowlisted paths and excludes gov
     'VISION.md',
     'package.json',
     'package-lock.json',
-    'scripts/build-pages-site.js'
+    'scripts/build-pages-site.js',
+    'scripts/jev-pin-verify.js',
+    '.github/workflows/jev-pin-verify.yml'
   ];
   for (const rel of forbiddenRelatives) {
     assert.equal(files.includes(rel), false, `${rel} must not be published via Pages`);

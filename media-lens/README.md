@@ -23,7 +23,7 @@ Set with `MEDIA_LENS_MODE` (default `fixture`):
 - **`fixture`** — the only mode automated tests and CI exercise. No outbound network at all. The Jev and Newsjack adapters read local JSON fixtures under `fixtures/jev/` and `fixtures/newsjack/`.
 - **`live`** — refuses to start unless **both** `MEDIA_LENS_ENABLE_LIVE=true` and `MEDIA_LENS_TYPESAFE_API_KEY` are set. Live pasted-text analysis is disabled and is rejected before any external request. Live URL fetch is experimental, **disabled by default**, and additionally requires `MEDIA_LENS_ENABLE_LIVE_URL=true`. It is not production-ready. When those gates pass, prepared public span text from a fetched URL may be sent to TypeSafe's Jev classifier over HTTPS. Newsjack provenance in live mode is read from an **operator-provided artifacts directory** (`MEDIA_LENS_NEWSJACK_ARTIFACTS_DIR`) — the worker never spawns the Newsjack CLI and never calls a live news-search service.
 
-Environment variables (read only by `worker/config.js`, never logged, never returned by `/health`):
+Worker environment variables (read only by `worker/config.js`, never logged, never returned by `/health`):
 
 | Variable | Purpose |
 | --- | --- |
@@ -38,11 +38,12 @@ Environment variables (read only by `worker/config.js`, never logged, never retu
 | `MEDIA_LENS_MAX_LIVE_URL_PER_HOST_PER_MINUTE` | per-host live URL attempt budget (default 3) |
 | `MEDIA_LENS_MAX_CONCURRENT_LIVE_URL` | concurrent live URL fetches (default 1) |
 | `MEDIA_LENS_HOST` / `MEDIA_LENS_PORT` | worker bind address (default `127.0.0.1:8787`) |
-| `MEDIA_LENS_TYPESAFE_API_KEY` | Jev API key; required for `live` mode together with `MEDIA_LENS_ENABLE_LIVE=true` |
+| `MEDIA_LENS_TYPESAFE_API_KEY` | Jev API key; required for `live` mode together with `MEDIA_LENS_ENABLE_LIVE=true`; also required for isolated pin-verify |
 | `MEDIA_LENS_TYPESAFE_BASE_URL` | Jev API base URL override (used by tests to point at a mock server) |
 | `MEDIA_LENS_NEWSJACK_ARTIFACTS_DIR` | directory of operator-produced Newsjack run artifacts for `live` mode coverage |
+| `MEDIA_LENS_JEV_VERIFY` | exact value `true` required before `scripts/jev-pin-verify.js` may call TypeSafe; does not enable live URL or live pasted-text (default: unset/false) |
 
-`.env` is git-ignored; no key value is ever committed or shipped in a browser-served file.
+Worker environment variables are read only by `worker/config.js`. Isolated pin verify is a separate CLI (`scripts/jev-pin-verify.js`) that reads `MEDIA_LENS_JEV_VERIFY` and the TypeSafe key from the environment. `.env` is git-ignored; no key value is ever committed or shipped in a browser-served file.
 
 ## Limits (enforced in `worker/config.js`, `worker/server.js`, `worker/prepare.js`)
 
@@ -67,6 +68,16 @@ node --test tests/*.test.js
 node media-lens/worker/analyze-fixture.js synthetic-01-quoted-vs-authorial | node media-lens/schema/validate.js
 MEDIA_LENS_MODE=fixture node media-lens/worker/server.js      # http://127.0.0.1:8787/health
 python3 -m http.server 4173                                    # open http://localhost:4173/media-lens/
+```
+
+## Isolated Jev pin verify (Issue #118 Phase 4)
+
+Default CI stays fixture-only. This does not enable live URL. It does not enable live pasted-text. It is not production-ready and not a quality study.
+
+When `MEDIA_LENS_JEV_VERIFY=true` and `MEDIA_LENS_TYPESAFE_API_KEY` are both set, `scripts/jev-pin-verify.js` sends synthetic spans from `media-lens/fixtures/articles/` with `model: "jev-1.13.0"`. If the API rejects the versioned id or reports any other model, the gate fails. It does not fall back to `jev-latest`. The report (commit SHA, timestamp, pass/fail) is a local or CI artifact, never an accuracy claim in `docs/`.
+
+```bash
+MEDIA_LENS_JEV_VERIFY=true MEDIA_LENS_TYPESAFE_API_KEY=... node scripts/jev-pin-verify.js
 ```
 
 ## Out of scope for v1

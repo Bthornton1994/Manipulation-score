@@ -1,0 +1,34 @@
+# Isolated Jev jev-1.13.0 pin verification (Issue #118 Phase 4).
+# Not default CI. Does not run on pull_request or push.
+# Does not enable live URL or live pasted-text.
+# A recorded pass is pin evidence, not an accuracy claim, and not production-ready.
+
+name: Jev pin verify (opt-in)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  jev-pin-verify:
+    if: ${{ vars.MEDIA_LENS_JEV_VERIFY == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Isolated jev-1.13.0 pin verify
+        env:
+          MEDIA_LENS_JEV_VERIFY: ${{ vars.MEDIA_LENS_JEV_VERIFY }}
+          MEDIA_LENS_TYPESAFE_API_KEY: ${{ secrets.MEDIA_LENS_TYPESAFE_API_KEY }}
+        run: node scripts/jev-pin-verify.js --artifact artifacts/jev-pin-verify.json
+      - name: Upload pin-verify artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jev-pin-verify
+          path: artifacts/jev-pin-verify.json
+          if-no-files-found: ignore

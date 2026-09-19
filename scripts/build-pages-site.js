@@ -61,6 +61,7 @@ export const PAGES_FORBIDDEN_NAMES = Object.freeze([
   'scripts',
   'evaluations',
   'fixtures',
+  'artifacts',
   'NEWSJACK-LICENSE.md'
 ]);
 

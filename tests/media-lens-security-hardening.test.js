@@ -577,6 +577,10 @@ test('N3: media-lens/README.md documents the residual DNS-rebinding risk and IPv
   assert.match(readme, /DNS rebinding/i);
   assert.match(readme, /IPv4-compatible `::\/96`/);
   assert.match(readme, /Live URL mode is still not production-ready/);
+  assert.match(readme, /2001:2::\/48/);
+  assert.match(readme, /64:ff9b:1::\/48/);
+  assert.match(readme, /classifier limit/);
+  assert.match(readme, /WHATWG canonicalization/);
 });
 
 // ---------------------------------------------------------------------------

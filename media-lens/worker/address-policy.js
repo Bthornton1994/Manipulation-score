@@ -28,7 +28,8 @@ const DENIED_EXACT_HOSTS = new Set([
 ]);
 
 // Loopback, RFC 1918, CGNAT, link-local (incl. 169.254.169.254 / 169.254.170.2),
-// IETF protocol assignments, benchmarking, this-network, multicast, reserved.
+// IETF protocol assignments, deprecated 6to4 anycast, benchmarking,
+// this-network, multicast, reserved.
 const BLOCKED_IPV4_RANGES = [
   ['0.0.0.0', 8, 'block_this_network'],
   ['10.0.0.0', 8, 'block_rfc1918'],
@@ -38,6 +39,7 @@ const BLOCKED_IPV4_RANGES = [
   ['172.16.0.0', 12, 'block_rfc1918'],
   ['192.168.0.0', 16, 'block_rfc1918'],
   ['192.0.0.0', 24, 'block_ietf_protocol'],
+  ['192.88.99.0', 24, 'block_6to4_anycast'],
   ['198.18.0.0', 15, 'block_benchmark'],
   ['224.0.0.0', 4, 'block_multicast'],
   ['240.0.0.0', 4, 'block_reserved']
@@ -162,6 +164,19 @@ function classifyEmbeddedIPv4(ipv4, family, canonical, embedding) {
   return allowResult(family, canonical, { reason: `allow_public_via_${embedding}`, embeddedIPv4: ipv4 });
 }
 
+/**
+ * RFC 6052 /48 IPv4 embed: bits 48–63 and 72–87, u-octet (bits 64–71) must be 0.
+ * Returns null when u is nonzero (fail closed). Trailing suffix bits are ignored;
+ * IPv4 policy then applies, matching well-known NAT64 /96.
+ */
+function ipv4FromRfc6052Slash48(words) {
+  const u = (words[4] >> 8) & 0xff;
+  if (u !== 0) return null;
+  const hi = words[3];
+  const lo = ((words[4] & 0xff) << 8) | ((words[5] >> 8) & 0xff);
+  return hextetToIPv4(hi, lo);
+}
+
 function classifyIPv6(ip) {
   const canonical = canonicalizeIPv6Literal(ip);
   if (canonical === null) return blockResult('block_unparsable', { family: 6 });
@@ -177,6 +192,17 @@ function classifyIPv6(ip) {
   if ((words[0] & 0xfe00) === 0xfc00) return blockResult('block_ula', { family: 6, canonical });
   if ((words[0] & 0xff00) === 0xff00) return blockResult('block_multicast', { family: 6, canonical });
   if (words[0] === 0x2001 && words[1] === 0xdb8) return blockResult('block_documentation', { family: 6, canonical });
+  // IPv6 BMWG benchmarking 2001:2::/48 (RFC 5180). Not native unicast.
+  if (words[0] === 0x2001 && words[1] === 0x0002) {
+    return blockResult('block_benchmark', { family: 6, canonical });
+  }
+  // ORCHID 2001:10::/28 (RFC 4843) and ORCHIDv2 2001:20::/28 (RFC 7343).
+  if (words[0] === 0x2001 && (words[1] & 0xfff0) === 0x0010) {
+    return blockResult('block_orchid', { family: 6, canonical });
+  }
+  if (words[0] === 0x2001 && (words[1] & 0xfff0) === 0x0020) {
+    return blockResult('block_orchid', { family: 6, canonical });
+  }
   if (words[0] === 0x100 && words[1] === 0 && words[2] === 0 && words[3] === 0) {
     return blockResult('block_discard', { family: 6, canonical });
   }
@@ -196,9 +222,23 @@ function classifyIPv6(ip) {
   if (words[0] === 0 && words[1] === 0 && words[2] === 0 && words[3] === 0 && words[4] === 0xffff && words[5] === 0) {
     return classifyEmbeddedIPv4(hextetToIPv4(words[6], words[7]), 6, canonical, 'siit');
   }
-  // NAT64 well-known prefix 64:ff9b::/96 (RFC 6052). Extra prefixes are out of scope and not treated as this embedding.
+  // NAT64 well-known prefix 64:ff9b::/96 (RFC 6052).
   if (words[0] === 0x64 && words[1] === 0xff9b && words[2] === 0 && words[3] === 0 && words[4] === 0 && words[5] === 0) {
     return classifyEmbeddedIPv4(hextetToIPv4(words[6], words[7]), 6, canonical, 'nat64');
+  }
+  // Local-use NAT64 64:ff9b:1::/48 (RFC 8215). IPv4 embed is RFC 6052 /48.
+  if (words[0] === 0x64 && words[1] === 0xff9b && words[2] === 0x0001) {
+    const ipv4 = ipv4FromRfc6052Slash48(words);
+    if (!ipv4) {
+      return blockResult('block_nat64_local_invalid', { family: 6, canonical });
+    }
+    return classifyEmbeddedIPv4(ipv4, 6, canonical, 'nat64_local');
+  }
+  // Remainder of 64:ff9b::/32: unknown NAT64 prefix. Not native unicast.
+  // Classifier limit: network-specific NAT64 prefixes outside 64:ff9b::/32 are
+  // not detected and may classify as native unicast.
+  if (words[0] === 0x64 && words[1] === 0xff9b) {
+    return blockResult('block_nat64_unknown', { family: 6, canonical });
   }
   // Deprecated IPv4-compatible ::/96 excluding :: and ::1 (already handled).
   if (words[0] === 0 && words[1] === 0 && words[2] === 0 && words[3] === 0 && words[4] === 0 && words[5] === 0) {
@@ -323,7 +363,11 @@ export function parseArticleUrl(targetUrl) {
 
   const writtenHost = authorityHostAsWritten(targetUrl);
   if (!hostsMatchWritten(writtenHost, parsed.hostname)) {
-    throw taggedError('URL host was rewritten from an exotic form and is rejected', 'BAD_URL');
+    // WHATWG canonicalizes exotic IPv4 (octal, hex, decimal, short) to
+    // dotted-decimal. Accept that rewrite only; IPv4 policy applies below.
+    if (!isStrictIPv4(parsed.hostname)) {
+      throw taggedError('URL host was rewritten from an exotic form and is rejected', 'BAD_URL');
+    }
   }
 
   const bareHost = stripIPv6Brackets(parsed.hostname).toLowerCase();

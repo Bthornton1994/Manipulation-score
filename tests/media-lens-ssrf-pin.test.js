@@ -48,21 +48,23 @@ function redirectResponse(pin, location, status = 302) {
 
 const PUBLIC_LOOKUP = async () => [{ address: '203.0.113.7', family: 4 }];
 
-test('URL parse / exotic IPv4: octal, hex, decimal, short, userinfo, schemes', async () => {
-  const cases = [
-    ['http://0177.0.0.1/', 'BAD_URL'],
-    ['http://0x7f.0.0.1/', 'BAD_URL'],
-    ['http://2130706433/', 'BAD_URL'],
-    ['http://127.1/', 'BAD_URL'],
+test('URL parse / exotic IPv4: WHATWG canonicalizes then IPv4 policy applies', async () => {
+  const blocked = [
+    ['http://0177.0.0.1/', 'BLOCKED_HOST'],
+    ['http://0x7f.0.0.1/', 'BLOCKED_HOST'],
+    ['http://2130706433/', 'BLOCKED_HOST'],
+    ['http://127.1/', 'BLOCKED_HOST'],
+    ['http://0x7f000001/', 'BLOCKED_HOST'],
     ['http://foo@127.0.0.1/', 'BAD_URL'],
     ['http://127.0.0.1#@203.0.113.7/', 'BLOCKED_HOST'],
     ['file:///etc/passwd', 'BAD_SCHEME'],
     ['gopher://203.0.113.7/', 'BAD_SCHEME'],
     ['javascript:alert(1)', 'BAD_SCHEME'],
     ['http://', 'BAD_URL'],
-    ['\x00http://203.0.113.7/', 'BAD_URL']
+    ['\x00http://203.0.113.7/', 'BAD_URL'],
+    ['http://exämple.com/', 'BAD_URL']
   ];
-  for (const [input, code] of cases) {
+  for (const [input, code] of blocked) {
     let called = false;
     await assert.rejects(
       () =>
@@ -79,6 +81,21 @@ test('URL parse / exotic IPv4: octal, hex, decimal, short, userinfo, schemes', a
     );
     assert.equal(called, false, `${input} must not connect`);
   }
+
+  const exoticPublic = parseArticleUrl('http://0xcb.0.113.7/path');
+  assert.equal(exoticPublic.kind, 'ipv4');
+  assert.equal(exoticPublic.parsed.hostname, '203.0.113.7');
+  assert.equal(exoticPublic.classified.disposition, 'allow_public');
+
+  const fetched = await fetchArticleSafely('http://0xcb.0.113.7/article', {
+    timeoutMs: 500,
+    maxBytes: 4000,
+    requestImpl: async ({ parsed, pin }) => {
+      assert.equal(parsed.hostname, '203.0.113.7');
+      return htmlResponse(pin);
+    }
+  });
+  assert.match(fetched.html, /Public article fixture/);
 });
 
 test('IPv4 policy table', async () => {
@@ -91,6 +108,7 @@ test('IPv4 policy table', async () => {
     ['169.254.170.2', 'block_link_local'],
     ['100.64.0.1', 'block_cgnat'],
     ['198.18.0.1', 'block_benchmark'],
+    ['192.88.99.1', 'block_6to4_anycast'],
     ['224.0.0.1', 'block_multicast'],
     ['240.0.0.1', 'block_reserved'],
     ['0.0.0.0', 'block_this_network']
@@ -122,6 +140,19 @@ test('IPv6 / embeddings policy table', async () => {
     ['::ffff:0:a9fe:a9fe', 'block_link_local_via_siit'],
     ['64:ff9b::7f00:1', 'block_loopback_via_nat64'],
     ['64:ff9b::a9fe:a9fe', 'block_link_local_via_nat64'],
+    ['64:ff9b:1:7f00:0:100::', 'block_loopback_via_nat64_local'],
+    ['64:ff9b:1:a9fe:a9:fe00::', 'block_link_local_via_nat64_local'],
+    ['64:ff9b:1:7f00:100:100::', 'block_nat64_local_invalid'],
+    ['64:ff9b:2::1', 'block_nat64_unknown'],
+    ['64:ff9b:0:0:0:1:7f00:1', 'block_nat64_unknown'],
+    ['2001:2::1', 'block_benchmark'],
+    ['2001:2:0:0:0:0:0:1', 'block_benchmark'],
+    ['2001:10::1', 'block_orchid'],
+    ['2001:1f::1', 'block_orchid'],
+    ['2001:20::1', 'block_orchid'],
+    ['2001:2f::1', 'block_orchid'],
+    ['::ffff:192.88.99.1', 'block_6to4_anycast_via_mapped'],
+    ['2002:c058:6301::', 'block_6to4_anycast_via_6to4'],
     ['::7f00:1', 'block_loopback_via_compat96'],
     ['::127.0.0.1', 'block_loopback_via_compat96'],
     ['2002:7f00:0001::', 'block_loopback_via_6to4'],
@@ -141,7 +172,25 @@ test('IPv6 / embeddings policy table', async () => {
   const nat64Public = classifyIp('64:ff9b::cb00:7107');
   assert.equal(nat64Public.disposition, 'allow_public');
   assert.equal(nat64Public.embeddedIPv4, '203.0.113.7');
+  const localNat64Public = classifyIp('64:ff9b:1:cb00:71:700::');
+  assert.equal(localNat64Public.disposition, 'allow_public');
+  assert.equal(localNat64Public.embeddedIPv4, '203.0.113.7');
   await assert.doesNotReject(() => assertHostIsPublic('::ffff:cb00:7107'));
+
+  let benchmarkConnects = 0;
+  await assert.rejects(
+    () =>
+      fetchArticleSafely('http://[2001:2::1]/', {
+        timeoutMs: 200,
+        maxBytes: 1000,
+        requestImpl: async () => {
+          benchmarkConnects += 1;
+          throw new Error('must not connect');
+        }
+      }),
+    hasCode('BLOCKED_HOST')
+  );
+  assert.equal(benchmarkConnects, 0);
 });
 
 test('DNS rebinding fixture: lookup is called once per hop and the second answer is never used', async () => {
@@ -175,6 +224,14 @@ test('mixed public+private DNS fails closed with no connect', async () => {
     async () => [
       { address: '203.0.113.7', family: 4 },
       { address: 'fd00::1', family: 6 }
+    ],
+    async () => [
+      { address: '203.0.113.7', family: 4 },
+      { address: '2001:2::1', family: 6 }
+    ],
+    async () => [
+      { address: '203.0.113.7', family: 4 },
+      { address: '64:ff9b:2::1', family: 6 }
     ]
   ];
   for (const lookupImpl of cases) {
@@ -234,6 +291,10 @@ test('redirects: private, loopback, mapped, NAT64, downgrade, relative, protocol
   await assert.rejects(() => follow('http://[::1]/'), hasCode('BLOCKED_HOST'));
   await assert.rejects(() => follow('http://[64:ff9b::7f00:1]/'), hasCode('BLOCKED_HOST'));
   await assert.rejects(() => follow('http://[::ffff:7f00:1]/'), hasCode('BLOCKED_HOST'));
+  await assert.rejects(() => follow('http://[2001:2::1]/'), hasCode('BLOCKED_HOST'));
+  await assert.rejects(() => follow('http://[64:ff9b:1:7f00:0:100::]/'), hasCode('BLOCKED_HOST'));
+  await assert.rejects(() => follow('http://[64:ff9b:2::1]/'), hasCode('BLOCKED_HOST'));
+  await assert.rejects(() => follow('http://0177.0.0.1/'), hasCode('BLOCKED_HOST'));
   await assert.rejects(
     () =>
       fetchArticleSafely('https://203.0.113.7/start', {

@@ -62,6 +62,28 @@ test('the evidence-only export omits text for spans not tied to any observation 
   assert.ok(graph.spans.every((s) => typeof s.text === 'string' && (referencedIds.has(s.id) ? s.text.length > 0 : true)));
 });
 
+const CLARITY_PRIVACY_SUMMARY =
+  'We do not operate accounts, servers that receive your pasted text, or analytics that track what you analyze.';
+const CLARITY_PRIVACY_HOW_ANALYSIS_WORKS =
+  'When you analyze a message, processing happens entirely in your browser using local JavaScript. Nothing is uploaded to Clarity or any third-party service for analysis.';
+const MEDIA_LENS_PRIVACY_DISCLOSURE =
+  'Media Lens is an unreleased, separate preview for public articles, advertisements, speeches, and campaign material. It is not deployed on this site. Its default fixture mode uses local example material and makes no network calls. Do not enter private messages or material you are not authorized to review. Any future live mode that sends prepared public text to an external service will require separate informed consent, an updated privacy notice, and additional security review before enablement. Clarity’s private analyzer remains governed by the on-device behavior described above.';
+
+test('privacy.html keeps Clarity analysis language unchanged and adds the Media Lens preview disclosure after it', async () => {
+  const html = await readFile('privacy.html', 'utf8');
+  assert.match(html, new RegExp(CLARITY_PRIVACY_SUMMARY.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(html, new RegExp(CLARITY_PRIVACY_HOW_ANALYSIS_WORKS.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(html, new RegExp(MEDIA_LENS_PRIVACY_DISCLOSURE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+
+  const howIdx = html.indexOf('<h2>How analysis works</h2>');
+  const mediaLensIdx = html.indexOf('<h2>Media Lens preview</h2>');
+  const localIdx = html.indexOf('<h2>Local storage on your device</h2>');
+  assert.ok(howIdx !== -1 && mediaLensIdx !== -1 && localIdx !== -1, 'expected How analysis works, Media Lens preview, and Local storage headings');
+  assert.ok(howIdx < mediaLensIdx && mediaLensIdx < localIdx, 'Media Lens preview must be a separate section after How analysis works and before Local storage');
+  assert.doesNotMatch(html, /live Media Lens processing is currently available/i);
+  assert.doesNotMatch(html, /Media Lens is deployed on this site/i);
+});
+
 test('/health never echoes a key value even when one is configured', async () => {
   const { loadConfig, publicConfig } = await import('../media-lens/worker/config.js');
   const config = loadConfig({ MEDIA_LENS_MODE: 'live', MEDIA_LENS_TYPESAFE_API_KEY: 'super-secret-value-123' });

@@ -141,6 +141,12 @@ async function buildAdapters({ config, payload }) {
 }
 
 async function preparePayload({ payload, config }) {
+  if (config.mode === 'live' && payload.mode === 'pasted_text') {
+    throw Object.assign(
+      new Error('Live pasted-text analysis is disabled until a later privacy and security review.'),
+      { code: 'live_pasted_text_disabled' }
+    );
+  }
   if (payload.mode === 'pasted_text') {
     return prepareFromPastedText({ text: String(payload.text || ''), kind: payload.kind || 'other_public' });
   }
@@ -262,6 +268,14 @@ export function createServer(config = loadConfig()) {
           return;
         }
 
+        if (config.mode === 'live' && payload.mode === 'pasted_text') {
+          sendJson(res, 400, {
+            error: 'live_pasted_text_disabled',
+            message: 'Live pasted-text analysis is disabled until a later privacy and security review.'
+          });
+          return;
+        }
+
         const { consentAt } = resolveConsentAt(payload.consent_at);
 
         let prepared;
@@ -312,7 +326,8 @@ export function createServer(config = loadConfig()) {
 }
 
 /**
- * Start the worker. Refuses to start in live mode without a configured key.
+ * Start the worker. Refuses to start in live mode unless
+ * MEDIA_LENS_ENABLE_LIVE=true and the TypeSafe key are both present.
  */
 export async function startServer(config = loadConfig()) {
   const readiness = assertLiveModeIsReady(config);

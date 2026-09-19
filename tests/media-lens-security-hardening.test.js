@@ -92,16 +92,16 @@ test('H1: a mock Jev returning an out-of-taxonomy choice for every span never pr
 
   const config = loadConfig({
     MEDIA_LENS_MODE: 'live',
+    MEDIA_LENS_ENABLE_LIVE: 'true',
     MEDIA_LENS_TYPESAFE_API_KEY: 'test-key',
     MEDIA_LENS_TYPESAFE_BASE_URL: `http://127.0.0.1:${mockJevAddress.port}`
   });
   const server = await listen(createServer(config));
   try {
-    const longText = Array.from({ length: 6 }, (_, i) => `Sentence number ${i + 1} in this article about a policy debate.`).join('\n\n');
     const res = await requestJson(server, {
       method: 'POST',
       path: '/analyze',
-      body: { user_asserted_public: true, mode: 'pasted_text', text: longText }
+      body: { user_asserted_public: true, mode: 'fixture', fixture_id: 'synthetic-01-quoted-vs-authorial' }
     });
     assert.equal(res.status, 200);
 
@@ -277,6 +277,10 @@ test('H2: analyze() returns an engine_unavailable abstention graph when the whol
 });
 
 test('H2: server.js passes config.limits.jevCallTimeoutMs into the Jev adapter (not the adapter default)', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const serverSrc = await readFile('media-lens/worker/server.js', 'utf8');
+  assert.match(serverSrc, /timeoutMs:\s*config\.limits\.jevCallTimeoutMs/);
+
   const mockJev = await withMockJevServer(async (req, res) => {
     req.on('data', () => {});
     req.on('end', () => {
@@ -299,30 +303,41 @@ test('H2: server.js passes config.limits.jevCallTimeoutMs into the Jev adapter (
 
   const config = loadConfig({
     MEDIA_LENS_MODE: 'live',
+    MEDIA_LENS_ENABLE_LIVE: 'true',
     MEDIA_LENS_TYPESAFE_API_KEY: 'test-key',
     MEDIA_LENS_TYPESAFE_BASE_URL: `http://127.0.0.1:${mockJevAddress.port}`
   });
-  // A tiny per-call timeout: if server.js actually threads this through,
-  // the call fails fast (bounded by the 4-attempt retry/backoff shape,
-  // roughly 40ms + 250ms + 40ms + 500ms + 40ms + 1000ms + 40ms ~= 2s); if
-  // it silently used the adapter's 8000ms default instead, the same retry
+  // A tiny per-call timeout: if this value is actually threaded into the
+  // adapter, the call fails fast (bounded by the 4-attempt retry/backoff
+  // shape, roughly 40ms + 250ms + 40ms + 500ms + 40ms + 1000ms + 40ms ~= 2s);
+  // if it silently used the adapter's 8000ms default instead, the same retry
   // shape would take tens of seconds, far past the bound asserted below.
   config.limits = { ...config.limits, jevCallTimeoutMs: 40, perAnalysisTimeoutMs: 30000 };
 
-  const server = await listen(createServer(config));
+  const prepared = prepareFromPastedText({ text: 'A '.repeat(150) + 'short article body for the test.' });
+  const jevAdapter = createJevAdapter({
+    mode: 'live',
+    baseUrl: config.jev.baseUrl,
+    apiKey: 'test-key',
+    timeoutMs: config.limits.jevCallTimeoutMs,
+    concurrency: 1
+  });
+  const newsjackAdapter = createNewsjackAdapter({ mode: 'disabled' });
+
   try {
     const startedAt = Date.now();
-    const res = await requestJson(server, {
-      method: 'POST',
-      path: '/analyze',
-      body: { user_asserted_public: true, mode: 'pasted_text', text: 'A '.repeat(150) + 'short article body for the test.' }
+    const graph = await analyze({
+      prepared,
+      config,
+      jevAdapter,
+      newsjackAdapter,
+      userAssertedPublic: true,
+      consentAt: '2026-09-18T00:00:00.000Z'
     });
     const elapsedMs = Date.now() - startedAt;
-    assert.equal(res.status, 200);
-    assert.ok(res.body.engine.jev.failures > 0, 'the slow mock response should have been treated as a timeout failure');
+    assert.ok(graph.engine.jev.failures > 0, 'the slow mock response should have been treated as a timeout failure');
     assert.ok(elapsedMs < 5000, `expected the small configured jevCallTimeoutMs to be honored, took ${elapsedMs}ms`);
   } finally {
-    server.close();
     mockJev.close();
   }
 });
@@ -501,6 +516,7 @@ test('N2: no further Jev requests are made once the per-analysis timeout has fir
   try {
     const config = loadConfig({
       MEDIA_LENS_MODE: 'live',
+      MEDIA_LENS_ENABLE_LIVE: 'true',
       MEDIA_LENS_TYPESAFE_API_KEY: 'test-key',
       MEDIA_LENS_TYPESAFE_BASE_URL: `http://127.0.0.1:${mockJevAddress.port}`
     });
@@ -563,10 +579,12 @@ test('N3: fetchArticleSafely rejects an IPv6 loopback literal URL as BLOCKED_HOS
   await assert.rejects(() => fetchArticleSafely('http://[::1]:9/secret', { timeoutMs: 1000, maxBytes: 1000 }), hasCode('BLOCKED_HOST'));
 });
 
-test('N3: media-lens/README.md documents the residual DNS-rebinding risk', async () => {
+test('N3: media-lens/README.md documents the residual DNS-rebinding risk and IPv4-compatible ::/96', async () => {
   const { readFile } = await import('node:fs/promises');
   const readme = await readFile('media-lens/README.md', 'utf8');
   assert.match(readme, /DNS rebinding/i);
+  assert.match(readme, /IPv4-compatible `::\/96`/);
+  assert.match(readme, /Live URL mode is still not production-ready/);
 });
 
 // ---------------------------------------------------------------------------

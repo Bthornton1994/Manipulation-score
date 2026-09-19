@@ -54,9 +54,9 @@
         <p>
           A local worker process that you or an operator run performs the analysis. In <strong>fixture mode</strong> (the default in
           this preview), the worker reads pre-recorded example answers and makes no network calls at all. In <strong>live mode</strong>
-          (not enabled by default, and not used in automated testing), the worker may send prepared public text to a typed classifier
-          called Jev, run by TypeSafe. Newsjack provenance data, when used, comes from files an operator already has on this computer;
-          the worker never calls a Newsjack service.
+          (disabled by default; requires <code>MEDIA_LENS_ENABLE_LIVE=true</code> and an operator-configured key; not used in automated
+          testing), URL fetch is experimental and not production-ready, and live pasted-text analysis is disabled. Newsjack provenance
+          data, when used, comes from files an operator already has on this computer; the worker never calls a Newsjack service.
         </p>
         <p>
           Full article text is not stored by default. Nothing here is downloaded, uploaded, or exported unless you choose the export
@@ -83,7 +83,7 @@
             </label>
             <label>
               <input type="radio" name="input-mode" value="url" />
-              <span>Enter a URL (live mode only)</span>
+              <span>Enter a URL (experimental, not production-ready)</span>
             </label>
           </div>
         </fieldset>
@@ -109,8 +109,9 @@
           <label class="ml-field-label" for="article-url">Article URL</label>
           <input type="url" id="article-url" name="url" placeholder="https://example.com/article" disabled />
           <p class="ml-form-note">
-            URL analysis needs the worker running with <code>MEDIA_LENS_MODE=live</code> and an operator-configured key. It is
-            disabled in this fixture-mode preview.
+            URL analysis is experimental and not production-ready. It needs the worker running with
+            <code>MEDIA_LENS_MODE=live</code>, <code>MEDIA_LENS_ENABLE_LIVE=true</code>, and an operator-configured key. Live
+            pasted-text analysis is disabled. URL fetch is disabled in this fixture-mode preview.
           </p>
         </div>
 

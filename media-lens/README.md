@@ -21,15 +21,16 @@ media-lens/
 Set with `MEDIA_LENS_MODE` (default `fixture`):
 
 - **`fixture`** — the only mode automated tests and CI exercise. No outbound network at all. The Jev and Newsjack adapters read local JSON fixtures under `fixtures/jev/` and `fixtures/newsjack/`.
-- **`live`** — requires `MEDIA_LENS_TYPESAFE_API_KEY` to be set, or the worker refuses to start. Sends prepared public span text to TypeSafe's Jev classifier over HTTPS. Newsjack provenance in live mode is read from an **operator-provided artifacts directory** (`MEDIA_LENS_NEWSJACK_ARTIFACTS_DIR`) — the worker never spawns the Newsjack CLI and never calls a live news-search service.
+- **`live`** — refuses to start unless **both** `MEDIA_LENS_ENABLE_LIVE=true` and `MEDIA_LENS_TYPESAFE_API_KEY` are set. Live pasted-text analysis is disabled and is rejected before any external request. Live URL fetch is experimental and not production-ready. When those gates pass, prepared public span text from a fetched URL may be sent to TypeSafe's Jev classifier over HTTPS. Newsjack provenance in live mode is read from an **operator-provided artifacts directory** (`MEDIA_LENS_NEWSJACK_ARTIFACTS_DIR`) — the worker never spawns the Newsjack CLI and never calls a live news-search service.
 
 Environment variables (read only by `worker/config.js`, never logged, never returned by `/health`):
 
 | Variable | Purpose |
 | --- | --- |
 | `MEDIA_LENS_MODE` | `fixture` (default) or `live` |
+| `MEDIA_LENS_ENABLE_LIVE` | explicit opt-in; must be the exact value `true` before live mode can start (default: unset/false) |
 | `MEDIA_LENS_HOST` / `MEDIA_LENS_PORT` | worker bind address (default `127.0.0.1:8787`) |
-| `MEDIA_LENS_TYPESAFE_API_KEY` | Jev API key; required for `live` mode |
+| `MEDIA_LENS_TYPESAFE_API_KEY` | Jev API key; required for `live` mode together with `MEDIA_LENS_ENABLE_LIVE=true` |
 | `MEDIA_LENS_TYPESAFE_BASE_URL` | Jev API base URL override (used by tests to point at a mock server) |
 | `MEDIA_LENS_NEWSJACK_ARTIFACTS_DIR` | directory of operator-produced Newsjack run artifacts for `live` mode coverage |
 
@@ -39,7 +40,7 @@ Environment variables (read only by `worker/config.js`, never logged, never retu
 
 512 KB request body; 60,000 char prepared text; 200 spans; 10 analyses/minute/worker; 8 s per Jev call; 30 s per analysis. Exceeding a limit returns HTTP 413/429 and a graph with a single abstention, never a partial result.
 
-`worker/safe-fetch.js` rejects loopback/private/link-local hosts (including IPv6 literals, IPv4-mapped IPv6 in dotted and hexadecimal forms, and via redirect) before fetching a live-mode URL, resolving the hostname once via DNS at request time. A residual risk in any such check is DNS rebinding: the resolved address could change between that lookup and the underlying TCP connection. Other IPv4-embedded IPv6 prefixes (for example NAT64 `64:ff9b::/96` and SIIT `::ffff:0:0:0/96`) are not classified as IPv4. Live URL mode is still not production-ready.
+`worker/safe-fetch.js` rejects loopback/private/link-local hosts (including IPv6 literals, IPv4-mapped IPv6 in dotted and hexadecimal forms, and via redirect) before fetching a live-mode URL, resolving the hostname once via DNS at request time. A residual risk in any such check is DNS rebinding: the resolved address could change between that lookup and the underlying TCP connection. Other IPv4-embedded IPv6 prefixes (for example NAT64 `64:ff9b::/96`, SIIT `::ffff:0:0:0/96`, and deprecated IPv4-compatible `::/96`) are not classified as IPv4. Live URL mode is still not production-ready.
 
 ## Consent and disclosure
 

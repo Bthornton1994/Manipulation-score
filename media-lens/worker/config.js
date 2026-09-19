@@ -25,6 +25,10 @@ function readMode(env) {
   return raw === 'live' ? 'live' : 'fixture';
 }
 
+function readLiveEnabled(env) {
+  return env.MEDIA_LENS_ENABLE_LIVE === 'true';
+}
+
 /**
  * Build a config object from an environment map (defaults to
  * process.env). Never returns key values directly under an obviously
@@ -33,11 +37,13 @@ function readMode(env) {
  */
 export function loadConfig(env = process.env) {
   const mode = readMode(env);
+  const liveEnabled = readLiveEnabled(env);
   const typesafeApiKey = env.MEDIA_LENS_TYPESAFE_API_KEY || null;
   const medialystToken = env.MEDIA_LENS_MEDIALYST_TOKEN || null;
 
   return {
     mode,
+    liveEnabled,
     host: env.MEDIA_LENS_HOST || '127.0.0.1',
     port: Number.parseInt(env.MEDIA_LENS_PORT || '8787', 10),
     limits: { ...DEFAULT_LIMITS },
@@ -63,6 +69,7 @@ export function loadConfig(env = process.env) {
 export function publicConfig(config) {
   return {
     mode: config.mode,
+    liveEnabled: Boolean(config.liveEnabled),
     limits: config.limits,
     jev: { mode: config.mode === 'live' ? 'live' : 'fixture', modelRequested: config.jev.modelRequested, hasApiKey: config.jev.hasApiKey },
     newsjack: { artifactsConfigured: Boolean(config.newsjack.artifactsDir) }
@@ -70,11 +77,15 @@ export function publicConfig(config) {
 }
 
 /**
- * Live mode must refuse to start without the required key. Called by
- * server.js before binding.
+ * Live mode must refuse to start unless the operator has opted in with
+ * MEDIA_LENS_ENABLE_LIVE=true *and* the required TypeSafe key is present.
+ * Called by server.js before binding.
  */
 export function assertLiveModeIsReady(config) {
   if (config.mode !== 'live') return { ok: true };
+  if (!config.liveEnabled) {
+    return { ok: false, reason: 'MEDIA_LENS_MODE=live requires MEDIA_LENS_ENABLE_LIVE=true' };
+  }
   if (!config.secrets.typesafeApiKey) {
     return { ok: false, reason: 'MEDIA_LENS_MODE=live requires MEDIA_LENS_TYPESAFE_API_KEY to be set' };
   }

@@ -233,19 +233,34 @@ test('unknown routes return 404', async () => {
   }
 });
 
-test('live mode without a configured key refuses to start', async () => {
+test('live mode without MEDIA_LENS_ENABLE_LIVE refuses to start even when a key is set', async () => {
   await assert.rejects(
-    () => startServer(loadConfig({ MEDIA_LENS_MODE: 'live', MEDIA_LENS_PORT: '0' })),
+    () => startServer(loadConfig({ MEDIA_LENS_MODE: 'live', MEDIA_LENS_TYPESAFE_API_KEY: 'test-key-not-used', MEDIA_LENS_PORT: '0' })),
+    /MEDIA_LENS_ENABLE_LIVE/
+  );
+});
+
+test('live mode with ENABLE_LIVE but no key refuses to start', async () => {
+  await assert.rejects(
+    () => startServer(loadConfig({ MEDIA_LENS_MODE: 'live', MEDIA_LENS_ENABLE_LIVE: 'true', MEDIA_LENS_PORT: '0' })),
     /MEDIA_LENS_TYPESAFE_API_KEY/
   );
 });
 
-test('live mode with a configured key is allowed to start (still never called in this test)', async () => {
-  const server = await startServer(loadConfig({ MEDIA_LENS_MODE: 'live', MEDIA_LENS_TYPESAFE_API_KEY: 'test-key-not-used', MEDIA_LENS_PORT: '0' }));
+test('live mode with ENABLE_LIVE and a configured key is allowed to start (still never called in this test)', async () => {
+  const server = await startServer(
+    loadConfig({
+      MEDIA_LENS_MODE: 'live',
+      MEDIA_LENS_ENABLE_LIVE: 'true',
+      MEDIA_LENS_TYPESAFE_API_KEY: 'test-key-not-used',
+      MEDIA_LENS_PORT: '0'
+    })
+  );
   try {
     const res = await requestJson(server, { method: 'GET', path: '/health' });
     assert.equal(res.status, 200);
     assert.equal(res.body.mode, 'live');
+    assert.equal(res.body.liveEnabled, true);
   } finally {
     server.close();
   }

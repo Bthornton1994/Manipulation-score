@@ -77,7 +77,7 @@ GitHub provisions TLS for both `manipulationscore.com` and `www.manipulationscor
 
 Media Lens is a separate, unreleased preview mode for public articles, advertisements, speeches, and campaign material — not for private messages. It is isolated from Clarity (no shared code, no shared network path) and is **not deployed**: it is excluded from the GitHub Pages build.
 
-Media Lens runs entirely through a local worker process. The default and only mode exercised in automated tests is `fixture` mode, which reads local example files and makes no network calls. A `live` mode exists as an adapter seam behind explicit operator configuration (environment variables, never committed) and is not used by default or in CI.
+Media Lens runs entirely through a local worker process. The default and only mode exercised in automated tests is `fixture` mode, which reads local example files and makes no network calls. A `live` mode exists as an adapter seam behind explicit operator configuration (`MEDIA_LENS_ENABLE_LIVE=true` and `MEDIA_LENS_TYPESAFE_API_KEY`, never committed) and is not used by default or in CI. Live pasted-text analysis is disabled. Live URL mode is experimental and not production-ready.
 
 ```bash
 node --test tests/*.test.js                                                          # full suite, including Media Lens tests

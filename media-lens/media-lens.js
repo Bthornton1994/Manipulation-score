@@ -250,7 +250,7 @@ async function handleSubmit(event) {
     payload.text = byId('pasted-text').value;
     payload.kind = 'other_public';
   } else if (mode === 'url') {
-    showError('URL analysis requires a worker running in live mode. Not available in this preview.');
+    showError('URL analysis is experimental and not production-ready. It is not available in this preview.');
     return;
   }
 

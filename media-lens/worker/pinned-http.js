@@ -208,7 +208,8 @@ export function performPinnedGet({
   connectTimeoutMs = DEFAULT_CONNECT_TIMEOUT_MS,
   maxHeaderBytes = DEFAULT_MAX_HEADER_BYTES,
   maxBytes,
-  createConnectionImpl = null
+  createConnectionImpl = null,
+  tlsCa = null
 }) {
   const isHttps = parsed.protocol === 'https:';
   const transport = isHttps ? https : http;
@@ -250,7 +251,10 @@ export function performPinnedGet({
           ...pinnedOptions,
           servername: isIpHostname(requestHostname) ? undefined : requestHostname,
           checkServerIdentity: (name, cert) => tls.checkServerIdentity(isIpHostname(requestHostname) ? requestHostname : requestHostname, cert),
-          rejectUnauthorized: true
+          rejectUnauthorized: true,
+          // tlsCa is a test-only local-CA trust store. Production omits it
+          // so Node's default CAs apply. Never set rejectUnauthorized: false.
+          ...(tlsCa ? { ca: tlsCa } : {})
         });
       }
       return net.connect(pinnedOptions);
@@ -278,6 +282,7 @@ export function performPinnedGet({
         return tls.checkServerIdentity(identity, cert);
       };
       options.rejectUnauthorized = true;
+      if (tlsCa) options.ca = tlsCa;
     }
 
     let req;

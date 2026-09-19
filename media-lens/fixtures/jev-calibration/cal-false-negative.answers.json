@@ -1,0 +1,19 @@
+{
+  "model_reported": "jev-1.13.0",
+  "answers": {
+    "span-1": {
+      "influence_signal": {
+        "type": "choice",
+        "choice": "none",
+        "probabilities": {
+          "none": 0.88
+        },
+        "confidence": 0.88
+      },
+      "is_quoted_or_attributed": {
+        "type": "noul",
+        "noul": 0.12
+      }
+    }
+  }
+}

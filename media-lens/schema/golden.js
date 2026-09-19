@@ -17,5 +17,8 @@ export function normalizeForGolden(graph) {
   if (typeof clone.engine?.jev?.elapsed_ms === 'number') {
     clone.engine.jev.elapsed_ms = 0;
   }
+  if (typeof clone.engine?.classifier_dev?.elapsed_ms === 'number') {
+    clone.engine.classifier_dev.elapsed_ms = 0;
+  }
   return clone;
 }

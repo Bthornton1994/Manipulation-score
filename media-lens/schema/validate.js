@@ -389,6 +389,17 @@ function validateEngine(engine, observations, errors) {
   if (isPlainObject(engine.newsjack)) {
     req(errors, inEnum(engine.newsjack.mode, NEWSJACK_MODES), `${p}.newsjack.mode invalid`);
   }
+  if (engine.classifier_dev != null) {
+    req(errors, isPlainObject(engine.classifier_dev), `${p}.classifier_dev must be an object when present`);
+    if (isPlainObject(engine.classifier_dev)) {
+      req(errors, engine.classifier_dev.evaluation_only === true, `${p}.classifier_dev.evaluation_only must be literal true`);
+      req(
+        errors,
+        inEnum(engine.classifier_dev.mode, ['evaluation']),
+        `${p}.classifier_dev.mode must be "evaluation"`
+      );
+    }
+  }
 }
 
 function validatePrivacy(privacy, errors) {

@@ -549,7 +549,11 @@ test('operator notes describe pin-verify as evidence plumbing, not a quality stu
   assert.match(readme, /not production-ready/i);
   assert.match(readme, /does not enable live URL/i);
   assert.match(readme, /verify_kill_switch/);
-  assert.match(readme, /every external Jev-capable path/i);
+  assert.match(
+    readme,
+    /every external Jev-capable path immediately \(live URL fetch, live Jev, isolated pin verification, and classifier\.dev\)/
+  );
+  assert.match(readme, /classifier\.dev makes zero outbound calls/);
 
   const notes = await readFile('docs/media-lens-jev-integration-v2.md', 'utf8');
   assert.match(notes, /MEDIA_LENS_JEV_VERIFY/);
@@ -566,5 +570,8 @@ test('operator notes describe pin-verify as evidence plumbing, not a quality stu
   const root = await readFile('README.md', 'utf8');
   assert.match(root, /MEDIA_LENS_JEV_VERIFY/);
   assert.match(root, /not a quality study/i);
-  assert.match(root, /isolated pin verification/i);
+  assert.match(
+    root,
+    /every external Jev-capable path \(live URL fetch, live Jev, isolated pin verification, and classifier\.dev\)/
+  );
 });

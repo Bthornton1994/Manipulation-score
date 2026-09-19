@@ -19,7 +19,7 @@ export const FIXTURES_DIR = join(__dirname, '..', 'fixtures');
 
 const FIXED_CONSENT_AT = '2026-09-18T00:00:00.000Z';
 
-export async function runFixture(fixtureId, { config = loadConfig({}) } = {}) {
+export async function runFixture(fixtureId, { config = loadConfig({}), classifierDevAdapter = null } = {}) {
   const articlePath = join(FIXTURES_DIR, 'articles', `${fixtureId}.html`);
   const html = await readFile(articlePath, 'utf8');
   const sourceUrl = `https://fictional-daily.example/articles/${fixtureId}`;
@@ -34,6 +34,7 @@ export async function runFixture(fixtureId, { config = loadConfig({}) } = {}) {
     config,
     jevAdapter,
     newsjackAdapter,
+    classifierDevAdapter,
     userAssertedPublic: true,
     consentAt: FIXED_CONSENT_AT,
     disclosureShown: true

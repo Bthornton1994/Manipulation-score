@@ -1,0 +1,43 @@
+{
+  "disclaimer": "Synthetic/public-safe fixtures for software consistency only. Not news scrapes. Not representative real-world accuracy.",
+  "taxonomy_version": "cdev-taxonomy-1.0.0",
+  "policy_version": "cdev-cascade-1.0.0",
+  "cases": [
+    {
+      "id": "eval-none-neutral",
+      "span": { "id": "span-1", "role": "authorial", "text": "The committee met on Tuesday and approved the budget amendment." },
+      "artifact": { "kind": "article", "title": "Synthetic eval fixture" },
+      "label": { "jev": "none", "cdev": "no_detected_signal" }
+    },
+    {
+      "id": "eval-urgency-pressure",
+      "span": { "id": "span-1", "role": "authorial", "text": "Act before midnight or there will be no time left to check." },
+      "artifact": { "kind": "article", "title": "Synthetic eval fixture" },
+      "label": { "jev": "urgency", "cdev": "fear_urgency" }
+    },
+    {
+      "id": "eval-certainty-marker",
+      "span": { "id": "span-1", "role": "authorial", "text": "This plan will undeniably fix every school in the county." },
+      "artifact": { "kind": "article", "title": "Synthetic eval fixture" },
+      "label": { "jev": "certainty_beyond_evidence", "cdev": "unsupported_certainty" }
+    },
+    {
+      "id": "eval-personal-attack",
+      "span": { "id": "span-1", "role": "authorial", "text": "Ignore the proposal; she is a fool and always has been." },
+      "artifact": { "kind": "article", "title": "Synthetic eval fixture" },
+      "label": { "jev": "none", "cdev": "personal_attack" }
+    },
+    {
+      "id": "eval-short-insufficient",
+      "span": { "id": "span-1", "role": "authorial", "text": "See below." },
+      "artifact": { "kind": "article", "title": "Synthetic eval fixture" },
+      "label": { "jev": "none", "cdev": "insufficient_evidence" }
+    },
+    {
+      "id": "eval-quoted-attribution",
+      "span": { "id": "span-1", "role": "quoted", "text": "We will act immediately." },
+      "artifact": { "kind": "article", "title": "Synthetic eval fixture" },
+      "label": { "jev": "none", "cdev": "no_detected_signal" }
+    }
+  ]
+}

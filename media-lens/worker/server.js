@@ -13,11 +13,13 @@ import {
   publicConfig,
   assertLiveModeIsReady,
   effectiveLiveFlags,
-  jevAdapterMode
+  jevAdapterMode,
+  classifierDevAdapterEnabled
 } from './config.js';
 import { prepareFromHtml, prepareFromPastedText, emptyPreparedArtifactStub } from './prepare.js';
 import { createJevAdapter } from './adapters/jev.js';
 import { createNewsjackAdapter } from './adapters/newsjack.js';
+import { createClassifierDevAdapter } from './adapters/classifier-dev.js';
 import { analyze, buildAbstentionOnlyGraph } from './analyze.js';
 import { fetchArticleSafely } from './safe-fetch.js';
 import { parseArticleUrl } from './address-policy.js';
@@ -112,7 +114,7 @@ function readBodyWithLimit(req, maxBytes) {
   });
 }
 
-async function buildAdapters({ config, payload }) {
+async function buildAdapters({ config, payload, classifierDevFetch }) {
   const jevMode = jevAdapterMode(config);
   const jevAdapter = createJevAdapter({
     mode: jevMode,
@@ -134,7 +136,17 @@ async function buildAdapters({ config, payload }) {
     artifactsDir: config.newsjack.artifactsDir
   });
 
-  return { jevAdapter, newsjackAdapter };
+  const classifierDevAdapter = createClassifierDevAdapter({
+    enabled: classifierDevAdapterEnabled(config),
+    isKillSwitchAsserted: () => effectiveLiveFlags(config).killSwitch,
+    baseUrl: config.classifierDev.baseUrl,
+    timeoutMs: config.classifierDev.timeoutMs,
+    maxBatch: config.classifierDev.maxBatch,
+    maxDailyClassifications: config.classifierDev.maxDailyClassifications,
+    fetchImpl: classifierDevFetch || globalThis.fetch
+  });
+
+  return { jevAdapter, newsjackAdapter, classifierDevAdapter };
 }
 
 async function preparePayload({ payload, config, fetchArticle }) {
@@ -339,6 +351,7 @@ export function createServer(config = loadConfig(), options = {}) {
   const audit = options.auditLogger || createAuditLogger();
   // Test/programmatic only. Unused by startServer() / the CLI.
   const fetchArticle = options.fetchArticle || null;
+  const classifierDevFetch = options.classifierDevFetch || null;
   const checkRateLimit = createFixedWindowLimiter(config.limits.maxAnalysesPerMinute);
   const consumeLiveUrl = createFixedWindowLimiter(config.limits.maxLiveUrlPerMinute);
   const consumeLiveUrlHost = createKeyedFixedWindowLimiter(config.limits.maxLiveUrlPerHostPerMinute);
@@ -520,13 +533,18 @@ export function createServer(config = loadConfig(), options = {}) {
         }
 
         try {
-          const { jevAdapter, newsjackAdapter } = await buildAdapters({ config, payload });
+          const { jevAdapter, newsjackAdapter, classifierDevAdapter } = await buildAdapters({
+            config,
+            payload,
+            classifierDevFetch
+          });
 
           const rawGraph = await analyze({
             prepared,
             config,
             jevAdapter,
             newsjackAdapter,
+            classifierDevAdapter,
             userAssertedPublic: true,
             consentAt,
             disclosureShown: true
@@ -543,8 +561,29 @@ export function createServer(config = loadConfig(), options = {}) {
             jev_calls: graph.engine?.jev?.calls ?? 0,
             jev_failures: graph.engine?.jev?.failures ?? 0,
             model_match: graph.engine?.jev?.model_match ?? null,
-            abstention_count: Array.isArray(graph.abstentions) ? graph.abstentions.length : 0
+            abstention_count: Array.isArray(graph.abstentions) ? graph.abstentions.length : 0,
+            classifier_dev_enabled: Boolean(graph.engine?.classifier_dev),
+            cdev_calls: graph.engine?.classifier_dev?.calls ?? 0,
+            cdev_classifications: graph.engine?.classifier_dev?.classifications ?? 0,
+            escalated_span_count: graph.engine?.classifier_dev?.escalated_span_count ?? 0,
+            circuit_open: graph.engine?.classifier_dev?.circuit_open ?? false
           });
+
+          if (graph.engine?.classifier_dev) {
+            audit.emit(AUDIT_EVENTS.CLASSIFIER_DEV_CASCADE, {
+              mode: config.mode,
+              input_mode: payload.mode,
+              classifier_dev_enabled: true,
+              cdev_calls: graph.engine.classifier_dev.calls ?? 0,
+              cdev_classifications: graph.engine.classifier_dev.classifications ?? 0,
+              cdev_model: graph.engine.classifier_dev.model_reported,
+              cdev_status: graph.engine.classifier_dev.mode,
+              escalated_span_count: graph.engine.classifier_dev.escalated_span_count ?? 0,
+              circuit_open: graph.engine.classifier_dev.circuit_open ?? false,
+              taxonomy_version: graph.engine.classifier_dev.taxonomy_version,
+              policy_version: graph.engine.classifier_dev.policy_version
+            });
+          }
 
           sendJson(res, 200, graph);
           return;

@@ -63,9 +63,13 @@ Worker environment variables are read only by `worker/config.js`. Isolated pin v
 
 The UI shows a persistent, non-dismissable notice describing what Media Lens analyzes, that a local worker performs any processing, what happens in live mode, and that private messages belong in Clarity instead. A per-session "This is public material I am allowed to analyze" checkbox gates the submit button; the worker rejects `/analyze` requests without `user_asserted_public: true`.
 
+## Privacy / DPA (evaluation-only)
+
+In-repo source of truth: `docs/media-lens-classifier-dev-privacy.md`. Recommendation: **KEEP_EVALUATION_ONLY** (public sources retrieved 2026-09-19 PT). `MEDIA_LENS_ENABLE_CLASSIFIER_DEV` remains default-off. A public classifier.dev claim that it stores no request text is insufficient alone for production. Prefer default tier `fast`; do not enable `smart` on any live path until contracts close the TypeSafe / OpenRouter / ultimate-model chain. Live URL and live pasted-text stay unauthorized. Not production-ready. Not an accuracy claim. Related to Issue #118; does not close it.
+
 ## Incidents and rollback
 
-Operator runbook: `docs/media-lens-ops-runbook-v2.md`. Canary/kill-switch drill packet (Issue #118 E, **DRILL_PACKET_ONLY**, not production-ready, does not authorize live enablement): `docs/media-lens-canary-drill-v1.md`. Architecture rollback and incident classes: `docs/media-lens-live-url-v2-architecture.md` §20.
+Operator runbook: `docs/media-lens-ops-runbook-v2.md`. Canary/kill-switch drill packet (Issue #118 E, **DRILL_PACKET_ONLY**, not production-ready, does not authorize live enablement): `docs/media-lens-canary-drill-v1.md`. Architecture rollback and incident classes: `docs/media-lens-live-url-v2-architecture.md` §20. classifier.dev privacy SoT: `docs/media-lens-classifier-dev-privacy.md` (**KEEP_EVALUATION_ONLY**).
 
 Do not paste API keys, article bodies, or URLs with credentials into tickets. To stop every external Jev-capable path immediately (live URL fetch, live Jev, isolated pin verification, and classifier.dev): set `MEDIA_LENS_KILL_SWITCH=true` or `touch` the kill file, then confirm live `/analyze` returns `503 live_killed` (live mode) or that fixture-only behavior continues, that `scripts/jev-pin-verify.js` exits nonzero with `verify_kill_switch`, and that classifier.dev makes zero outbound calls. This is not a production-ready mode and is not hosted on GitHub Pages.
 

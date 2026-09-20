@@ -36,12 +36,31 @@ test('classifier.dev docs stay off the Pages allowlist with docs/ and media-lens
 
 test('privacy disposition lists provider claims as UNVERIFIED and stays evaluation-only', async () => {
   const body = await readFile(PRIVACY, 'utf8');
+  assert.match(body, /KEEP_EVALUATION_ONLY/);
   assert.match(body, /UNVERIFIED/);
   assert.match(body, /evaluation-only/);
   assert.match(body, /Issue #118/);
   assert.match(body, /does \*\*not\*\* close/);
   assert.match(body, /Private messages/);
   assert.match(body, /pasted sensitive/);
+  assert.match(body, /MEDIA_LENS_ENABLE_CLASSIFIER_DEV/);
+  assert.match(body, /off by default/);
+  assert.match(body, /stores no request text/);
+  assert.match(body, /insufficient alone/);
+  assert.match(body, /No signed DPA/);
+  assert.match(body, /Upstream retention unverified/);
+  assert.match(body, /Smart \/ fallback training risk/);
+  assert.match(body, /No data residency/);
+  assert.match(body, /No customer breach-notification SLA/);
+  assert.match(body, /2026-09-19 PT/);
+  assert.match(body, /https:\/\/classifier\.dev\/privacy/);
+  assert.match(body, /https:\/\/classifier\.dev\/terms/);
+  assert.match(body, /https:\/\/typesafe\.ai\/legal\/data-processing/);
+  assert.match(body, /https:\/\/openrouter\.ai\/privacy/);
+  assert.match(body, /MEDIA_LENS_CLASSIFIER_DEV_TIER/);
+  assert.match(body, /Do \*\*not\*\* enable `smart` on any live path/);
+  assert.match(body, /Live URL remains unauthorized/);
+  assert.match(body, /Not selected:\*\* `READY_FOR_OWNER_PRIVACY_ACCEPTANCE`/);
   assert.doesNotMatch(body, /production-ready live classifier\.dev/i);
   assert.doesNotMatch(body, /sk-[A-Za-z0-9]{16,}/);
 });
@@ -58,6 +77,7 @@ test('eval doc documents thresholds without claiming they are met or citing AG N
 test('runbook can disable classifier.dev independently of Jev and fail closed when unavailable', async () => {
   const body = await readFile(RUNBOOK, 'utf8');
   assert.match(body, /MEDIA_LENS_ENABLE_CLASSIFIER_DEV/);
+  assert.match(body, /KEEP_EVALUATION_ONLY/);
   assert.match(body, /independently disableable/);
   assert.match(body, /unset MEDIA_LENS_ENABLE_CLASSIFIER_DEV/);
   assert.match(body, /POST \/v1\/classify/);

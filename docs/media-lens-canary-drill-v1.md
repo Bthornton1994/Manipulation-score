@@ -8,6 +8,7 @@ Status: **DRILL_PACKET_ONLY**. Live URL remains **disabled by default**. This pa
 | Phase | Ops/docs packet for a future owner-authorized drill. Flags stay off in the repository. |
 | Operator runbook | `docs/media-lens-ops-runbook-v2.md` |
 | Architecture | `docs/media-lens-live-url-v2-architecture.md` §§16–20 |
+| classifier.dev privacy | `docs/media-lens-classifier-dev-privacy.md` — **KEEP_EVALUATION_ONLY** (retrieved 2026-09-19 PT). Default-off. Does not authorize a classify drill. |
 | Public site | GitHub Pages remains Clarity-only. `docs/` and `media-lens/` stay off the Pages allowlist. |
 
 Issue #118 is not complete when this packet exists. Independent security review, privacy/consent decisions, public-claim review, canary **evidence from an owner-authorized rehearsal**, and explicit owner authorization are still required before any live enablement. This document supports that future rehearsal. It is not the rehearsal, and it is not a production grant.
@@ -26,7 +27,7 @@ It is:
 
 It is not:
 
-- Authorization to set `MEDIA_LENS_ENABLE_LIVE`, `MEDIA_LENS_ENABLE_LIVE_URL`, or `MEDIA_LENS_ENABLE_CLASSIFIER_DEV` in any shared or production environment.
+- Authorization to set `MEDIA_LENS_ENABLE_LIVE`, `MEDIA_LENS_ENABLE_LIVE_URL`, or `MEDIA_LENS_ENABLE_CLASSIFIER_DEV` in any shared or production environment. classifier.dev privacy remains **KEEP_EVALUATION_ONLY**.
 - A TypeSafe key, a `.env` file, or a live network job.
 - A claim that Media Lens is production-ready, accurate, or available on manipulationscore.com.
 - A `READY_FOR_CANARY` grant. That phrase is not a status this packet can assign.
@@ -240,6 +241,8 @@ Timestamps and HTTP statuses are required. Commit SHA is required. Flags used ar
 | C | Connect-time pin for live Jev and classifier.dev | `media-lens/worker/provider-pinned-fetch.js` |
 | D | classifier.dev default tier `fast` | `media-lens/worker/classifier-dev/contract.js` |
 | E (this packet) | Canary / kill-switch drill docs | this file; runbook §11 |
+
+Privacy/DPA SoT (does not close Issue #118): `docs/media-lens-classifier-dev-privacy.md` (**KEEP_EVALUATION_ONLY**).
 
 This packet does not change those implementations.
 

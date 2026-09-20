@@ -235,15 +235,18 @@ Deprecated site-local `fec0::/10` (RFC 3879) and retired 6bone `3ffe::/16` are *
 | `nat64-wk-public` | `64:ff9b::cb00:7107` (`203.0.113.7`) | allow_public |
 | `nat64-local-public` | `64:ff9b:1:cb00:71:700::` | block (extra prefix) |
 | `nat64-extra-sparse-loopback` | `2001:470:1::7f00:1` | block |
-| `nat64-extra-sparse-public` | `2001:470:1::cb00:7107` | block |
+| `nat64-extra-sparse-public` | `2001:470:1::cb00:7107` | allow_public (native unicast) |
 | `nat64-extra-nonzero-64-95-loopback` | `2001:67c:27e4:64:ff:9b:7f00:1` | block |
 | `nat64-extra-nonzero-64-95-imds` | `2606:4700:4700:1:2:3:a9fe:a9fe` | block |
 | `nat64-extra-nonzero-64-95-rfc1918-10` | `2001:470:1:2:3:4:a00:1` | block |
 | `nat64-extra-nonzero-64-95-rfc1918-192` | `2a00:1450:4001:80e:1:2:c0a8:101` | block |
-| `nat64-extra-nonzero-64-95-public` | `2001:67c:27e4:64:ff:9b:cb00:7107` | block |
+| `nat64-extra-nonzero-64-95-public` | `2001:67c:27e4:64:ff:9b:cb00:7107` | allow_public (native unicast) |
+| `cloudflare-aaaa-public-last32` | `2606:4700:10::6814:179a` | allow_public (native unicast) |
 | `isatap-loopback` | `2001:470:1:2:0:5efe:7f00:1` | block |
 | `isatap-rfc1918-dotted` | `2001:470:1:2:0:5efe:10.0.0.1` | block |
 | `isatap-public` | `2001:470:1:2:0:5efe:cb00:7107` | block |
+| `isatap-public-gbit` | `2001:470:1:2:100:5efe:cb00:7107` | block |
+| `isatap-public-ugbit` | `2001:470:1:2:300:5efe:cb00:7107` | block |
 | `compat-96-loopback` | `::7f00:1` | block |
 | `compat-96-dotted` | `::127.0.0.1` | block |
 | `6to4-loopback` | `2002:7f00:0001::` | block |
@@ -260,6 +263,7 @@ Deprecated site-local `fec0::/10` (RFC 3879) and retired 6bone `3ffe::/16` are *
 | `mixed-aaaa-ula` | A `203.0.113.7`, AAAA `fd00::1` | `BLOCKED_HOST` |
 | `mixed-aaaa-site-local` | A `203.0.113.7`, AAAA `fec0::1` | `BLOCKED_HOST` |
 | `mixed-aaaa-6bone` | A `203.0.113.7`, AAAA `3ffe::1` | `BLOCKED_HOST` |
+| `mixed-aaaa-cloudflare-public-last32` | A `93.184.216.34`, AAAA `2606:4700:10::6814:179a` | pin succeeds; not `BLOCKED_HOST` |
 | `empty-dns` | `[]` | `DNS_ERROR` |
 | `localhost-name` | `localhost` | `BLOCKED_HOST` no lookup required |
 | `mdns` | `printer.local` | `BLOCKED_HOST` |

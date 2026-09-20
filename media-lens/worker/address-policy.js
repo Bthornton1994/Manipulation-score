@@ -3,10 +3,14 @@
 // Fail closed. Every A/AAAA or literal is classified as allow_public or
 // block. Known IPv4-in-IPv6 embeddings extract an IPv4 and reuse the IPv4
 // table. Well-known NAT64 64:ff9b::/96 may be allow_public only when that
-// IPv4 is public. Extra NAT64 (including RFC 8215 local-use), ISATAP, and
-// other unknown embeddings are block. Deprecated site-local fec0::/10
-// (RFC 3879) and retired 6bone 3ffe::/16 are block. Mixed public+private
-// DNS is block. This module does no I/O.
+// IPv4 is public. Extra NAT64 prefixes (RFC 8215 local-use and other
+// 64:ff9b::/32), ISATAP, and last-32 embeddings of a blocked IPv4 are
+// block. A last-32 that decodes to a public IPv4 is native unicast, not
+// extra NAT64, except ISATAP-shaped IIDs (RFC 5214 u/g 0000:5efe /
+// 0100:5efe / 0200:5efe / 0300:5efe), which remain block_isatap on the
+// residual path. Deprecated site-local
+// fec0::/10 (RFC 3879) and retired 6bone 3ffe::/16 are block. Mixed
+// public+private DNS is block. This module does no I/O.
 
 export function taggedError(message, code) {
   return Object.assign(new Error(message), { code });
@@ -195,8 +199,11 @@ function ipv4FirstOctet(ipv4) {
 }
 
 function isIsatapIid(words) {
-  // RFC 5214: IID 0000:5efe:IPv4 or 0200:5efe:IPv4 (U/L bit set).
-  return words[5] === 0x5efe && (words[4] === 0 || words[4] === 0x0200);
+  // RFC 5214 §6.1: IID 000000ug00000000:5efe:IPv4. u/g are the U/L and
+  // I/G bits of the first octet, so the first IID hextet is 0000, 0100,
+  // 0200, or 0300. Public IPv4 uses u=1 (0200:5efe / 0300:5efe). Treat
+  // all four as ISATAP and fail closed even if the embedded IPv4 is public.
+  return words[5] === 0x5efe && (words[4] === 0 || words[4] === 0x0100 || words[4] === 0x0200 || words[4] === 0x0300);
 }
 
 /**
@@ -290,15 +297,26 @@ function classifyIPv6(ip) {
   if (isIsatapIid(words)) {
     return classifyFailClosedEmbedding(hextetToIPv4(words[6], words[7]), 6, canonical, 'isatap');
   }
-  // Custom NAT64 /96: bits 96–127 decode to an IPv4 whose first octet is
-  // not 0. Covers sparse (bits 64–95 zero) and the QA residual (bits 64–95
-  // non-zero). Fail closed when in doubt. Well-known 64:ff9b::/96, mapped,
-  // SIIT, and deprecated ::/96 already returned. First-octet-0 last-32-bit
-  // forms (e.g. 2001:4860:4860::8888) stay native.
+  // Residual last-32: bits 96–127 as IPv4. ISATAP-shaped IIDs
+  // (0000/0100/0200/0300:5efe) stay fail-closed here even if the dedicated
+  // detector is dropped — a public last-32 must not become allow_public.
+  // If that IPv4 is blocked (private/loopback/metadata/etc.), fail closed
+  // as extra NAT64. If that IPv4 is public and the IID is not ISATAP,
+  // treat the address as native unicast (Cloudflare-style AAAA such as
+  // 2606:4700:10::6814:179a).
+  // First-octet-0 last-32 forms (e.g. 2001:4860:4860::8888) stay native.
+  // Well-known 64:ff9b::/96, mapped, SIIT, fec0::/10, and 3ffe::/16 already
+  // returned.
   {
     const ipv4 = hextetToIPv4(words[6], words[7]);
+    if (isIsatapIid(words)) {
+      return classifyFailClosedEmbedding(ipv4, 6, canonical, 'isatap');
+    }
     if (ipv4FirstOctet(ipv4) !== 0) {
-      return classifyFailClosedEmbedding(ipv4, 6, canonical, 'nat64_extra');
+      const inner = classifyIPv4(ipv4);
+      if (inner.disposition === 'block') {
+        return classifyFailClosedEmbedding(ipv4, 6, canonical, 'nat64_extra');
+      }
     }
   }
 

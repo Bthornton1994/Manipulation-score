@@ -106,9 +106,9 @@ const NAT64_ISATAP_TABLE = [
   {
     id: 'nat64-extra-sparse-public',
     ip: '2001:470:1::cb00:7107',
-    disposition: 'block',
-    reason: 'block_nat64_extra',
-    embeddedIPv4: '203.0.113.7'
+    disposition: 'allow_public',
+    reason: 'allow_public',
+    embeddedIPv4: null
   },
   {
     id: 'nat64-extra-nonzero-64-95-loopback',
@@ -141,9 +141,9 @@ const NAT64_ISATAP_TABLE = [
   {
     id: 'nat64-extra-nonzero-64-95-public',
     ip: '2001:67c:27e4:64:ff:9b:cb00:7107',
-    disposition: 'block',
-    reason: 'block_nat64_extra',
-    embeddedIPv4: '203.0.113.7'
+    disposition: 'allow_public',
+    reason: 'allow_public',
+    embeddedIPv4: null
   },
   {
     id: 'isatap-loopback',
@@ -186,6 +186,20 @@ const NAT64_ISATAP_TABLE = [
     disposition: 'block',
     reason: 'block_isatap',
     embeddedIPv4: '203.0.113.7'
+  },
+  {
+    id: 'isatap-public-gbit',
+    ip: '2001:470:1:2:100:5efe:cb00:7107',
+    disposition: 'block',
+    reason: 'block_isatap',
+    embeddedIPv4: '203.0.113.7'
+  },
+  {
+    id: 'isatap-public-ugbit',
+    ip: '2001:470:1:2:300:5efe:cb00:7107',
+    disposition: 'block',
+    reason: 'block_isatap',
+    embeddedIPv4: '203.0.113.7'
   }
 ];
 
@@ -206,8 +220,10 @@ test('NAT64/ISATAP disposition table matches architecture §6', () => {
 });
 
 test('custom NAT64 /96 with non-zero bits 64–95 fail closed with lookups=0 and connects=0', async () => {
-  const residual = NAT64_ISATAP_TABLE.filter((row) => row.id.startsWith('nat64-extra-nonzero-64-95-'));
-  assert.equal(residual.length, 5);
+  const residual = NAT64_ISATAP_TABLE.filter(
+    (row) => row.id.startsWith('nat64-extra-nonzero-64-95-') && row.disposition === 'block'
+  );
+  assert.equal(residual.length, 4);
   for (const row of residual) {
     const words = row.ip.split(':');
     assert.ok(words.length === 8, row.ip);
@@ -239,7 +255,9 @@ test('custom NAT64 /96 with non-zero bits 64–95 fail closed with lookups=0 and
 });
 
 test('DNS answers that include custom NAT64 /96 with non-zero bits 64–95 fail closed with connects=0', async () => {
-  const residual = NAT64_ISATAP_TABLE.filter((row) => row.id.startsWith('nat64-extra-nonzero-64-95-'));
+  const residual = NAT64_ISATAP_TABLE.filter(
+    (row) => row.id.startsWith('nat64-extra-nonzero-64-95-') && row.disposition === 'block'
+  );
   for (const row of residual) {
     let lookups = 0;
     let connects = 0;
@@ -331,12 +349,7 @@ test('well-known public NAT64 may connect; extra/ISATAP public embeddings must n
   });
   assert.match(fetched.html, /Public article fixture/);
 
-  for (const ip of [
-    '64:ff9b:1:cb00:71:700::',
-    '2001:470:1::cb00:7107',
-    '2001:470:1:2:0:5efe:cb00:7107',
-    '2001:67c:27e4:64:ff:9b:cb00:7107'
-  ]) {
+  for (const ip of ['64:ff9b:1:cb00:71:700::', '2001:470:1:2:0:5efe:cb00:7107', '2001:470:1:2:100:5efe:cb00:7107', '2001:470:1:2:300:5efe:cb00:7107']) {
     let called = false;
     await assert.rejects(
       () =>
@@ -361,14 +374,14 @@ test('redirects to NAT64 extra / ISATAP are BLOCKED_HOST before the second conne
     'http://[2001:470:1:2:0:5efe:7f00:1]/',
     'http://[2001:470:1:2:0:5efe:10.0.0.1]/',
     'http://[2001:470:1:2:200:5efe:a9fe:a9fe]/',
+    'http://[2001:470:1:2:100:5efe:cb00:7107]/',
+    'http://[2001:470:1:2:300:5efe:cb00:7107]/',
     'http://[2001:470:1::7f00:1]/',
-    'http://[2001:470:1::cb00:7107]/',
     'http://[64:ff9b:1:cb00:71:700::]/',
     'http://[2001:67c:27e4:64:ff:9b:7f00:1]/',
     'http://[2606:4700:4700:1:2:3:a9fe:a9fe]/',
     'http://[2001:470:1:2:3:4:a00:1]/',
-    'http://[2a00:1450:4001:80e:1:2:c0a8:101]/',
-    'http://[2001:67c:27e4:64:ff:9b:cb00:7107]/'
+    'http://[2a00:1450:4001:80e:1:2:c0a8:101]/'
   ];
   for (const location of locations) {
     let lookups = 0;

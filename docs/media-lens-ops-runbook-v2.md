@@ -8,6 +8,7 @@ Status: **operational controls only**. Live URL remains **disabled by default**.
 | Phase | Ops controls for Live URL v2 (kill switch, audit, rate limits, monitoring). Flags stay off. |
 | Architecture | `docs/media-lens-live-url-v2-architecture.md` §§16–20 |
 | Canary drill packet | `docs/media-lens-canary-drill-v1.md` (Issue #118 E). Operator-run rehearsal docs only. Defaults remain OFF. |
+| classifier.dev privacy | `docs/media-lens-classifier-dev-privacy.md` — **KEEP_EVALUATION_ONLY** (retrieved 2026-09-19 PT). Default-off. Live URL unauthorized. |
 | Public site | GitHub Pages remains Clarity-only. `docs/` and `media-lens/` stay off the Pages allowlist. |
 
 Issue #118 is not complete when these controls exist. Independent security review, canary evidence, public-claim review, and explicit owner authorization are still required before any live enablement. The drill packet is **DRILL_PACKET_ONLY**: it does not authorize live enablement and does **not** grant `READY_FOR_CANARY`.
@@ -213,9 +214,9 @@ Also watch: live-URL 429s (`limiter: live_url` / `live_url_host` / `live_url_con
 
 ## 10. classifier.dev (evaluation-only, independently disableable)
 
-Privacy claims: `docs/media-lens-classifier-dev-privacy.md`. Eval scaffold: `docs/media-lens-classifier-dev-eval.md`.
+Privacy SoT: `docs/media-lens-classifier-dev-privacy.md`. Recommendation **KEEP_EVALUATION_ONLY** (retrieved 2026-09-19 PT). A public “stores no request text” claim is insufficient alone for production. Eval scaffold: `docs/media-lens-classifier-dev-eval.md`.
 
-Default-off. Versioned path only: `POST /v1/classify`. Browser pages must not call classifier.dev.
+Default-off. Versioned path only: `POST /v1/classify`. Browser pages must not call classifier.dev. Prefer default tier `fast`. Do not enable `smart` on any live path until contracts close the TypeSafe / OpenRouter / ultimate-model chain. This section does not close Issue #118.
 
 | Control | Default | Effect |
 | --- | --- | --- |

@@ -2,7 +2,7 @@
 
 Status: **evaluation-only**. Not production-ready. Not a second independent model. Direct Jev remains the Media Lens primary typed classifier. classifier.dev is a selective low-confidence escalation behind a default-off flag. The default requested tier is `fast` when `MEDIA_LENS_CLASSIFIER_DEV_TIER` is unset or empty. Smart requires the exact value `MEDIA_LENS_CLASSIFIER_DEV_TIER=smart`.
 
-Related to [Issue #118](https://github.com/Bthornton1994/Manipulation-score/issues/118). This document does **not** close that issue. AG News / emotion-benchmark figures from provider pages are **not** Media Lens accuracy and must not be cited as such.
+Related to [Issue #118](https://github.com/Bthornton1994/Manipulation-score/issues/118). This document does **not** close that issue. Privacy/DPA SoT: `docs/media-lens-classifier-dev-privacy.md` (**KEEP_EVALUATION_ONLY**, retrieved 2026-09-19 PT). AG News / emotion-benchmark figures from provider pages are **not** Media Lens accuracy and must not be cited as such.
 
 ## What the harness compares
 

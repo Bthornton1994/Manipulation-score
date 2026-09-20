@@ -616,6 +616,10 @@ test('ops runbook exists, stays off Pages, and does not claim production readine
   assert.match(body, /media-lens-canary-drill-v1\.md/);
   assert.match(body, /DRILL_PACKET_ONLY/);
   assert.match(body, /does \*\*not\*\* grant `READY_FOR_CANARY`/);
+  assert.match(body, /Incident owner \| PLACEHOLDER/);
+  assert.match(body, /Deputy \| PLACEHOLDER/);
+  assert.match(body, /Alert channel \| DECISION — unset/);
+  assert.match(body, /Do not invent names/);
 
   assert.ok(PAGES_FORBIDDEN_NAMES.includes('docs'));
   assert.equal(isAllowedSitePath(RUNBOOK), false);

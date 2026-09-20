@@ -83,9 +83,11 @@ test('privacy.html keeps Clarity analysis language unchanged and adds the Media 
     howIdx !== -1 && mediaLensIdx !== -1 && futureLiveIdx !== -1 && localIdx !== -1,
     'expected How analysis works, Media Lens preview, Future Media Lens live URL, and Local storage headings'
   );
+  const claimsIdx = html.indexOf('<h2>Media Lens public claims (flags off)</h2>');
+  assert.ok(claimsIdx !== -1, 'expected Media Lens public claims heading');
   assert.ok(
-    howIdx < mediaLensIdx && mediaLensIdx < futureLiveIdx && futureLiveIdx < localIdx,
-    'Media Lens preview then future live URL must sit after How analysis works and before Local storage'
+    howIdx < mediaLensIdx && mediaLensIdx < futureLiveIdx && futureLiveIdx < claimsIdx && claimsIdx < localIdx,
+    'Media Lens preview then future live URL then public claims must sit after How analysis works and before Local storage'
   );
   assert.match(html, /The Summary and How analysis works sections describe Clarity, the private message analyzer\./);
   assert.doesNotMatch(html, /live Media Lens processing is currently available/i);

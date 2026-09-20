@@ -153,6 +153,14 @@ No history rewrite. Do not rebase or force-push PR #117 / `9cca564`.
 
 Do not paste article bodies, span text, URLs with userinfo, or API keys into tickets.
 
+Ownership for production incident response is unset. Do not invent names.
+
+| Role | Status |
+| --- | --- |
+| Incident owner | PLACEHOLDER — unset |
+| Deputy | PLACEHOLDER — unset |
+| Alert channel | DECISION — unset |
+
 | Class | Immediate action |
 | --- | --- |
 | Suspected SSRF (metadata/LAN reached) | Kill switch; keep redacted audit lines; do not paste bodies |

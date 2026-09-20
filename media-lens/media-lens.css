@@ -167,6 +167,8 @@
 }
 
 .ml-consent-row label {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 14px;
   line-height: 1.5;
 }

@@ -158,6 +158,8 @@ test('IPv6 / embeddings policy table', async () => {
     ['2001:470:1:2:0:5efe:cb00:7107', 'block_isatap'],
     ['2001:470:1:2:200:5efe:a9fe:a9fe', 'block_link_local_via_isatap'],
     ['2001:470:1:2:0:5efe:a00:1', 'block_rfc1918_via_isatap'],
+    ['2001:470:1:2:100:5efe:cb00:7107', 'block_isatap'],
+    ['2001:470:1:2:300:5efe:cb00:7107', 'block_isatap'],
     ['64:ff9b:0:0:0:1:7f00:1', 'block_nat64_unknown'],
     ['2001:2::1', 'block_benchmark'],
     ['2001:2:0:0:0:0:0:1', 'block_benchmark'],

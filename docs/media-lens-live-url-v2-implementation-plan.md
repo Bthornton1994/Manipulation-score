@@ -245,6 +245,8 @@ Deprecated site-local `fec0::/10` (RFC 3879) and retired 6bone `3ffe::/16` are *
 | `isatap-loopback` | `2001:470:1:2:0:5efe:7f00:1` | block |
 | `isatap-rfc1918-dotted` | `2001:470:1:2:0:5efe:10.0.0.1` | block |
 | `isatap-public` | `2001:470:1:2:0:5efe:cb00:7107` | block |
+| `isatap-public-gbit` | `2001:470:1:2:100:5efe:cb00:7107` | block |
+| `isatap-public-ugbit` | `2001:470:1:2:300:5efe:cb00:7107` | block |
 | `compat-96-loopback` | `::7f00:1` | block |
 | `compat-96-dotted` | `::127.0.0.1` | block |
 | `6to4-loopback` | `2002:7f00:0001::` | block |

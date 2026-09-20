@@ -186,6 +186,20 @@ const NAT64_ISATAP_TABLE = [
     disposition: 'block',
     reason: 'block_isatap',
     embeddedIPv4: '203.0.113.7'
+  },
+  {
+    id: 'isatap-public-gbit',
+    ip: '2001:470:1:2:100:5efe:cb00:7107',
+    disposition: 'block',
+    reason: 'block_isatap',
+    embeddedIPv4: '203.0.113.7'
+  },
+  {
+    id: 'isatap-public-ugbit',
+    ip: '2001:470:1:2:300:5efe:cb00:7107',
+    disposition: 'block',
+    reason: 'block_isatap',
+    embeddedIPv4: '203.0.113.7'
   }
 ];
 
@@ -335,7 +349,7 @@ test('well-known public NAT64 may connect; extra/ISATAP public embeddings must n
   });
   assert.match(fetched.html, /Public article fixture/);
 
-  for (const ip of ['64:ff9b:1:cb00:71:700::', '2001:470:1:2:0:5efe:cb00:7107']) {
+  for (const ip of ['64:ff9b:1:cb00:71:700::', '2001:470:1:2:0:5efe:cb00:7107', '2001:470:1:2:100:5efe:cb00:7107', '2001:470:1:2:300:5efe:cb00:7107']) {
     let called = false;
     await assert.rejects(
       () =>
@@ -360,6 +374,8 @@ test('redirects to NAT64 extra / ISATAP are BLOCKED_HOST before the second conne
     'http://[2001:470:1:2:0:5efe:7f00:1]/',
     'http://[2001:470:1:2:0:5efe:10.0.0.1]/',
     'http://[2001:470:1:2:200:5efe:a9fe:a9fe]/',
+    'http://[2001:470:1:2:100:5efe:cb00:7107]/',
+    'http://[2001:470:1:2:300:5efe:cb00:7107]/',
     'http://[2001:470:1::7f00:1]/',
     'http://[64:ff9b:1:cb00:71:700::]/',
     'http://[2001:67c:27e4:64:ff:9b:7f00:1]/',

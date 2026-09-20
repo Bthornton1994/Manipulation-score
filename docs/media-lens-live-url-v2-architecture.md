@@ -250,8 +250,8 @@ Extract an embedded IPv4 when the prefix is a **known embedding**. Apply the IPv
 | NAT64 well-known | `64:ff9b::/96` (RFC 6052) | extract IPv4 → IPv4 policy. **This is the only NAT64 form that may be `allow_public`**, and only when that IPv4 is `allow_public`. |
 | NAT64 extra prefixes | RFC 8215 local-use `64:ff9b:1::/48`; remainder of `64:ff9b::/32` | **block**. No extra-prefix allowlist env is implemented; fail closed. |
 | Residual last-32 of a blocked IPv4 | bits 96–127 decode to an IPv4 whose first octet is not 0 **and** that IPv4 is blocked by the IPv4 table (private, loopback, metadata, CGNAT, multicast, reserved, …), sparse or with non-zero bits 64–95 | **block** as extra NAT64. Distinct from well-known `64:ff9b::/96`, mapped, SIIT, and ISATAP. |
-| Residual last-32 of a public IPv4 | bits 96–127 decode to an IPv4 that is `allow_public` (for example Cloudflare `2606:4700:10::6814:179a` → `104.20.23.154`) **and** the IID is not ISATAP-shaped | **allow_public** as native unicast. Not extra NAT64. First-octet-0 last-32 stays native. ISATAP-shaped IIDs (`0000:5efe` / `0200:5efe`) stay **block** here even if the dedicated ISATAP detector is dropped. |
-| ISATAP | IID `0000:5efe:IPv4` or `0200:5efe:IPv4` (RFC 5214), any unicast prefix | **block** (tunnel embedding; do not allow even if the embedded IPv4 is public). Dedicated detector plus residual last-32 both fail closed. |
+| Residual last-32 of a public IPv4 | bits 96–127 decode to an IPv4 that is `allow_public` (for example Cloudflare `2606:4700:10::6814:179a` → `104.20.23.154`) **and** the IID is not ISATAP-shaped | **allow_public** as native unicast. Not extra NAT64. First-octet-0 last-32 stays native. ISATAP-shaped IIDs (`0000:5efe` / `0100:5efe` / `0200:5efe` / `0300:5efe`, RFC 5214 u/g) stay **block** here even if the dedicated ISATAP detector is dropped. |
+| ISATAP | IID `0000:5efe:IPv4`, `0100:5efe:IPv4`, `0200:5efe:IPv4`, or `0300:5efe:IPv4` (RFC 5214 §6.1 u/g variants), any unicast prefix | **block** (tunnel embedding; do not allow even if the embedded IPv4 is public). Dedicated detector plus residual last-32 both fail closed. |
 | IPv4-compatible (deprecated) | `::/96` excluding `::` and `::1` (e.g. `::7f00:1`, `::127.0.0.1`) | extract IPv4 → IPv4 policy |
 | 6to4 | `2002::/16` | extract IPv4 from bits 16–47 → IPv4 policy |
 | Retired 6bone | `3ffe::/16` (RFC 2471 / RFC 3701) | **block**. Not native unicast. Fail closed before connect. |
@@ -281,12 +281,14 @@ NAT64 / ISATAP worked examples (classifier only; live URL remains disabled):
 | `isatap-loopback` | `2001:470:1:2:0:5efe:7f00:1` | block |
 | `isatap-public` | `2001:470:1:2:0:5efe:cb00:7107` | block |
 | `isatap-ulbit-imds` | `2001:470:1:2:200:5efe:a9fe:a9fe` | block |
+| `isatap-public-gbit` | `2001:470:1:2:100:5efe:cb00:7107` | block |
+| `isatap-public-ugbit` | `2001:470:1:2:300:5efe:cb00:7107` | block |
 | `v6-site-local` | `fec0::1` | block (RFC 3879 site-local) |
 | `v6-site-local-end` | `feff::1` | block |
 | `v6-6bone` | `3ffe::1` | block (retired 6bone) |
 | `v6-6bone-end` | `3ffe:ffff::1` | block |
 
-A residual last-32 whose decoded IPv4 is blocked by the IPv4 table is **block** as extra NAT64. A residual last-32 whose decoded IPv4 is public is native unicast `allow_public` (Cloudflare-style AAAA, including public TEST-NET last-32), **except** ISATAP-shaped IIDs (`0000:5efe` / `0200:5efe`), which remain **block** / `block_isatap` on that residual path even if the dedicated ISATAP detector is removed. Well-known `64:ff9b::/96` remains the only **NAT64** form that may be `allow_public`. Native unicast whose last 32 bits decode to an IPv4 in `0.0.0.0/8` (first octet 0) stays native (for example `2001:4860:4860::8888`). Deprecated site-local `fec0::/10` and retired 6bone `3ffe::/16` are **block** even when the last 32 bits look like a public IPv4. Mapped and SIIT are unchanged.
+A residual last-32 whose decoded IPv4 is blocked by the IPv4 table is **block** as extra NAT64. A residual last-32 whose decoded IPv4 is public is native unicast `allow_public` (Cloudflare-style AAAA, including public TEST-NET last-32), **except** ISATAP-shaped IIDs (`0000:5efe` / `0100:5efe` / `0200:5efe` / `0300:5efe`), which remain **block** / `block_isatap` on that residual path even if the dedicated ISATAP detector is removed. Well-known `64:ff9b::/96` remains the only **NAT64** form that may be `allow_public`. Native unicast whose last 32 bits decode to an IPv4 in `0.0.0.0/8` (first octet 0) stays native (for example `2001:4860:4860::8888`). Deprecated site-local `fec0::/10` and retired 6bone `3ffe::/16` are **block** even when the last 32 bits look like a public IPv4. Mapped and SIIT are unchanged.
 
 ### 6.3 Ambiguous and dual-stack
 

@@ -59,7 +59,19 @@ const NARROW_BLOCKED_LAST32_ONLY = `if (ipv4FirstOctet(ipv4) !== 0) {
 
 const PUBLIC_ISATAP = '2001:470:1:2:0:5efe:cb00:7107';
 const PUBLIC_ISATAP_ULBIT = '2001:470:1:2:200:5efe:cb00:7107';
+const PUBLIC_ISATAP_GBIT = '2001:470:1:2:100:5efe:cb00:7107';
+const PUBLIC_ISATAP_UGBIT = '2001:470:1:2:300:5efe:cb00:7107';
 const PUBLIC_ISATAP_EMBEDDED = '203.0.113.7';
+const CLASSIC_ISATAP_IID = 'return words[5] === 0x5efe && (words[4] === 0 || words[4] === 0x0200);';
+const RFC5214_ISATAP_IID =
+  'return words[5] === 0x5efe && (words[4] === 0 || words[4] === 0x0100 || words[4] === 0x0200 || words[4] === 0x0300);';
+
+const RFC5214_PUBLIC_ISATAP = [
+  ['isatap-public', PUBLIC_ISATAP],
+  ['isatap-public-ulbit', PUBLIC_ISATAP_ULBIT],
+  ['isatap-public-gbit', PUBLIC_ISATAP_GBIT],
+  ['isatap-public-ugbit', PUBLIC_ISATAP_UGBIT]
+];
 
 const DEDICATED_ISATAP_DETECTOR = `if (isIsatapIid(words)) {
     return classifyFailClosedEmbedding(hextetToIPv4(words[6], words[7]), 6, canonical, 'isatap');
@@ -193,6 +205,46 @@ test('well-known NAT64, mapped/SIIT, ISATAP, fec0::/10, 3ffe::/16, and first-oct
   }
 });
 
+test('RFC 5214 u/g ISATAP 0100:5efe and 0300:5efe with public last-32 are block_isatap', async () => {
+  assert.equal(classifyIp(CLOUDFLARE_AAAA).disposition, 'allow_public');
+  assert.equal(classifyIp('2001:470:1::cb00:7107').disposition, 'allow_public');
+  assert.equal(classifyIp('2001:470:1:2:400:5efe:cb00:7107').disposition, 'allow_public');
+
+  for (const [id, ip] of RFC5214_PUBLIC_ISATAP) {
+    const result = classifyIp(ip);
+    assert.equal(result.disposition, 'block', `${id} ${ip} disposition`);
+    assert.notEqual(result.disposition, 'allow_public', `${id} must not classify as native unicast`);
+    assert.equal(result.reason, 'block_isatap', `${id} ${ip} reason`);
+    assert.equal(result.embeddedIPv4, PUBLIC_ISATAP_EMBEDDED, `${id} ${ip} embedded IPv4`);
+
+    let lookups = 0;
+    let connects = 0;
+    await assert.rejects(
+      () =>
+        fetchArticleSafely(`http://[${ip}]/`, {
+          timeoutMs: 200,
+          maxBytes: 1000,
+          lookupImpl: async () => {
+            lookups += 1;
+            throw new Error(`must not lookup for ${id}`);
+          },
+          requestImpl: async () => {
+            connects += 1;
+            throw new Error(`must not connect for ${id}`);
+          }
+        }),
+      hasCode('BLOCKED_HOST'),
+      id
+    );
+    assert.equal(lookups, 0, `${id} lookups`);
+    assert.equal(connects, 0, `${id} connects`);
+  }
+
+  assert.equal(classifyIp('2001:470:1:2:100:5efe:7f00:1').reason, 'block_loopback_via_isatap');
+  assert.equal(classifyIp('2001:470:1:2:300:5efe:a9fe:a9fe').reason, 'block_link_local_via_isatap');
+  assert.equal(classifyIp('2001:470:1:2:100:5efe:a00:1').reason, 'block_rfc1918_via_isatap');
+});
+
 test('private last-32 embeddings still fail closed before connect; public last-32 may pin', async () => {
   for (const [id, ip] of BLOCKED_LAST32_EMBEDDINGS) {
     let lookups = 0;
@@ -244,24 +296,23 @@ test('private last-32 embeddings still fail closed before connect; public last-3
 });
 
 test('mutation: dropping ISATAP detector still fail-closes public-IPv4 ISATAP on residual last-32', async () => {
-  const current = classifyIp(PUBLIC_ISATAP);
-  assert.equal(current.disposition, 'block');
-  assert.equal(current.reason, 'block_isatap');
-  assert.equal(current.embeddedIPv4, PUBLIC_ISATAP_EMBEDDED);
-  assert.equal(classifyIp(PUBLIC_ISATAP_ULBIT).reason, 'block_isatap');
+  for (const [id, ip] of RFC5214_PUBLIC_ISATAP) {
+    const current = classifyIp(ip);
+    assert.equal(current.disposition, 'block', id);
+    assert.equal(current.reason, 'block_isatap', id);
+    assert.equal(current.embeddedIPv4, PUBLIC_ISATAP_EMBEDDED, id);
+  }
   assert.equal(classifyIp(CLOUDFLARE_AAAA).disposition, 'allow_public');
 
   const src = await readFile('media-lens/worker/address-policy.js', 'utf8');
   assert.ok(src.includes(DEDICATED_ISATAP_DETECTOR), 'dedicated ISATAP detector must remain');
+  assert.ok(src.includes(RFC5214_ISATAP_IID), 'isIsatapIid must match RFC 5214 u/g variants');
 
   const mutant = await loadMutatedAddressPolicy((original) =>
     original.replace(DEDICATED_ISATAP_DETECTOR, DROPPED_ISATAP_DETECTOR)
   );
 
-  for (const [id, ip] of [
-    ['isatap-public', PUBLIC_ISATAP],
-    ['isatap-public-ulbit', PUBLIC_ISATAP_ULBIT]
-  ]) {
+  for (const [id, ip] of RFC5214_PUBLIC_ISATAP) {
     const blocked = mutant.classifyIp(ip);
     assert.equal(blocked.disposition, 'block', `${id} must not become allow_public after detector drop`);
     assert.notEqual(blocked.disposition, 'allow_public', id);
@@ -275,11 +326,30 @@ test('mutation: dropping ISATAP detector still fail-closes public-IPv4 ISATAP on
   assert.equal(mutant.classifyIp('2001:470:1::cb00:7107').disposition, 'allow_public');
   assert.equal(mutant.classifyIp('2001:470:1::7f00:1').reason, 'block_loopback_via_nat64_extra');
   assert.equal(mutant.classifyIp('2001:470:1:2:0:5efe:7f00:1').reason, 'block_loopback_via_isatap');
+  assert.equal(mutant.classifyIp('2001:470:1:2:100:5efe:7f00:1').reason, 'block_loopback_via_isatap');
+  assert.equal(mutant.classifyIp('2001:470:1:2:300:5efe:a9fe:a9fe').reason, 'block_link_local_via_isatap');
 
   assert.ok(
     src.includes(RESIDUAL_ISATAP_FAIL_CLOSED),
     'residual last-32 must fail-close ISATAP-shaped IIDs before public allow'
   );
+});
+
+test('mutation: classic-only 0000/0200:5efe matcher allows RFC 5214 0100/0300 public last-32', async () => {
+  const src = await readFile('media-lens/worker/address-policy.js', 'utf8');
+  assert.ok(src.includes(RFC5214_ISATAP_IID), 'production matcher must include 0100:5efe and 0300:5efe');
+  assert.equal(src.includes(CLASSIC_ISATAP_IID), false, 'classic-only matcher must not remain');
+
+  const mutant = await loadMutatedAddressPolicy((original) =>
+    original.replace(RFC5214_ISATAP_IID, CLASSIC_ISATAP_IID)
+  );
+
+  assert.equal(mutant.classifyIp(PUBLIC_ISATAP).reason, 'block_isatap');
+  assert.equal(mutant.classifyIp(PUBLIC_ISATAP_ULBIT).reason, 'block_isatap');
+  assert.equal(mutant.classifyIp(PUBLIC_ISATAP_GBIT).disposition, 'allow_public');
+  assert.equal(mutant.classifyIp(PUBLIC_ISATAP_UGBIT).disposition, 'allow_public');
+  assert.equal(mutant.classifyIp(CLOUDFLARE_AAAA).disposition, 'allow_public');
+  assert.equal(mutant.classifyIp('2001:470:1:2:100:5efe:7f00:1').reason, 'block_loopback_via_nat64_extra');
 });
 
 test('mutation: restoring always-fail-closed last-32 nonzero blocks Cloudflare-style AAAA', async () => {

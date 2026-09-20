@@ -6,9 +6,10 @@
 // IPv4 is public. Extra NAT64 prefixes (RFC 8215 local-use and other
 // 64:ff9b::/32), ISATAP, and last-32 embeddings of a blocked IPv4 are
 // block. A last-32 that decodes to a public IPv4 is native unicast, not
-// extra NAT64. Deprecated site-local fec0::/10 (RFC 3879) and retired
-// 6bone 3ffe::/16 are block. Mixed public+private DNS is block. This
-// module does no I/O.
+// extra NAT64, except ISATAP-shaped IIDs (0000:5efe / 0200:5efe), which
+// remain block_isatap on the residual path. Deprecated site-local
+// fec0::/10 (RFC 3879) and retired 6bone 3ffe::/16 are block. Mixed
+// public+private DNS is block. This module does no I/O.
 
 export function taggedError(message, code) {
   return Object.assign(new Error(message), { code });
@@ -292,14 +293,20 @@ function classifyIPv6(ip) {
   if (isIsatapIid(words)) {
     return classifyFailClosedEmbedding(hextetToIPv4(words[6], words[7]), 6, canonical, 'isatap');
   }
-  // Residual last-32: bits 96–127 as IPv4. If that IPv4 is blocked
+  // Residual last-32: bits 96–127 as IPv4. ISATAP-shaped IIDs stay
+  // fail-closed here even if the dedicated detector is dropped — a public
+  // last-32 must not become allow_public. If that IPv4 is blocked
   // (private/loopback/metadata/etc.), fail closed as extra NAT64. If that
-  // IPv4 is public, treat the address as native unicast (Cloudflare-style
-  // AAAA such as 2606:4700:10::6814:179a). First-octet-0 last-32 forms
-  // (e.g. 2001:4860:4860::8888) stay native. Well-known 64:ff9b::/96,
-  // mapped, SIIT, ISATAP, fec0::/10, and 3ffe::/16 already returned.
+  // IPv4 is public and the IID is not ISATAP, treat the address as native
+  // unicast (Cloudflare-style AAAA such as 2606:4700:10::6814:179a).
+  // First-octet-0 last-32 forms (e.g. 2001:4860:4860::8888) stay native.
+  // Well-known 64:ff9b::/96, mapped, SIIT, fec0::/10, and 3ffe::/16 already
+  // returned.
   {
     const ipv4 = hextetToIPv4(words[6], words[7]);
+    if (isIsatapIid(words)) {
+      return classifyFailClosedEmbedding(ipv4, 6, canonical, 'isatap');
+    }
     if (ipv4FirstOctet(ipv4) !== 0) {
       const inner = classifyIPv4(ipv4);
       if (inner.disposition === 'block') {

@@ -84,8 +84,9 @@ test('mutation: dropping local-use NAT64 extraction still blocks via unknown-NAT
   assert.equal(mutant.classifyIp('64:ff9b:1:cb00:71:700::').disposition, 'block');
 });
 
-test('mutation: dropping ISATAP detection still blocks via extra-NAT64 catch-all', async () => {
+test('mutation: dropping ISATAP detection still blocks via residual ISATAP fail-closed', async () => {
   assert.equal(classifyIp('2001:470:1:2:0:5efe:7f00:1').reason, 'block_loopback_via_isatap');
+  assert.equal(classifyIp('2001:470:1:2:0:5efe:cb00:7107').reason, 'block_isatap');
   const mutant = await loadMutatedAddressPolicy((src) =>
     src.replace(
       'if (isIsatapIid(words)) {\n    return classifyFailClosedEmbedding(hextetToIPv4(words[6], words[7]), 6, canonical, \'isatap\');\n  }',
@@ -94,8 +95,12 @@ test('mutation: dropping ISATAP detection still blocks via extra-NAT64 catch-all
   );
   const loopback = mutant.classifyIp('2001:470:1:2:0:5efe:7f00:1');
   assert.equal(loopback.disposition, 'block');
-  assert.equal(loopback.reason, 'block_loopback_via_nat64_extra');
-  assert.equal(mutant.classifyIp('2001:470:1:2:0:5efe:cb00:7107').disposition, 'allow_public');
+  assert.equal(loopback.reason, 'block_loopback_via_isatap');
+  const publicIsatap = mutant.classifyIp('2001:470:1:2:0:5efe:cb00:7107');
+  assert.equal(publicIsatap.disposition, 'block');
+  assert.equal(publicIsatap.reason, 'block_isatap');
+  assert.equal(publicIsatap.embeddedIPv4, '203.0.113.7');
+  assert.equal(mutant.classifyIp('2606:4700:10::6814:179a').disposition, 'allow_public');
 });
 
 test('mutation: dropping extra NAT64 would allow private last-32 embeddings as public IPv6', async () => {

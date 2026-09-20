@@ -57,6 +57,22 @@ const NARROW_BLOCKED_LAST32_ONLY = `if (ipv4FirstOctet(ipv4) !== 0) {
       }
     }`;
 
+const PUBLIC_ISATAP = '2001:470:1:2:0:5efe:cb00:7107';
+const PUBLIC_ISATAP_ULBIT = '2001:470:1:2:200:5efe:cb00:7107';
+const PUBLIC_ISATAP_EMBEDDED = '203.0.113.7';
+
+const DEDICATED_ISATAP_DETECTOR = `if (isIsatapIid(words)) {
+    return classifyFailClosedEmbedding(hextetToIPv4(words[6], words[7]), 6, canonical, 'isatap');
+  }`;
+
+const DROPPED_ISATAP_DETECTOR = `if (false && isIsatapIid(words)) {
+    return classifyFailClosedEmbedding(hextetToIPv4(words[6], words[7]), 6, canonical, 'isatap');
+  }`;
+
+const RESIDUAL_ISATAP_FAIL_CLOSED = `if (isIsatapIid(words)) {
+      return classifyFailClosedEmbedding(ipv4, 6, canonical, 'isatap');
+    }`;
+
 const CLOUDFLARE_STYLE_PUBLIC_AAAA = [
   {
     id: 'cloudflare-aaaa-public-last32',
@@ -225,6 +241,45 @@ test('private last-32 embeddings still fail closed before connect; public last-3
   );
   assert.equal(lookups, 1);
   assert.equal(connects, 0);
+});
+
+test('mutation: dropping ISATAP detector still fail-closes public-IPv4 ISATAP on residual last-32', async () => {
+  const current = classifyIp(PUBLIC_ISATAP);
+  assert.equal(current.disposition, 'block');
+  assert.equal(current.reason, 'block_isatap');
+  assert.equal(current.embeddedIPv4, PUBLIC_ISATAP_EMBEDDED);
+  assert.equal(classifyIp(PUBLIC_ISATAP_ULBIT).reason, 'block_isatap');
+  assert.equal(classifyIp(CLOUDFLARE_AAAA).disposition, 'allow_public');
+
+  const src = await readFile('media-lens/worker/address-policy.js', 'utf8');
+  assert.ok(src.includes(DEDICATED_ISATAP_DETECTOR), 'dedicated ISATAP detector must remain');
+
+  const mutant = await loadMutatedAddressPolicy((original) =>
+    original.replace(DEDICATED_ISATAP_DETECTOR, DROPPED_ISATAP_DETECTOR)
+  );
+
+  for (const [id, ip] of [
+    ['isatap-public', PUBLIC_ISATAP],
+    ['isatap-public-ulbit', PUBLIC_ISATAP_ULBIT]
+  ]) {
+    const blocked = mutant.classifyIp(ip);
+    assert.equal(blocked.disposition, 'block', `${id} must not become allow_public after detector drop`);
+    assert.notEqual(blocked.disposition, 'allow_public', id);
+    assert.equal(blocked.reason, 'block_isatap', `${id} residual path must still classify as ISATAP`);
+    assert.equal(blocked.embeddedIPv4, PUBLIC_ISATAP_EMBEDDED, id);
+  }
+
+  const cloudflare = mutant.classifyIp(CLOUDFLARE_AAAA);
+  assert.equal(cloudflare.disposition, 'allow_public');
+  assert.equal(cloudflare.reason, 'allow_public');
+  assert.equal(mutant.classifyIp('2001:470:1::cb00:7107').disposition, 'allow_public');
+  assert.equal(mutant.classifyIp('2001:470:1::7f00:1').reason, 'block_loopback_via_nat64_extra');
+  assert.equal(mutant.classifyIp('2001:470:1:2:0:5efe:7f00:1').reason, 'block_loopback_via_isatap');
+
+  assert.ok(
+    src.includes(RESIDUAL_ISATAP_FAIL_CLOSED),
+    'residual last-32 must fail-close ISATAP-shaped IIDs before public allow'
+  );
 });
 
 test('mutation: restoring always-fail-closed last-32 nonzero blocks Cloudflare-style AAAA', async () => {

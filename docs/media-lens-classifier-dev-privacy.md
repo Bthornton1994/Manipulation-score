@@ -86,7 +86,7 @@ All provider claims below are **UNVERIFIED as production guarantees** until Owne
 
 | Field | Content |
 | --- | --- |
-| Public claim | TypeSafe for the decision model; smart-tier re-asks via the reasoning model's provider via OpenRouter. Infra named: Cloudflare Worker + Analytics Engine; billing Autumn + Stripe; newsletter Neon; email Resend; optional Vercel AI Gateway. README documents a past primary-model delist that quietly served granite for weeks. |
+| Public claim | TypeSafe for the decision model; smart-tier re-asks via the reasoning model's provider via OpenRouter. Infra named: Cloudflare Worker + Analytics Engine; billing Autumn + Stripe; newsletter Neon; email Resend; optional Vercel AI Gateway. classifier.dev README documents a past silent primary-model delist that served its backup for weeks without disclosure; the digest reports which model answered, with a FALLBACK marker. This is not a current model-availability claim. |
 | Status | `VERIFIED_PUBLIC_CLAIM` that these parties are named; `NOT_FOUND` for a formal subprocessor register; `UNVERIFIED` which party processes a given Media Lens call under failure/fallback |
 | Owner implication | Treat classifier.dev as a multi-party processor graph. Owner must approve named parties and silent-fallback behavior. |
 
@@ -126,7 +126,7 @@ All provider claims below are **UNVERIFIED as production guarantees** until Owne
 
 | Field | Content |
 | --- | --- |
-| Public claim | Response discloses `model` / `modelsUsed`. Docs describe per-result `model` / `escalated`. README names Jev / jev-1.13 and smart escalation choices, and documents prior silent primary delist. |
+| Public claim | Response discloses `model` / `modelsUsed`. Docs describe per-result `model` / `escalated`. README names Jev / jev-1.13 and smart escalation choices, and documents a prior silent primary-model delist that served a backup until the digest marked FALLBACK. Media Lens does not treat that README note as a current model-availability claim. |
 | Status | `VERIFIED_PUBLIC_CLAIM` that disclosure fields are documented; `UNVERIFIED` that every live response always names the true ultimate provider under all fallbacks |
 | Owner implication | Require the adapter to log/store `model`/`modelsUsed` (not request text) for any future canary. Treat silent fallback as an operational and privacy event. |
 

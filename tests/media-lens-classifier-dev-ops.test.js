@@ -61,8 +61,18 @@ test('privacy disposition lists provider claims as UNVERIFIED and stays evaluati
   assert.match(body, /Do \*\*not\*\* enable `smart` on any live path/);
   assert.match(body, /Live URL remains unauthorized/);
   assert.match(body, /Not selected:\*\* `READY_FOR_OWNER_PRIVACY_ACCEPTANCE`/);
+  assert.match(body, /silent primary-model delist/);
+  assert.match(body, /served (its|a) backup/);
+  assert.match(body, /not a current model-availability claim/);
+  assert.doesNotMatch(body, /granite/i);
   assert.doesNotMatch(body, /production-ready live classifier\.dev/i);
   assert.doesNotMatch(body, /sk-[A-Za-z0-9]{16,}/);
+  const readme = await readFile('media-lens/README.md', 'utf8');
+  assert.match(readme, /KEEP_EVALUATION_ONLY/);
+  assert.match(readme, /silent primary-model delist/);
+  assert.match(readme, /served a backup/);
+  assert.match(readme, /not treat that as a current model-availability claim/);
+  assert.doesNotMatch(readme, /granite/i);
 });
 
 test('eval doc documents thresholds without claiming they are met or citing AG News as proof', async () => {

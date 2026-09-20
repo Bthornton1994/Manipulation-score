@@ -65,7 +65,7 @@ The UI shows a persistent, non-dismissable notice describing what Media Lens ana
 
 ## Privacy / DPA (evaluation-only)
 
-In-repo source of truth: `docs/media-lens-classifier-dev-privacy.md`. Recommendation: **KEEP_EVALUATION_ONLY** (public sources retrieved 2026-09-19 PT). `MEDIA_LENS_ENABLE_CLASSIFIER_DEV` remains default-off. A public classifier.dev claim that it stores no request text is insufficient alone for production. Prefer default tier `fast`; do not enable `smart` on any live path until contracts close the TypeSafe / OpenRouter / ultimate-model chain. Live URL and live pasted-text stay unauthorized. Not production-ready. Not an accuracy claim. Related to Issue #118; does not close it.
+In-repo source of truth: `docs/media-lens-classifier-dev-privacy.md`. Recommendation: **KEEP_EVALUATION_ONLY** (public sources retrieved 2026-09-19 PT). `MEDIA_LENS_ENABLE_CLASSIFIER_DEV` remains default-off. A public classifier.dev claim that it stores no request text is insufficient alone for production. Prefer default tier `fast`; do not enable `smart` on any live path until contracts close the TypeSafe / OpenRouter / ultimate-model chain. classifier.dev's public README records a past silent primary-model delist that served a backup for weeks without disclosure; Media Lens does not treat that as a current model-availability claim. Live URL and live pasted-text stay unauthorized. Not production-ready. Not an accuracy claim. Related to Issue #118; does not close it.
 
 ## Incidents and rollback
 

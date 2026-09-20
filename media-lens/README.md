@@ -61,7 +61,7 @@ Worker environment variables are read only by `worker/config.js`. Isolated pin v
 
 ## Consent and disclosure
 
-The UI shows a persistent, non-dismissable notice describing what Media Lens analyzes, that a local worker performs any processing, what happens in live mode, and that private messages belong in Clarity instead. A per-session "This is public material I am allowed to analyze" checkbox gates the submit button; the worker rejects `/analyze` requests without `user_asserted_public: true`.
+The UI shows a persistent, non-dismissable notice describing what Media Lens analyzes, that a local worker performs any processing, what happens in live mode, and that private messages belong in Clarity instead. The full live-URL disclosure stays visible before submit. A per-session "I confirm this is public material I am allowed to analyze, and I understand that live URL mode may send prepared public spans to TypeSafe AI’s Jev service." checkbox gates the submit button; the worker rejects `/analyze` requests without `user_asserted_public: true`.
 
 ## Privacy / DPA (evaluation-only)
 

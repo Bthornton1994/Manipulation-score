@@ -144,6 +144,62 @@ test('MEDIA_LENS_ENABLE_LIVE_URL is not true by default', () => {
   assert.equal(truthyButNotExact.liveUrlEnabled, false);
 });
 
+const TYPESAFE_NON_CLAIMS =
+  'Media Lens does not claim that TypeSafe AI will not retain, delete, train on, or otherwise use submitted inputs. Those practices are governed by TypeSafe\u2019s applicable policy or written agreement. Media Lens makes no ZDR, deletion, or no-training claim unless a written agreement is attached to the release packet.';
+const JEV_ONLY_SCOPE =
+  'If live URL mode is ever enabled, the only production provider in scope is the pinned TypeSafe Jev integration. classifier.dev remains disabled, evaluation-only, and is not a fallback, second model, cascade, or production dependency.';
+
+test('privacy.html records TypeSafe non-claims, Jev-only scope, and KEEP_EVALUATION_ONLY while flags stay off', async () => {
+  const html = await readFile('privacy.html', 'utf8');
+  assert.match(html, new RegExp(escapeRe(TYPESAFE_NON_CLAIMS)));
+  assert.match(html, new RegExp(escapeRe(JEV_ONLY_SCOPE)));
+  assert.match(html, /Live pasted-text analysis stays disabled/);
+  assert.match(html, /classifier\.dev remains off \/ KEEP_EVALUATION_ONLY/);
+  assert.match(html, /unreleased, not available, a fixture\/local preview, and not production-ready/);
+  assert.match(html, /KEEP_EVALUATION_ONLY/);
+  assert.doesNotMatch(html, /MEDIA_LENS_ENABLE_LIVE=true/);
+  assert.doesNotMatch(html, /MEDIA_LENS_ENABLE_LIVE_URL=true/);
+  assert.doesNotMatch(html, /MEDIA_LENS_ENABLE_CLASSIFIER_DEV=true/);
+  assert.match(html, /does not claim that classifier\.dev is part of the live path/);
+  assert.doesNotMatch(html, /we delete your article text from TypeSafe/i);
+  assert.doesNotMatch(html, /zero data retention is enabled/i);
+  const classifierPrivacy = await readFile('docs/media-lens-classifier-dev-privacy.md', 'utf8');
+  assert.match(classifierPrivacy, /KEEP_EVALUATION_ONLY/);
+  assert.match(classifierPrivacy, /off by default/);
+});
+
+test('privacy.html lists forbidden Media Lens public claims from privacy draft v2', async () => {
+  const html = await readFile('privacy.html', 'utf8');
+  const required = [
+    'is production-ready before enablement approval',
+    'is currently available while flags remain off',
+    'detects manipulation with guaranteed accuracy',
+    'fact-checks claims',
+    'identifies manipulative people, outlets, or political actors',
+    'provides anonymous or zero-retention processing',
+    'guarantees no training or third-party processing',
+    'is a diagnosis, safety assessment, or definitive credibility judgment'
+  ];
+  for (const claim of required) {
+    assert.match(html, new RegExp(escapeRe(claim)));
+  }
+  assert.match(html, /does not claim TypeSafe ZDR/);
+  assert.match(html, /detected an attack on a named outlet or person/);
+  assert.doesNotMatch(html, PRODUCTION_READY_CLAIM);
+});
+
+test('limitations.html and acceptable-use.html keep fixture\/local and not-available language', async () => {
+  const limitations = await readFile('limitations.html', 'utf8');
+  const acceptableUse = await readFile('acceptable-use.html', 'utf8');
+  assert.match(limitations, /unreleased fixture\/local preview/);
+  assert.match(limitations, /not available on the public site/);
+  assert.match(limitations, /not production-ready/);
+  assert.match(acceptableUse, /unreleased Media Lens fixture\/local preview/);
+  assert.match(acceptableUse, /not available on the public site/);
+  assert.doesNotMatch(limitations, PRODUCTION_READY_CLAIM);
+  assert.doesNotMatch(acceptableUse, PRODUCTION_READY_CLAIM);
+});
+
 test('live pasted-text remains rejected even when an operator sets MEDIA_LENS_ENABLE_LIVE_URL=true', async () => {
   const publicPastedText = Array.from(
     { length: 6 },

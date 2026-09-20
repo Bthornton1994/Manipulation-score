@@ -95,22 +95,24 @@ test('mutation: dropping ISATAP detection still blocks via extra-NAT64 catch-all
   const loopback = mutant.classifyIp('2001:470:1:2:0:5efe:7f00:1');
   assert.equal(loopback.disposition, 'block');
   assert.equal(loopback.reason, 'block_loopback_via_nat64_extra');
-  assert.equal(mutant.classifyIp('2001:470:1:2:0:5efe:cb00:7107').reason, 'block_nat64_extra');
+  assert.equal(mutant.classifyIp('2001:470:1:2:0:5efe:cb00:7107').disposition, 'allow_public');
 });
 
-test('mutation: dropping extra NAT64 would allow sparse and non-zero-64–95 custom /96 as public IPv6', async () => {
+test('mutation: dropping extra NAT64 would allow private last-32 embeddings as public IPv6', async () => {
   assert.equal(classifyIp('2001:470:1::7f00:1').reason, 'block_loopback_via_nat64_extra');
   assert.equal(classifyIp('2001:67c:27e4:64:ff:9b:7f00:1').reason, 'block_loopback_via_nat64_extra');
+  assert.equal(classifyIp('2606:4700:10::6814:179a').disposition, 'allow_public');
   const mutant = await loadMutatedAddressPolicy((src) =>
     src.replace(
-      'if (ipv4FirstOctet(ipv4) !== 0) {\n      return classifyFailClosedEmbedding(ipv4, 6, canonical, \'nat64_extra\');\n    }',
-      'if (false && ipv4FirstOctet(ipv4) !== 0) {\n      return classifyFailClosedEmbedding(ipv4, 6, canonical, \'nat64_extra\');\n    }'
+      'if (ipv4FirstOctet(ipv4) !== 0) {\n      const inner = classifyIPv4(ipv4);\n      if (inner.disposition === \'block\') {\n        return classifyFailClosedEmbedding(ipv4, 6, canonical, \'nat64_extra\');\n      }\n    }',
+      'if (false && ipv4FirstOctet(ipv4) !== 0) {\n      const inner = classifyIPv4(ipv4);\n      if (inner.disposition === \'block\') {\n        return classifyFailClosedEmbedding(ipv4, 6, canonical, \'nat64_extra\');\n      }\n    }'
     )
   );
   assert.equal(mutant.classifyIp('2001:470:1::7f00:1').disposition, 'allow_public');
   assert.equal(mutant.classifyIp('2001:470:1::cb00:7107').disposition, 'allow_public');
   assert.equal(mutant.classifyIp('2001:67c:27e4:64:ff:9b:7f00:1').disposition, 'allow_public');
   assert.equal(mutant.classifyIp('2001:67c:27e4:64:ff:9b:cb00:7107').disposition, 'allow_public');
+  assert.equal(mutant.classifyIp('2606:4700:4700:1:2:3:a9fe:a9fe').disposition, 'allow_public');
 });
 
 test('mutation: dropping unknown NAT64 catch-all would allow 64:ff9b:2::1 as public IPv6', async () => {

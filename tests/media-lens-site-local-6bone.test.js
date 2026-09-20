@@ -104,7 +104,7 @@ const NAT64_ISATAP_MAPPED_UNCHANGED = [
   ['64:ff9b::cb00:7107', 'allow_public', 'allow_public_via_nat64', '203.0.113.7'],
   ['64:ff9b::7f00:1', 'block', 'block_loopback_via_nat64', '127.0.0.1'],
   ['64:ff9b:1:cb00:71:700::', 'block', 'block_nat64_local', '203.0.113.7'],
-  ['2001:470:1::cb00:7107', 'block', 'block_nat64_extra', '203.0.113.7'],
+  ['2001:470:1::cb00:7107', 'allow_public', 'allow_public', null],
   ['2001:470:1:2:0:5efe:cb00:7107', 'block', 'block_isatap', '203.0.113.7'],
   ['::ffff:203.0.113.7', 'allow_public', 'allow_public_via_mapped', '203.0.113.7'],
   ['::ffff:0:cb00:7107', 'allow_public', 'allow_public_via_siit', '203.0.113.7'],
@@ -137,7 +137,7 @@ test('adjacent prefixes stay distinct from site-local and 6bone', () => {
   assert.equal(notSixbone.embeddedIPv4, null);
 });
 
-test('NAT64/ISATAP/mapped/SIIT/compat96 from #130 stay unchanged', () => {
+test('NAT64/ISATAP/mapped/SIIT/compat96 from #130 stay unchanged except public last-32 native unicast', () => {
   for (const [ip, disposition, reason, embeddedIPv4] of NAT64_ISATAP_MAPPED_UNCHANGED) {
     const result = classifyIp(ip);
     assert.equal(result.disposition, disposition, ip);

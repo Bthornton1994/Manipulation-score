@@ -249,8 +249,8 @@ Extract an embedded IPv4 when the prefix is a **known embedding**. Apply the IPv
 | SIIT IPv4-translated | `::ffff:0:0:0/96` (e.g. `::ffff:0:7f00:1`, `::ffff:0:127.0.0.1`) | extract IPv4 → IPv4 policy |
 | NAT64 well-known | `64:ff9b::/96` (RFC 6052) | extract IPv4 → IPv4 policy. **This is the only NAT64 form that may be `allow_public`**, and only when that IPv4 is `allow_public`. |
 | NAT64 extra prefixes | RFC 8215 local-use `64:ff9b:1::/48`; remainder of `64:ff9b::/32` | **block**. No extra-prefix allowlist env is implemented; fail closed. |
-| Sparse custom NAT64 `/96` | non-zero prefix, bits 64–95 are 0, bits 96–127 decode to an IPv4 whose first octet is not 0 | **block**. Distinct from well-known `64:ff9b::/96` and from deprecated `::/96`. |
-| Custom NAT64 `/96` with non-zero bits 64–95 | last 32 bits decode to an IPv4 whose first octet is not 0, and bits 64–95 are non-zero | **block**. Same fail-closed extra-prefix class as sparse `/96`. Not well-known `64:ff9b::/96`. |
+| Residual last-32 of a blocked IPv4 | bits 96–127 decode to an IPv4 whose first octet is not 0 **and** that IPv4 is blocked by the IPv4 table (private, loopback, metadata, CGNAT, multicast, reserved, …), sparse or with non-zero bits 64–95 | **block** as extra NAT64. Distinct from well-known `64:ff9b::/96`, mapped, SIIT, and ISATAP. |
+| Residual last-32 of a public IPv4 | bits 96–127 decode to an IPv4 that is `allow_public` (for example Cloudflare `2606:4700:10::6814:179a` → `104.20.23.154`) | **allow_public** as native unicast. Not extra NAT64. First-octet-0 last-32 stays native. |
 | ISATAP | IID `0000:5efe:IPv4` or `0200:5efe:IPv4` (RFC 5214), any unicast prefix | **block** (tunnel embedding; do not allow even if the embedded IPv4 is public) |
 | IPv4-compatible (deprecated) | `::/96` excluding `::` and `::1` (e.g. `::7f00:1`, `::127.0.0.1`) | extract IPv4 → IPv4 policy |
 | 6to4 | `2002::/16` | extract IPv4 from bits 16–47 → IPv4 policy |
@@ -271,12 +271,13 @@ NAT64 / ISATAP worked examples (classifier only; live URL remains disabled):
 | `nat64-local-public` | `64:ff9b:1:cb00:71:700::` | block (extra prefix) |
 | `nat64-unknown-32` | `64:ff9b:2::1` | block |
 | `nat64-extra-sparse-loopback` | `2001:470:1::7f00:1` | block |
-| `nat64-extra-sparse-public` | `2001:470:1::cb00:7107` | block |
+| `nat64-extra-sparse-public` | `2001:470:1::cb00:7107` | **allow_public** (native unicast; last-32 public IPv4) |
 | `nat64-extra-nonzero-64-95-loopback` | `2001:67c:27e4:64:ff:9b:7f00:1` | block |
 | `nat64-extra-nonzero-64-95-imds` | `2606:4700:4700:1:2:3:a9fe:a9fe` | block |
 | `nat64-extra-nonzero-64-95-rfc1918-10` | `2001:470:1:2:3:4:a00:1` | block |
 | `nat64-extra-nonzero-64-95-rfc1918-192` | `2a00:1450:4001:80e:1:2:c0a8:101` | block |
-| `nat64-extra-nonzero-64-95-public` | `2001:67c:27e4:64:ff:9b:cb00:7107` | block |
+| `nat64-extra-nonzero-64-95-public` | `2001:67c:27e4:64:ff:9b:cb00:7107` | **allow_public** (native unicast; last-32 public IPv4) |
+| `cloudflare-aaaa-public-last32` | `2606:4700:10::6814:179a` (`104.20.23.154`) | **allow_public** (native unicast; not extra NAT64) |
 | `isatap-loopback` | `2001:470:1:2:0:5efe:7f00:1` | block |
 | `isatap-public` | `2001:470:1:2:0:5efe:cb00:7107` | block |
 | `isatap-ulbit-imds` | `2001:470:1:2:200:5efe:a9fe:a9fe` | block |
@@ -285,11 +286,12 @@ NAT64 / ISATAP worked examples (classifier only; live URL remains disabled):
 | `v6-6bone` | `3ffe::1` | block (retired 6bone) |
 | `v6-6bone-end` | `3ffe:ffff::1` | block |
 
-Custom NAT64 `/96` (sparse or with non-zero bits 64–95) whose last 32 bits decode to an IPv4 with a non-zero first octet is **block**, including when that IPv4 is public TEST-NET. Well-known `64:ff9b::/96` remains the only NAT64 form that may be `allow_public`. Native unicast whose last 32 bits decode to an IPv4 in `0.0.0.0/8` (first octet 0) stays native (for example `2001:4860:4860::8888`). Deprecated site-local `fec0::/10` and retired 6bone `3ffe::/16` are **block** even when the last 32 bits look like a public IPv4.
+A residual last-32 whose decoded IPv4 is blocked by the IPv4 table is **block** as extra NAT64. A residual last-32 whose decoded IPv4 is public is native unicast `allow_public` (Cloudflare-style AAAA, including public TEST-NET last-32). Well-known `64:ff9b::/96` remains the only **NAT64** form that may be `allow_public`. Native unicast whose last 32 bits decode to an IPv4 in `0.0.0.0/8` (first octet 0) stays native (for example `2001:4860:4860::8888`). Deprecated site-local `fec0::/10` and retired 6bone `3ffe::/16` are **block** even when the last 32 bits look like a public IPv4. ISATAP, mapped, and SIIT are unchanged.
 
 ### 6.3 Ambiguous and dual-stack
 
 - Mixed A (public) + AAAA (ULA/link-local/site-local/6bone): **block the host**.
+- Mixed A (public) + AAAA (Cloudflare-style public last-32 native unicast): **allow**. Pin one public address. Not `BLOCKED_HOST` for address policy.
 - Mixed A (private) + AAAA (global): **block the host**.
 - Happy Eyeballs must not be allowed to pick a second address after policy. Pin **one** `allow_public` address chosen from an answer set that is **entirely** `allow_public`.
 - Address family preference when both v4 and v6 are public: prefer IPv6, then IPv4. Document the choice in `engine` metadata (`pinned_family`) without logging the IP by default.
@@ -793,7 +795,7 @@ Mitigations: concept separation, banned phrases, no score, consent copy, accepta
 - TypeSafe server-side retention is not under this repo's control.
 - IDN homographs can fool **users**; they are not treated as SSRF if DNS is public.
 - Fixture/adversarial tests are not a pentest substitute. Independent security review remains a gate.
-- Custom NAT64 `/96` of an IPv4 in `0.0.0.0/8` (last 32 bits with first octet 0) remains indistinguishable from native last-hextet unicast and stays native. Some native unicast whose last 32 bits look like a non-`0/8` IPv4 is fail-closed as extra NAT64 (false-positive vs random IID; fail closed when in doubt).
+- Custom NAT64 `/96` of an IPv4 in `0.0.0.0/8` (last 32 bits with first octet 0) remains indistinguishable from native last-hextet unicast and stays native. Native unicast whose last 32 bits decode to a **public** IPv4 is `allow_public` (Cloudflare AAAA false-positive fix). Last-32 embeddings of a **blocked** IPv4 remain fail-closed extra NAT64.
 
 ---
 

@@ -8,7 +8,7 @@
 // tests/media-lens-no-secrets.test.js). classifier.dev enablement is an
 // evaluation-only exact-string flag and is off by default.
 
-import { existsSync } from 'node:fs';
+import { statSync } from 'node:fs';
 import { parseHostnameAllowlist } from './host-key.js';
 import {
   DEFAULT_BASE_URL as CLASSIFIER_DEV_DEFAULT_BASE_URL,
@@ -158,16 +158,27 @@ export function loadConfig(env = process.env) {
  * and `yes` do not assert it. An existing MEDIA_LENS_KILL_SWITCH_FILE is
  * equivalent. File existence is re-read each call so ops can `touch`
  * without a restart.
+ *
+ * Kill-file checks use `statSync`, not `existsSync`. A missing path
+ * (`ENOENT`) is not a kill. Permission, IO, and any other check error
+ * fail-closed (treat as asserted) so an unreadable kill-file path cannot
+ * leave live paths enabled. `MEDIA_LENS_KILL_SWITCH=true` is checked first
+ * and does not consult the file.
+ *
+ * `io.statSync` is a test seam for stubbing check errors; production callers
+ * omit it.
  */
-export function isKillSwitchAsserted(config) {
+export function isKillSwitchAsserted(config, io = {}) {
   const env = getEnv(config);
   if (env.MEDIA_LENS_KILL_SWITCH === 'true') return true;
   const file = env.MEDIA_LENS_KILL_SWITCH_FILE || config.killSwitchFile;
   if (typeof file === 'string' && file.length > 0) {
+    const stat = typeof io.statSync === 'function' ? io.statSync : statSync;
     try {
-      return existsSync(file);
-    } catch {
-      return false;
+      stat(file);
+      return true;
+    } catch (err) {
+      return err?.code !== 'ENOENT';
     }
   }
   return false;

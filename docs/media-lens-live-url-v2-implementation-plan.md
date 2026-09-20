@@ -209,11 +209,17 @@ Each row: construct input, expect code, no connect to a blocked address (assert 
 
 #### IPv6 / embeddings
 
+Deprecated site-local `fec0::/10` (RFC 3879) and retired 6bone `3ffe::/16` are **block** before connect. Empty canary allowlist still applies public-address policy only; a non-empty DNS allowlist still fail-closes these IP literals.
+
 | Id | Address | Expect |
 | --- | --- | --- |
 | `v6-loopback-br` | `[::1]` | block |
 | `v6-unspec` | `::` | block |
 | `v6-lla` | `fe80::1` | block |
+| `v6-site-local` | `fec0::1` | block |
+| `v6-site-local-end` | `feff::1` | block |
+| `v6-6bone` | `3ffe::1` | block |
+| `v6-6bone-end` | `3ffe:ffff::1` | block |
 | `v6-ula` | `fd12:3456:789a::1` | block |
 | `v6-multicast` | `ff02::1` | block |
 | `v6-doc` | `2001:db8::1` | block |
@@ -252,6 +258,8 @@ Each row: construct input, expect code, no connect to a blocked address (assert 
 | `rebind-ttl` | first call `203.0.113.7`, second call `127.0.0.1` | pin client never issues second lookup; connect only to first pin **or**, if policy requires single-shot all-addresses, only one lookup occurs |
 | `mixed-public-private-a` | `[203.0.113.7, 10.0.0.1]` | `BLOCKED_HOST`, no connect |
 | `mixed-aaaa-ula` | A `203.0.113.7`, AAAA `fd00::1` | `BLOCKED_HOST` |
+| `mixed-aaaa-site-local` | A `203.0.113.7`, AAAA `fec0::1` | `BLOCKED_HOST` |
+| `mixed-aaaa-6bone` | A `203.0.113.7`, AAAA `3ffe::1` | `BLOCKED_HOST` |
 | `empty-dns` | `[]` | `DNS_ERROR` |
 | `localhost-name` | `localhost` | `BLOCKED_HOST` no lookup required |
 | `mdns` | `printer.local` | `BLOCKED_HOST` |
@@ -265,6 +273,8 @@ For `rebind-ttl`, the **normative** architecture is: one lookup, classify all, p
 | --- | --- | --- |
 | `redir-imds` | `203.0.113.7` → `http://169.254.169.254/` | `BLOCKED_HOST` before second connect |
 | `redir-v6-loopback` | → `http://[::1]/` | `BLOCKED_HOST` |
+| `redir-site-local` | → `http://[fec0::1]/` | `BLOCKED_HOST` before second connect |
+| `redir-6bone` | → `http://[3ffe::1]/` | `BLOCKED_HOST` before second connect |
 | `redir-nat64-private` | → `http://[64:ff9b::7f00:1]/` | `BLOCKED_HOST` |
 | `redir-nat64-extra` | → `http://[2001:470:1::7f00:1]/` | `BLOCKED_HOST` before second connect |
 | `redir-nat64-extra-nonzero-64-95` | → `http://[2001:67c:27e4:64:ff:9b:7f00:1]/` | `BLOCKED_HOST` before second connect; lookups=0 |

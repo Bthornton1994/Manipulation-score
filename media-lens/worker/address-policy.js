@@ -35,8 +35,8 @@ const DENIED_EXACT_HOSTS = new Set([
 ]);
 
 // Loopback, RFC 1918, CGNAT, link-local (incl. 169.254.169.254 / 169.254.170.2),
-// IETF protocol assignments, deprecated 6to4 anycast, benchmarking,
-// this-network, multicast, reserved.
+// IETF protocol assignments, RFC 5737 TEST-NET documentation, deprecated 6to4
+// anycast, benchmarking, this-network, multicast, reserved.
 const BLOCKED_IPV4_RANGES = [
   ['0.0.0.0', 8, 'block_this_network'],
   ['10.0.0.0', 8, 'block_rfc1918'],
@@ -46,8 +46,12 @@ const BLOCKED_IPV4_RANGES = [
   ['172.16.0.0', 12, 'block_rfc1918'],
   ['192.168.0.0', 16, 'block_rfc1918'],
   ['192.0.0.0', 24, 'block_ietf_protocol'],
+  // RFC 5737 TEST-NET: IANA documentation space, non-global, non-forwardable.
+  ['192.0.2.0', 24, 'block_documentation'],
   ['192.88.99.0', 24, 'block_6to4_anycast'],
   ['198.18.0.0', 15, 'block_benchmark'],
+  ['198.51.100.0', 24, 'block_documentation'],
+  ['203.0.113.0', 24, 'block_documentation'],
   ['224.0.0.0', 4, 'block_multicast'],
   ['240.0.0.0', 4, 'block_reserved']
 ];

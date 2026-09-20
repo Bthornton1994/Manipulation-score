@@ -158,7 +158,7 @@ test('kill switch forces live URL and live Jev off even when enable flags are tr
     const res = await requestJson(server, {
       method: 'POST',
       path: '/analyze',
-      body: { user_asserted_public: true, mode: 'url', url: 'http://203.0.113.7/article' }
+      body: { user_asserted_public: true, mode: 'url', url: 'http://8.8.8.8/article' }
     });
     assert.equal(res.status, 503);
     assert.equal(res.body.error, 'live_killed');
@@ -205,7 +205,7 @@ test('kill file is re-checked per request without restart', async () => {
     const killed = await requestJson(server, {
       method: 'POST',
       path: '/analyze',
-      body: { user_asserted_public: true, mode: 'url', url: 'http://203.0.113.7/article' }
+      body: { user_asserted_public: true, mode: 'url', url: 'http://8.8.8.8/article' }
     });
     assert.equal(killed.status, 503);
     assert.equal(killed.body.error, 'live_killed');
@@ -217,7 +217,7 @@ test('kill file is re-checked per request without restart', async () => {
     const after = await requestJson(server, {
       method: 'POST',
       path: '/analyze',
-      body: { user_asserted_public: true, mode: 'url', url: 'http://203.0.113.7/article' }
+      body: { user_asserted_public: true, mode: 'url', url: 'http://8.8.8.8/article' }
     });
     assert.equal(after.status, 200);
     assert.equal(fetchHits, 1);
@@ -313,7 +313,7 @@ test('unreadable kill-file path fail-closes live /analyze with zero provider cal
     const res = await requestJson(server, {
       method: 'POST',
       path: '/analyze',
-      body: { user_asserted_public: true, mode: 'url', url: 'http://203.0.113.7/article' }
+      body: { user_asserted_public: true, mode: 'url', url: 'http://8.8.8.8/article' }
     });
     assert.equal(res.status, 503);
     assert.equal(res.body.error, 'live_killed');
@@ -359,7 +359,7 @@ test('fixture mode:url is URL_MODE_REQUIRES_LIVE even when the kill switch is on
     const res = await requestJson(server, {
       method: 'POST',
       path: '/analyze',
-      body: { user_asserted_public: true, mode: 'url', url: 'http://203.0.113.7/article' }
+      body: { user_asserted_public: true, mode: 'url', url: 'http://8.8.8.8/article' }
     });
     assert.equal(res.status, 400);
     assert.equal(res.body.error, 'URL_MODE_REQUIRES_LIVE');
@@ -396,7 +396,7 @@ test('live URL without ENABLE_LIVE_URL stays blocked and emits live_url_blocked'
     const res = await requestJson(server, {
       method: 'POST',
       path: '/analyze',
-      body: { user_asserted_public: true, mode: 'url', url: 'http://user:p4ssw0rd@203.0.113.7/secret?token=abc' }
+      body: { user_asserted_public: true, mode: 'url', url: 'http://user:p4ssw0rd@8.8.8.8/secret?token=abc' }
     });
     assert.equal(res.status, 400);
     assert.equal(res.body.error, 'live_url_disabled');
@@ -462,13 +462,13 @@ test('operator live URL rate limit is independent of the analyze window and emit
     const first = await requestJson(server, {
       method: 'POST',
       path: '/analyze',
-      body: { user_asserted_public: true, mode: 'url', url: 'http://203.0.113.7/article' }
+      body: { user_asserted_public: true, mode: 'url', url: 'http://8.8.8.8/article' }
     });
     assert.equal(first.status, 200);
     const second = await requestJson(server, {
       method: 'POST',
       path: '/analyze',
-      body: { user_asserted_public: true, mode: 'url', url: 'http://203.0.113.8/article' }
+      body: { user_asserted_public: true, mode: 'url', url: 'http://1.1.1.1/article' }
     });
     assert.equal(second.status, 429);
     assert.equal(second.body.error, 'rate_limited');

@@ -100,12 +100,12 @@ test('live flags and classifier.dev remain disabled by default (remediation C)',
 
 test('pinProviderHost DNS rebind mock: second answer is never used', async () => {
   const lookupImpl = countingLookup(
-    [{ address: '203.0.113.7', family: 4 }],
+    [{ address: '8.8.8.8', family: 4 }],
     [{ address: '127.0.0.1', family: 4 }]
   );
   const pin = await pinProviderHost(PIN_HOST, { lookupImpl });
   assert.equal(lookupImpl.count(), 1);
-  assert.equal(pin.address, '203.0.113.7');
+  assert.equal(pin.address, '8.8.8.8');
   assert.equal(pin.family, 4);
 });
 
@@ -204,7 +204,7 @@ test('classifier.dev uses connect-time pin: rebind mock second DNS answer is ign
 test('classifier.dev hostname pin ignores a second DNS answer', async () => {
   let connects = 0;
   const lookupImpl = countingLookup(
-    [{ address: '203.0.113.7', family: 4 }],
+    [{ address: '8.8.8.8', family: 4 }],
     [{ address: '169.254.169.254', family: 4 }]
   );
   const adapter = createClassifierDevAdapter({
@@ -213,7 +213,7 @@ test('classifier.dev hostname pin ignores a second DNS answer', async () => {
     lookupImpl,
     createConnectionImpl(options) {
       connects += 1;
-      assert.equal(options.host, '203.0.113.7');
+      assert.equal(options.host, '8.8.8.8');
       const socket = new net.Socket();
       queueMicrotask(() => socket.destroy(Object.assign(new Error('pin recorded'), { code: 'ECONNREFUSED' })));
       return socket;
@@ -355,7 +355,7 @@ test('mixed public+private provider DNS is BLOCKED_HOST with no connect', async 
     () =>
       pinProviderHost(PIN_HOST, {
         lookupImpl: async () => [
-          { address: '203.0.113.7', family: 4 },
+          { address: '8.8.8.8', family: 4 },
           { address: '10.0.0.1', family: 4 }
         ]
       }),
@@ -392,7 +392,7 @@ test('PIN_MISMATCH when the connected peer is not the pin', async () => {
         baseUrl: `http://${PIN_HOST}:${port}`,
         apiKey: 'test-key-not-used',
         concurrency: 1,
-        lookupImpl: lookupMap({ [PIN_HOST]: [{ address: '203.0.113.7', family: 4 }] }),
+        lookupImpl: lookupMap({ [PIN_HOST]: [{ address: '8.8.8.8', family: 4 }] }),
         createConnectionImpl() {
           return net.connect({ host: '127.0.0.1', port });
         }
@@ -408,7 +408,7 @@ test('default-off and kill switch make zero provider DNS or HTTP', async () => {
   let lookups = 0;
   const lookupImpl = async () => {
     lookups += 1;
-    return [{ address: '203.0.113.7', family: 4 }];
+    return [{ address: '8.8.8.8', family: 4 }];
   };
 
   const disabledJev = createJevAdapter({
@@ -476,7 +476,7 @@ test('classifier.dev origin allowlist and /v1/classify path are unchanged', asyn
   let lookups = 0;
   const lookupImpl = async () => {
     lookups += 1;
-    return [{ address: '203.0.113.7', family: 4 }];
+    return [{ address: '8.8.8.8', family: 4 }];
   };
   const evil = createClassifierDevAdapter({
     enabled: true,

@@ -34,7 +34,7 @@ function redirectResponse(pin, location, status = 302) {
   };
 }
 
-const PUBLIC_LOOKUP = async () => [{ address: '203.0.113.7', family: 4 }];
+const PUBLIC_LOOKUP = async () => [{ address: '8.8.8.8', family: 4 }];
 
 function requestJson(server, { method, path, body }) {
   return new Promise((resolve, reject) => {
@@ -115,7 +115,7 @@ test('off-allowlist redirect hop is fail-closed and does not return 200 from the
   const lookupImpl = async (hostname) => {
     lookups += 1;
     assert.notEqual(String(hostname).toLowerCase(), 'other.example', 'must not pin/lookup an off-allowlist hop');
-    return [{ address: '203.0.113.7', family: 4 }];
+    return [{ address: '8.8.8.8', family: 4 }];
   };
 
   await assert.rejects(

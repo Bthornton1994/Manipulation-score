@@ -284,7 +284,7 @@ test('live Jev without MEDIA_LENS_ENABLE_LIVE_URL cannot open article fetch', as
     const res = await requestJson(server, {
       method: 'POST',
       path: '/analyze',
-      body: { user_asserted_public: true, mode: 'url', url: 'http://203.0.113.7/article' }
+      body: { user_asserted_public: true, mode: 'url', url: 'http://8.8.8.8/article' }
     });
     assert.equal(res.status, 400);
     assert.equal(res.body.error, 'live_url_disabled');

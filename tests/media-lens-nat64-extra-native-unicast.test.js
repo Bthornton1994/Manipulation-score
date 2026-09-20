@@ -57,11 +57,11 @@ const NARROW_BLOCKED_LAST32_ONLY = `if (ipv4FirstOctet(ipv4) !== 0) {
       }
     }`;
 
-const PUBLIC_ISATAP = '2001:470:1:2:0:5efe:cb00:7107';
-const PUBLIC_ISATAP_ULBIT = '2001:470:1:2:200:5efe:cb00:7107';
-const PUBLIC_ISATAP_GBIT = '2001:470:1:2:100:5efe:cb00:7107';
-const PUBLIC_ISATAP_UGBIT = '2001:470:1:2:300:5efe:cb00:7107';
-const PUBLIC_ISATAP_EMBEDDED = '203.0.113.7';
+const PUBLIC_ISATAP = '2001:470:1:2:0:5efe:808:808';
+const PUBLIC_ISATAP_ULBIT = '2001:470:1:2:200:5efe:808:808';
+const PUBLIC_ISATAP_GBIT = '2001:470:1:2:100:5efe:808:808';
+const PUBLIC_ISATAP_UGBIT = '2001:470:1:2:300:5efe:808:808';
+const PUBLIC_ISATAP_EMBEDDED = '8.8.8.8';
 const CLASSIC_ISATAP_IID = 'return words[5] === 0x5efe && (words[4] === 0 || words[4] === 0x0200);';
 const RFC5214_ISATAP_IID =
   'return words[5] === 0x5efe && (words[4] === 0 || words[4] === 0x0100 || words[4] === 0x0200 || words[4] === 0x0300);';
@@ -93,13 +93,13 @@ const CLOUDFLARE_STYLE_PUBLIC_AAAA = [
   },
   {
     id: 'nat64-extra-sparse-public-now-native',
-    ip: '2001:470:1::cb00:7107',
-    last32: '203.0.113.7'
+    ip: '2001:470:1::808:808',
+    last32: '8.8.8.8'
   },
   {
     id: 'nat64-extra-nonzero-64-95-public-now-native',
-    ip: '2001:67c:27e4:64:ff:9b:cb00:7107',
-    last32: '203.0.113.7'
+    ip: '2001:67c:27e4:64:ff:9b:808:808',
+    last32: '8.8.8.8'
   }
 ];
 
@@ -116,6 +116,9 @@ const BLOCKED_LAST32_EMBEDDINGS = [
   ['nat64-extra-sparse-benchmark', '2001:470:1::c612:1', 'block_benchmark_via_nat64_extra', '198.18.0.1'],
   ['nat64-extra-sparse-multicast', '2001:470:1::e000:1', 'block_multicast_via_nat64_extra', '224.0.0.1'],
   ['nat64-extra-sparse-reserved', '2001:470:1::f000:1', 'block_reserved_via_nat64_extra', '240.0.0.1'],
+  ['nat64-extra-sparse-test-net-1', '2001:470:1::c000:207', 'block_documentation_via_nat64_extra', '192.0.2.7'],
+  ['nat64-extra-sparse-test-net-2', '2001:470:1::c633:6407', 'block_documentation_via_nat64_extra', '198.51.100.7'],
+  ['nat64-extra-sparse-test-net-3', '2001:470:1::cb00:7107', 'block_documentation_via_nat64_extra', '203.0.113.7'],
   ['nat64-extra-nonzero-64-95-loopback', '2001:67c:27e4:64:ff:9b:7f00:1', 'block_loopback_via_nat64_extra', '127.0.0.1'],
   ['nat64-extra-nonzero-64-95-imds', '2606:4700:4700:1:2:3:a9fe:a9fe', 'block_link_local_via_nat64_extra', '169.254.169.254'],
   ['nat64-extra-nonzero-64-95-rfc1918-10', '2001:470:1:2:3:4:a00:1', 'block_rfc1918_via_nat64_extra', '10.0.0.1'],
@@ -123,17 +126,19 @@ const BLOCKED_LAST32_EMBEDDINGS = [
 ];
 
 const UNCHANGED_KNOWN_PREFIXES = [
-  ['64:ff9b::cb00:7107', 'allow_public', 'allow_public_via_nat64', '203.0.113.7'],
+  ['64:ff9b::808:808', 'allow_public', 'allow_public_via_nat64', '8.8.8.8'],
+  ['64:ff9b::cb00:7107', 'block', 'block_documentation_via_nat64', '203.0.113.7'],
   ['64:ff9b::7f00:1', 'block', 'block_loopback_via_nat64', '127.0.0.1'],
-  ['64:ff9b:1:cb00:71:700::', 'block', 'block_nat64_local', '203.0.113.7'],
+  ['64:ff9b:1:808:8:800::', 'block', 'block_nat64_local', '8.8.8.8'],
   ['64:ff9b:2::1', 'block', 'block_nat64_unknown', null],
-  ['2001:470:1:2:0:5efe:cb00:7107', 'block', 'block_isatap', '203.0.113.7'],
-  ['::ffff:203.0.113.7', 'allow_public', 'allow_public_via_mapped', '203.0.113.7'],
-  ['::ffff:0:cb00:7107', 'allow_public', 'allow_public_via_siit', '203.0.113.7'],
+  ['2001:470:1:2:0:5efe:808:808', 'block', 'block_isatap', '8.8.8.8'],
+  ['::ffff:8.8.8.8', 'allow_public', 'allow_public_via_mapped', '8.8.8.8'],
+  ['::ffff:203.0.113.7', 'block', 'block_documentation_via_mapped', '203.0.113.7'],
+  ['::ffff:0:808:808', 'allow_public', 'allow_public_via_siit', '8.8.8.8'],
   ['fec0::1', 'block', 'block_site_local', null],
-  ['fec0::cb00:7107', 'block', 'block_site_local', null],
+  ['fec0::808:808', 'block', 'block_site_local', null],
   ['3ffe::1', 'block', 'block_6bone', null],
-  ['3ffe::cb00:7107', 'block', 'block_6bone', null],
+  ['3ffe::808:808', 'block', 'block_6bone', null],
   ['2001:4860:4860::8888', 'allow_public', 'allow_public', null]
 ];
 
@@ -207,8 +212,8 @@ test('well-known NAT64, mapped/SIIT, ISATAP, fec0::/10, 3ffe::/16, and first-oct
 
 test('RFC 5214 u/g ISATAP 0100:5efe and 0300:5efe with public last-32 are block_isatap', async () => {
   assert.equal(classifyIp(CLOUDFLARE_AAAA).disposition, 'allow_public');
-  assert.equal(classifyIp('2001:470:1::cb00:7107').disposition, 'allow_public');
-  assert.equal(classifyIp('2001:470:1:2:400:5efe:cb00:7107').disposition, 'allow_public');
+  assert.equal(classifyIp('2001:470:1::808:808').disposition, 'allow_public');
+  assert.equal(classifyIp('2001:470:1:2:400:5efe:808:808').disposition, 'allow_public');
 
   for (const [id, ip] of RFC5214_PUBLIC_ISATAP) {
     const result = classifyIp(ip);
@@ -280,7 +285,7 @@ test('private last-32 embeddings still fail closed before connect; public last-3
         lookupImpl: async () => {
           lookups += 1;
           return [
-            { address: '203.0.113.7', family: 4 },
+            { address: '8.8.8.8', family: 4 },
             { address: '2001:470:1::7f00:1', family: 6 }
           ];
         },
@@ -323,7 +328,7 @@ test('mutation: dropping ISATAP detector still fail-closes public-IPv4 ISATAP on
   const cloudflare = mutant.classifyIp(CLOUDFLARE_AAAA);
   assert.equal(cloudflare.disposition, 'allow_public');
   assert.equal(cloudflare.reason, 'allow_public');
-  assert.equal(mutant.classifyIp('2001:470:1::cb00:7107').disposition, 'allow_public');
+  assert.equal(mutant.classifyIp('2001:470:1::808:808').disposition, 'allow_public');
   assert.equal(mutant.classifyIp('2001:470:1::7f00:1').reason, 'block_loopback_via_nat64_extra');
   assert.equal(mutant.classifyIp('2001:470:1:2:0:5efe:7f00:1').reason, 'block_loopback_via_isatap');
   assert.equal(mutant.classifyIp('2001:470:1:2:100:5efe:7f00:1').reason, 'block_loopback_via_isatap');
@@ -373,8 +378,8 @@ test('mutation: restoring always-fail-closed last-32 nonzero blocks Cloudflare-s
   }
 
   assert.equal(mutant.classifyIp('2001:470:1::7f00:1').reason, 'block_loopback_via_nat64_extra');
-  assert.equal(mutant.classifyIp('64:ff9b::cb00:7107').reason, 'allow_public_via_nat64');
-  assert.equal(mutant.classifyIp('2001:470:1:2:0:5efe:cb00:7107').reason, 'block_isatap');
+  assert.equal(mutant.classifyIp('64:ff9b::808:808').reason, 'allow_public_via_nat64');
+  assert.equal(mutant.classifyIp('2001:470:1:2:0:5efe:808:808').reason, 'block_isatap');
   assert.equal(mutant.classifyIp('fec0::1').reason, 'block_site_local');
   assert.equal(mutant.classifyIp('3ffe::1').reason, 'block_6bone');
 });

@@ -215,7 +215,7 @@ test('kill-file drill: live /analyze returns 503 live_killed with zero provider 
     const killed = await requestJson(server, {
       method: 'POST',
       path: '/analyze',
-      body: { user_asserted_public: true, mode: 'url', url: 'http://203.0.113.7/article' }
+      body: { user_asserted_public: true, mode: 'url', url: 'http://8.8.8.8/article' }
     });
     assert.equal(killed.status, 503);
     assert.equal(killed.body.error, 'live_killed');

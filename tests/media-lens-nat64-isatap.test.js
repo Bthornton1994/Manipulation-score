@@ -42,16 +42,23 @@ function redirectResponse(pin, location, status = 302) {
 const NAT64_ISATAP_TABLE = [
   {
     id: 'nat64-wk-public',
-    ip: '64:ff9b::cb00:7107',
+    ip: '64:ff9b::808:808',
     disposition: 'allow_public',
     reason: 'allow_public_via_nat64',
-    embeddedIPv4: '203.0.113.7'
+    embeddedIPv4: '8.8.8.8'
   },
   {
     id: 'nat64-wk-public-dotted',
-    ip: '64:ff9b::203.0.113.7',
+    ip: '64:ff9b::8.8.8.8',
     disposition: 'allow_public',
     reason: 'allow_public_via_nat64',
+    embeddedIPv4: '8.8.8.8'
+  },
+  {
+    id: 'nat64-wk-test-net-3',
+    ip: '64:ff9b::cb00:7107',
+    disposition: 'block',
+    reason: 'block_documentation_via_nat64',
     embeddedIPv4: '203.0.113.7'
   },
   {
@@ -63,10 +70,10 @@ const NAT64_ISATAP_TABLE = [
   },
   {
     id: 'nat64-local-public',
-    ip: '64:ff9b:1:cb00:71:700::',
+    ip: '64:ff9b:1:808:8:800::',
     disposition: 'block',
     reason: 'block_nat64_local',
-    embeddedIPv4: '203.0.113.7'
+    embeddedIPv4: '8.8.8.8'
   },
   {
     id: 'nat64-local-loopback',
@@ -105,10 +112,17 @@ const NAT64_ISATAP_TABLE = [
   },
   {
     id: 'nat64-extra-sparse-public',
-    ip: '2001:470:1::cb00:7107',
+    ip: '2001:470:1::808:808',
     disposition: 'allow_public',
     reason: 'allow_public',
     embeddedIPv4: null
+  },
+  {
+    id: 'nat64-extra-sparse-test-net-3',
+    ip: '2001:470:1::cb00:7107',
+    disposition: 'block',
+    reason: 'block_documentation_via_nat64_extra',
+    embeddedIPv4: '203.0.113.7'
   },
   {
     id: 'nat64-extra-nonzero-64-95-loopback',
@@ -140,7 +154,7 @@ const NAT64_ISATAP_TABLE = [
   },
   {
     id: 'nat64-extra-nonzero-64-95-public',
-    ip: '2001:67c:27e4:64:ff:9b:cb00:7107',
+    ip: '2001:67c:27e4:64:ff:9b:808:808',
     disposition: 'allow_public',
     reason: 'allow_public',
     embeddedIPv4: null
@@ -182,24 +196,24 @@ const NAT64_ISATAP_TABLE = [
   },
   {
     id: 'isatap-public',
-    ip: '2001:470:1:2:0:5efe:cb00:7107',
+    ip: '2001:470:1:2:0:5efe:808:808',
     disposition: 'block',
     reason: 'block_isatap',
-    embeddedIPv4: '203.0.113.7'
+    embeddedIPv4: '8.8.8.8'
   },
   {
     id: 'isatap-public-gbit',
-    ip: '2001:470:1:2:100:5efe:cb00:7107',
+    ip: '2001:470:1:2:100:5efe:808:808',
     disposition: 'block',
     reason: 'block_isatap',
-    embeddedIPv4: '203.0.113.7'
+    embeddedIPv4: '8.8.8.8'
   },
   {
     id: 'isatap-public-ugbit',
-    ip: '2001:470:1:2:300:5efe:cb00:7107',
+    ip: '2001:470:1:2:300:5efe:808:808',
     disposition: 'block',
     reason: 'block_isatap',
-    embeddedIPv4: '203.0.113.7'
+    embeddedIPv4: '8.8.8.8'
   }
 ];
 
@@ -269,7 +283,7 @@ test('DNS answers that include custom NAT64 /96 with non-zero bits 64–95 fail 
           lookupImpl: async () => {
             lookups += 1;
             return [
-              { address: '203.0.113.7', family: 4 },
+              { address: '8.8.8.8', family: 4 },
               { address: row.ip, family: 6 }
             ];
           },
@@ -297,10 +311,10 @@ test('native IPv6 unicast with a last-hextet form is not treated as extra NAT64'
 
 test('well-known mapped/SIIT/6to4/compat public embeddings remain allow_public', () => {
   const allowed = [
-    ['::ffff:203.0.113.7', 'allow_public_via_mapped', '203.0.113.7'],
-    ['::ffff:0:cb00:7107', 'allow_public_via_siit', '203.0.113.7'],
-    ['::cb00:7107', 'allow_public_via_compat96', '203.0.113.7'],
-    ['2002:cb00:7107::', 'allow_public_via_6to4', '203.0.113.7']
+    ['::ffff:8.8.8.8', 'allow_public_via_mapped', '8.8.8.8'],
+    ['::ffff:0:808:808', 'allow_public_via_siit', '8.8.8.8'],
+    ['::808:808', 'allow_public_via_compat96', '8.8.8.8'],
+    ['2002:808:808::', 'allow_public_via_6to4', '8.8.8.8']
   ];
   for (const [ip, reason, v4] of allowed) {
     const result = classifyIp(ip);
@@ -339,17 +353,17 @@ test('blocked NAT64/ISATAP literals fail closed before connect', async () => {
 });
 
 test('well-known public NAT64 may connect; extra/ISATAP public embeddings must not', async () => {
-  const fetched = await fetchArticleSafely('http://[64:ff9b::cb00:7107]/article', {
+  const fetched = await fetchArticleSafely('http://[64:ff9b::808:808]/article', {
     timeoutMs: 500,
     maxBytes: 4000,
     requestImpl: async ({ pin }) => {
-      assert.equal(pin.address, '64:ff9b::cb00:7107');
+      assert.equal(pin.address, '64:ff9b::808:808');
       return htmlResponse(pin);
     }
   });
   assert.match(fetched.html, /Public article fixture/);
 
-  for (const ip of ['64:ff9b:1:cb00:71:700::', '2001:470:1:2:0:5efe:cb00:7107', '2001:470:1:2:100:5efe:cb00:7107', '2001:470:1:2:300:5efe:cb00:7107']) {
+  for (const ip of ['64:ff9b:1:808:8:800::', '2001:470:1:2:0:5efe:808:808', '2001:470:1:2:100:5efe:808:808', '2001:470:1:2:300:5efe:808:808']) {
     let called = false;
     await assert.rejects(
       () =>
@@ -369,15 +383,15 @@ test('well-known public NAT64 may connect; extra/ISATAP public embeddings must n
 });
 
 test('redirects to NAT64 extra / ISATAP are BLOCKED_HOST before the second connect', async () => {
-  const start = 'http://203.0.113.7/start';
+  const start = 'http://8.8.8.8/start';
   const locations = [
     'http://[2001:470:1:2:0:5efe:7f00:1]/',
     'http://[2001:470:1:2:0:5efe:10.0.0.1]/',
     'http://[2001:470:1:2:200:5efe:a9fe:a9fe]/',
-    'http://[2001:470:1:2:100:5efe:cb00:7107]/',
-    'http://[2001:470:1:2:300:5efe:cb00:7107]/',
+    'http://[2001:470:1:2:100:5efe:808:808]/',
+    'http://[2001:470:1:2:300:5efe:808:808]/',
     'http://[2001:470:1::7f00:1]/',
-    'http://[64:ff9b:1:cb00:71:700::]/',
+    'http://[64:ff9b:1:808:8:800::]/',
     'http://[2001:67c:27e4:64:ff:9b:7f00:1]/',
     'http://[2606:4700:4700:1:2:3:a9fe:a9fe]/',
     'http://[2001:470:1:2:3:4:a00:1]/',
@@ -411,12 +425,12 @@ test('redirects to NAT64 extra / ISATAP are BLOCKED_HOST before the second conne
   let downgradeConnects = 0;
   await assert.rejects(
     () =>
-      fetchArticleSafely('https://203.0.113.7/start', {
+      fetchArticleSafely('https://8.8.8.8/start', {
         timeoutMs: 1000,
         maxBytes: 1000,
         requestImpl: async ({ pin }) => {
           downgradeConnects += 1;
-          return redirectResponse(pin, 'http://203.0.113.8/');
+          return redirectResponse(pin, 'http://1.1.1.1/');
         }
       }),
     hasCode('REDIRECT_DOWNGRADE')

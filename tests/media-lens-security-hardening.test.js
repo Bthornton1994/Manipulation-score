@@ -175,10 +175,10 @@ test('H2: assertHostIsPublic rejects loopback and private/link-local hosts', asy
 });
 
 test('H2: assertHostIsPublic allows a public-looking address', async () => {
-  // 203.0.113.0/24 is TEST-NET-3 (RFC 5737), reserved for documentation —
-  // not private/loopback/link-local, and dns.lookup resolves an IP literal
-  // instantly without a real network query, so this is deterministic.
-  await assert.doesNotReject(() => assertHostIsPublic('203.0.113.7'));
+  // 8.8.8.8 is globally routable unicast used only as a mocked/no-connect
+  // public control. dns.lookup resolves an IP literal without a network query.
+  await assert.doesNotReject(() => assertHostIsPublic('8.8.8.8'));
+  await assert.rejects(() => assertHostIsPublic('203.0.113.7'), hasCode('BLOCKED_HOST'));
 });
 
 test('H2: fetchArticleSafely rejects a non-http(s) scheme before ever calling the pinned client', async () => {
@@ -190,7 +190,7 @@ test('H2: fetchArticleSafely rejects a non-http(s) scheme before ever calling th
         maxBytes: 1000,
         requestImpl: async () => {
           called = true;
-          return { status: 200, headers: {}, remoteAddress: '203.0.113.7', body: 'x' };
+          return { status: 200, headers: {}, remoteAddress: '8.8.8.8', body: 'x' };
         }
       }),
     hasCode('BAD_SCHEME')
@@ -217,7 +217,7 @@ test('H2: fetchArticleSafely re-validates the host after following a redirect', 
     }
     throw new Error('should never reach the second (internal) hop');
   };
-  await assert.rejects(() => fetchArticleSafely('http://203.0.113.7/start', { timeoutMs: 1000, maxBytes: 1000, requestImpl }), hasCode('BLOCKED_HOST'));
+  await assert.rejects(() => fetchArticleSafely('http://8.8.8.8/start', { timeoutMs: 1000, maxBytes: 1000, requestImpl }), hasCode('BLOCKED_HOST'));
   assert.equal(hop, 1);
 });
 
@@ -229,7 +229,7 @@ test('H2: fetchArticleSafely enforces a byte cap on the response body', async ()
     remoteAddress: pin.address,
     body: 'x'.repeat(1000)
   });
-  await assert.rejects(() => fetchArticleSafely('http://203.0.113.7/big', { timeoutMs: 1000, maxBytes: 100, requestImpl }), hasCode('TOO_LARGE'));
+  await assert.rejects(() => fetchArticleSafely('http://8.8.8.8/big', { timeoutMs: 1000, maxBytes: 100, requestImpl }), hasCode('TOO_LARGE'));
 });
 
 test('H2: fetchArticleSafely times out a hanging fetch within the configured limit', async () => {
@@ -242,7 +242,7 @@ test('H2: fetchArticleSafely times out a hanging fetch within the configured lim
       });
     });
   const startedAt = Date.now();
-  await assert.rejects(() => fetchArticleSafely('http://203.0.113.7/hangs', { timeoutMs: 60, maxBytes: 1000, requestImpl }), hasCode('TIMEOUT'));
+  await assert.rejects(() => fetchArticleSafely('http://8.8.8.8/hangs', { timeoutMs: 60, maxBytes: 1000, requestImpl }), hasCode('TIMEOUT'));
   assert.ok(Date.now() - startedAt < 2000, 'must not wait anywhere close to the default 8s timeout');
 });
 
@@ -627,9 +627,10 @@ test('R1: fetchArticleSafely rejects hex-mapped loopback URLs as BLOCKED_HOST af
   );
 });
 
-test('R1: a mapped public TEST-NET address is still allowed (IPv4 policy, not a blanket mapped ban)', async () => {
-  await assert.doesNotReject(() => assertHostIsPublic('::ffff:203.0.113.7'));
-  await assert.doesNotReject(() => assertHostIsPublic('::ffff:cb00:7107'));
+test('R1: a mapped public IPv4 address is still allowed (IPv4 policy, not a blanket mapped ban)', async () => {
+  await assert.doesNotReject(() => assertHostIsPublic('::ffff:8.8.8.8'));
+  await assert.doesNotReject(() => assertHostIsPublic('::ffff:808:808'));
+  await assert.rejects(() => assertHostIsPublic('::ffff:203.0.113.7'), hasCode('BLOCKED_HOST'));
 });
 
 test('R1: unparsable IPv4-mapped addresses fail closed as BLOCKED_HOST', async () => {

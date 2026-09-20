@@ -46,7 +46,7 @@ function redirectResponse(pin, location, status = 302) {
   };
 }
 
-const PUBLIC_LOOKUP = async () => [{ address: '203.0.113.7', family: 4 }];
+const PUBLIC_LOOKUP = async () => [{ address: '8.8.8.8', family: 4 }];
 
 test('URL parse / exotic IPv4: WHATWG canonicalizes then IPv4 policy applies', async () => {
   const blocked = [
@@ -56,13 +56,16 @@ test('URL parse / exotic IPv4: WHATWG canonicalizes then IPv4 policy applies', a
     ['http://127.1/', 'BLOCKED_HOST'],
     ['http://0x7f000001/', 'BLOCKED_HOST'],
     ['http://foo@127.0.0.1/', 'BAD_URL'],
-    ['http://127.0.0.1#@203.0.113.7/', 'BLOCKED_HOST'],
+    ['http://127.0.0.1#@8.8.8.8/', 'BLOCKED_HOST'],
     ['file:///etc/passwd', 'BAD_SCHEME'],
-    ['gopher://203.0.113.7/', 'BAD_SCHEME'],
+    ['gopher://8.8.8.8/', 'BAD_SCHEME'],
     ['javascript:alert(1)', 'BAD_SCHEME'],
     ['http://', 'BAD_URL'],
-    ['\x00http://203.0.113.7/', 'BAD_URL'],
-    ['http://exämple.com/', 'BAD_URL']
+    ['\x00http://8.8.8.8/', 'BAD_URL'],
+    ['http://exämple.com/', 'BAD_URL'],
+    ['http://0xcb.0.113.7/', 'BLOCKED_HOST'],
+    ['http://0xc0.0.2.7/', 'BLOCKED_HOST'],
+    ['http://0xc6.0x33.0x64.7/', 'BLOCKED_HOST']
   ];
   for (const [input, code] of blocked) {
     let called = false;
@@ -82,16 +85,16 @@ test('URL parse / exotic IPv4: WHATWG canonicalizes then IPv4 policy applies', a
     assert.equal(called, false, `${input} must not connect`);
   }
 
-  const exoticPublic = parseArticleUrl('http://0xcb.0.113.7/path');
+  const exoticPublic = parseArticleUrl('http://0x8.0x8.0x8.0x8/path');
   assert.equal(exoticPublic.kind, 'ipv4');
-  assert.equal(exoticPublic.parsed.hostname, '203.0.113.7');
+  assert.equal(exoticPublic.parsed.hostname, '8.8.8.8');
   assert.equal(exoticPublic.classified.disposition, 'allow_public');
 
-  const fetched = await fetchArticleSafely('http://0xcb.0.113.7/article', {
+  const fetched = await fetchArticleSafely('http://0x8.0x8.0x8.0x8/article', {
     timeoutMs: 500,
     maxBytes: 4000,
     requestImpl: async ({ parsed, pin }) => {
-      assert.equal(parsed.hostname, '203.0.113.7');
+      assert.equal(parsed.hostname, '8.8.8.8');
       return htmlResponse(pin);
     }
   });
@@ -111,7 +114,10 @@ test('IPv4 policy table', async () => {
     ['192.88.99.1', 'block_6to4_anycast'],
     ['224.0.0.1', 'block_multicast'],
     ['240.0.0.1', 'block_reserved'],
-    ['0.0.0.0', 'block_this_network']
+    ['0.0.0.0', 'block_this_network'],
+    ['192.0.2.7', 'block_documentation'],
+    ['198.51.100.7', 'block_documentation'],
+    ['203.0.113.7', 'block_documentation']
   ];
   for (const [ip, reason] of blocked) {
     const result = classifyIp(ip);
@@ -119,9 +125,9 @@ test('IPv4 policy table', async () => {
     assert.equal(result.reason, reason, ip);
     await assert.rejects(() => assertHostIsPublic(ip), hasCode('BLOCKED_HOST'));
   }
-  const allowed = classifyIp('203.0.113.7');
+  const allowed = classifyIp('8.8.8.8');
   assert.equal(allowed.disposition, 'allow_public');
-  await assert.doesNotReject(() => assertHostIsPublic('203.0.113.7'));
+  await assert.doesNotReject(() => assertHostIsPublic('8.8.8.8'));
 });
 
 test('IPv6 / embeddings policy table', async () => {
@@ -147,7 +153,7 @@ test('IPv6 / embeddings policy table', async () => {
     ['64:ff9b:1:7f00:0:100::', 'block_loopback_via_nat64_local'],
     ['64:ff9b:1:a9fe:a9:fe00::', 'block_link_local_via_nat64_local'],
     ['64:ff9b:1:7f00:100:100::', 'block_nat64_local_invalid'],
-    ['64:ff9b:1:cb00:71:700::', 'block_nat64_local'],
+    ['64:ff9b:1:808:8:800::', 'block_nat64_local'],
     ['64:ff9b:2::1', 'block_nat64_unknown'],
     ['2001:470:1::7f00:1', 'block_loopback_via_nat64_extra'],
     ['2001:67c:27e4:64:ff:9b:7f00:1', 'block_loopback_via_nat64_extra'],
@@ -155,11 +161,11 @@ test('IPv6 / embeddings policy table', async () => {
     ['2001:470:1:2:3:4:a00:1', 'block_rfc1918_via_nat64_extra'],
     ['2a00:1450:4001:80e:1:2:c0a8:101', 'block_rfc1918_via_nat64_extra'],
     ['2001:470:1:2:0:5efe:7f00:1', 'block_loopback_via_isatap'],
-    ['2001:470:1:2:0:5efe:cb00:7107', 'block_isatap'],
+    ['2001:470:1:2:0:5efe:808:808', 'block_isatap'],
     ['2001:470:1:2:200:5efe:a9fe:a9fe', 'block_link_local_via_isatap'],
     ['2001:470:1:2:0:5efe:a00:1', 'block_rfc1918_via_isatap'],
-    ['2001:470:1:2:100:5efe:cb00:7107', 'block_isatap'],
-    ['2001:470:1:2:300:5efe:cb00:7107', 'block_isatap'],
+    ['2001:470:1:2:100:5efe:808:808', 'block_isatap'],
+    ['2001:470:1:2:300:5efe:808:808', 'block_isatap'],
     ['64:ff9b:0:0:0:1:7f00:1', 'block_nat64_unknown'],
     ['2001:2::1', 'block_benchmark'],
     ['2001:2:0:0:0:0:0:1', 'block_benchmark'],
@@ -174,7 +180,26 @@ test('IPv6 / embeddings policy table', async () => {
     ['2002:7f00:0001::', 'block_loopback_via_6to4'],
     ['2001:0:53aa:64c::', 'block_teredo'],
     ['fd00:ec2::254', 'block_ula'],
-    ['::ffff:not-valid', 'block_unparsable']
+    ['::ffff:not-valid', 'block_unparsable'],
+    ['::ffff:192.0.2.7', 'block_documentation_via_mapped'],
+    ['::ffff:198.51.100.7', 'block_documentation_via_mapped'],
+    ['::ffff:203.0.113.7', 'block_documentation_via_mapped'],
+    ['::ffff:0:c000:207', 'block_documentation_via_siit'],
+    ['::ffff:0:c633:6407', 'block_documentation_via_siit'],
+    ['::ffff:0:cb00:7107', 'block_documentation_via_siit'],
+    ['64:ff9b::c000:207', 'block_documentation_via_nat64'],
+    ['64:ff9b::c633:6407', 'block_documentation_via_nat64'],
+    ['64:ff9b::cb00:7107', 'block_documentation_via_nat64'],
+    ['::c000:207', 'block_documentation_via_compat96'],
+    ['::c633:6407', 'block_documentation_via_compat96'],
+    ['::cb00:7107', 'block_documentation_via_compat96'],
+    ['2002:c000:207::', 'block_documentation_via_6to4'],
+    ['2002:c633:6407::', 'block_documentation_via_6to4'],
+    ['2002:cb00:7107::', 'block_documentation_via_6to4'],
+    ['2001:470:1::c000:207', 'block_documentation_via_nat64_extra'],
+    ['2001:470:1::c633:6407', 'block_documentation_via_nat64_extra'],
+    ['2001:470:1::cb00:7107', 'block_documentation_via_nat64_extra'],
+    ['2001:470:1:2:0:5efe:cb00:7107', 'block_documentation_via_isatap']
   ];
   for (const [ip, reason] of blocked) {
     const result = classifyIp(ip);
@@ -182,25 +207,25 @@ test('IPv6 / embeddings policy table', async () => {
     assert.equal(result.reason, reason, ip);
   }
 
-  const mappedPublic = classifyIp('::ffff:203.0.113.7');
+  const mappedPublic = classifyIp('::ffff:8.8.8.8');
   assert.equal(mappedPublic.disposition, 'allow_public');
-  assert.equal(mappedPublic.embeddedIPv4, '203.0.113.7');
-  const nat64Public = classifyIp('64:ff9b::cb00:7107');
+  assert.equal(mappedPublic.embeddedIPv4, '8.8.8.8');
+  const nat64Public = classifyIp('64:ff9b::808:808');
   assert.equal(nat64Public.disposition, 'allow_public');
-  assert.equal(nat64Public.embeddedIPv4, '203.0.113.7');
-  const localNat64Public = classifyIp('64:ff9b:1:cb00:71:700::');
+  assert.equal(nat64Public.embeddedIPv4, '8.8.8.8');
+  const localNat64Public = classifyIp('64:ff9b:1:808:8:800::');
   assert.equal(localNat64Public.disposition, 'block');
   assert.equal(localNat64Public.reason, 'block_nat64_local');
-  assert.equal(localNat64Public.embeddedIPv4, '203.0.113.7');
-  const extraPublicNative = classifyIp('2001:470:1::cb00:7107');
+  assert.equal(localNat64Public.embeddedIPv4, '8.8.8.8');
+  const extraPublicNative = classifyIp('2001:470:1::808:808');
   assert.equal(extraPublicNative.disposition, 'allow_public');
   assert.equal(extraPublicNative.reason, 'allow_public');
   assert.equal(extraPublicNative.embeddedIPv4, null);
-  const extraPublicResidual = classifyIp('2001:67c:27e4:64:ff:9b:cb00:7107');
+  const extraPublicResidual = classifyIp('2001:67c:27e4:64:ff:9b:808:808');
   assert.equal(extraPublicResidual.disposition, 'allow_public');
   assert.equal(extraPublicResidual.reason, 'allow_public');
   assert.equal(extraPublicResidual.embeddedIPv4, null);
-  await assert.doesNotReject(() => assertHostIsPublic('::ffff:cb00:7107'));
+  await assert.doesNotReject(() => assertHostIsPublic('::ffff:808:808'));
 
   let benchmarkConnects = 0;
   await assert.rejects(
@@ -222,7 +247,7 @@ test('DNS rebinding fixture: lookup is called once per hop and the second answer
   let lookups = 0;
   const lookupImpl = async () => {
     lookups += 1;
-    if (lookups === 1) return [{ address: '203.0.113.7', family: 4 }];
+    if (lookups === 1) return [{ address: '8.8.8.8', family: 4 }];
     return [{ address: '127.0.0.1', family: 4 }];
   };
   const pins = [];
@@ -236,38 +261,38 @@ test('DNS rebinding fixture: lookup is called once per hop and the second answer
     }
   });
   assert.equal(lookups, 1);
-  assert.deepEqual(pins, ['203.0.113.7']);
+  assert.deepEqual(pins, ['8.8.8.8']);
   assert.match(result.html, /Public article fixture/);
 });
 
 test('mixed public+private DNS fails closed with no connect', async () => {
   const cases = [
     async () => [
-      { address: '203.0.113.7', family: 4 },
+      { address: '8.8.8.8', family: 4 },
       { address: '10.0.0.1', family: 4 }
     ],
     async () => [
-      { address: '203.0.113.7', family: 4 },
+      { address: '8.8.8.8', family: 4 },
       { address: 'fd00::1', family: 6 }
     ],
     async () => [
-      { address: '203.0.113.7', family: 4 },
+      { address: '8.8.8.8', family: 4 },
       { address: '2001:2::1', family: 6 }
     ],
     async () => [
-      { address: '203.0.113.7', family: 4 },
+      { address: '8.8.8.8', family: 4 },
       { address: '64:ff9b:2::1', family: 6 }
     ],
     async () => [
-      { address: '203.0.113.7', family: 4 },
+      { address: '8.8.8.8', family: 4 },
       { address: '2001:470:1:2:0:5efe:7f00:1', family: 6 }
     ],
     async () => [
-      { address: '203.0.113.7', family: 4 },
+      { address: '8.8.8.8', family: 4 },
       { address: '2001:470:1::7f00:1', family: 6 }
     ],
     async () => [
-      { address: '203.0.113.7', family: 4 },
+      { address: '8.8.8.8', family: 4 },
       { address: '2001:67c:27e4:64:ff:9b:7f00:1', family: 6 }
     ]
   ];
@@ -310,7 +335,7 @@ test('empty DNS and special-use hostnames fail closed without a second lookup', 
 });
 
 test('redirects: private, loopback, mapped, NAT64, downgrade, relative, protocol-relative, missing, loop, multi-location', async () => {
-  const start = 'http://203.0.113.7/start';
+  const start = 'http://8.8.8.8/start';
 
   async function follow(location, extra = {}) {
     return fetchArticleSafely(start, {
@@ -331,7 +356,7 @@ test('redirects: private, loopback, mapped, NAT64, downgrade, relative, protocol
   await assert.rejects(() => follow('http://[2001:2::1]/'), hasCode('BLOCKED_HOST'));
   await assert.rejects(() => follow('http://[64:ff9b:1:7f00:0:100::]/'), hasCode('BLOCKED_HOST'));
   await assert.rejects(() => follow('http://[64:ff9b:2::1]/'), hasCode('BLOCKED_HOST'));
-  await assert.rejects(() => follow('http://[64:ff9b:1:cb00:71:700::]/'), hasCode('BLOCKED_HOST'));
+  await assert.rejects(() => follow('http://[64:ff9b:1:808:8:800::]/'), hasCode('BLOCKED_HOST'));
   await assert.rejects(() => follow('http://[2001:470:1:2:0:5efe:7f00:1]/'), hasCode('BLOCKED_HOST'));
   await assert.rejects(() => follow('http://[2001:470:1:2:0:5efe:10.0.0.1]/'), hasCode('BLOCKED_HOST'));
   await assert.rejects(() => follow('http://[2001:470:1::7f00:1]/'), hasCode('BLOCKED_HOST'));
@@ -340,10 +365,10 @@ test('redirects: private, loopback, mapped, NAT64, downgrade, relative, protocol
   await assert.rejects(() => follow('http://0177.0.0.1/'), hasCode('BLOCKED_HOST'));
   await assert.rejects(
     () =>
-      fetchArticleSafely('https://203.0.113.7/start', {
+      fetchArticleSafely('https://8.8.8.8/start', {
         timeoutMs: 1000,
         maxBytes: 1000,
-        requestImpl: async ({ pin }) => redirectResponse(pin, 'http://203.0.113.8/')
+        requestImpl: async ({ pin }) => redirectResponse(pin, 'http://1.1.1.1/')
       }),
     hasCode('REDIRECT_DOWNGRADE')
   );
@@ -353,7 +378,7 @@ test('redirects: private, loopback, mapped, NAT64, downgrade, relative, protocol
     maxBytes: 4000,
     requestImpl: async ({ parsed, pin }) => {
       if (parsed.pathname === '/start') return redirectResponse(pin, '/next');
-      assert.equal(parsed.hostname, '203.0.113.7');
+      assert.equal(parsed.hostname, '8.8.8.8');
       assert.equal(parsed.pathname, '/next');
       return htmlResponse(pin);
     }
@@ -395,8 +420,8 @@ test('redirects: private, loopback, mapped, NAT64, downgrade, relative, protocol
         maxBytes: 1000,
         requestImpl: async ({ pin }) => ({
           status: 302,
-          headers: { location: ['http://203.0.113.8/a', 'http://203.0.113.8/b'] },
-          rawHeaders: ['Location', 'http://203.0.113.8/a', 'Location', 'http://203.0.113.8/b'],
+          headers: { location: ['http://1.1.1.1/a', 'http://1.1.1.1/b'] },
+          rawHeaders: ['Location', 'http://1.1.1.1/a', 'Location', 'http://1.1.1.1/b'],
           remoteAddress: pin.address,
           body: ''
         })
@@ -437,7 +462,7 @@ test('HTTP_PROXY env is ignored: loopback sink receives no connections', async (
             connects.push({ host: 'pin.example' });
             const socket = new net.Socket();
             process.nextTick(() => {
-              socket.destroy(Object.assign(new Error('fixture: do not reach TEST-NET'), { code: 'ECONNREFUSED' }));
+              socket.destroy(Object.assign(new Error('fixture: do not reach the public pin'), { code: 'ECONNREFUSED' }));
             });
             return socket;
           }
@@ -455,7 +480,7 @@ test('HTTP_PROXY env is ignored: loopback sink receives no connections', async (
   }
 });
 
-test('PIN_MISMATCH: real loopback fixture socket does not satisfy a TEST-NET pin', async () => {
+test('PIN_MISMATCH: real loopback fixture socket does not satisfy a public pin', async () => {
   const fixture = http.createServer((req, res) => {
     res.writeHead(200, { 'content-type': 'text/html' });
     res.end('<!doctype html><html><body>loopback fixture</body></html>');
@@ -484,7 +509,7 @@ test('requestImpl returning a private remoteAddress is PIN_MISMATCH before the b
   let bodyRead = false;
   await assert.rejects(
     () =>
-      fetchArticleSafely('http://203.0.113.7/', {
+      fetchArticleSafely('http://8.8.8.8/', {
         timeoutMs: 500,
         maxBytes: 4000,
         requestImpl: async () => ({
@@ -509,7 +534,7 @@ test('requestImpl returning a private remoteAddress is PIN_MISMATCH before the b
 test('content-type restrict, gzip bomb, oversized HTML, no global fetch, no cookies, GET only', async () => {
   await assert.rejects(
     () =>
-      fetchArticleSafely('http://203.0.113.7/json', {
+      fetchArticleSafely('http://8.8.8.8/json', {
         timeoutMs: 500,
         maxBytes: 4000,
         requestImpl: async ({ pin }) => ({
@@ -526,7 +551,7 @@ test('content-type restrict, gzip bomb, oversized HTML, no global fetch, no cook
   const bomb = gzipSync(Buffer.alloc(3 * 1024 * 1024, 65));
   await assert.rejects(
     () =>
-      fetchArticleSafely('http://203.0.113.7/gz', {
+      fetchArticleSafely('http://8.8.8.8/gz', {
         timeoutMs: 2000,
         maxBytes: 2 * 1024 * 1024,
         requestImpl: async ({ pin }) => ({
@@ -543,7 +568,7 @@ test('content-type restrict, gzip bomb, oversized HTML, no global fetch, no cook
   const nested = `${'<div>'.repeat(80)}x${'</div>'.repeat(80)}`;
   await assert.rejects(
     () =>
-      fetchArticleSafely('http://203.0.113.7/nest', {
+      fetchArticleSafely('http://8.8.8.8/nest', {
         timeoutMs: 1000,
         maxBytes: 4000,
         requestImpl: async ({ pin }) => htmlResponse(pin, `<!doctype html><html><body>${nested}</body></html>`)
@@ -591,7 +616,7 @@ test('slow body and caller abort cancel the fetch and do not retry', async () =>
   const startedAt = Date.now();
   await assert.rejects(
     () =>
-      fetchArticleSafely('http://203.0.113.7/slow', {
+      fetchArticleSafely('http://8.8.8.8/slow', {
         timeoutMs: 80,
         maxBytes: 4000,
         requestImpl: async ({ pin }) => {
@@ -618,7 +643,7 @@ test('slow body and caller abort cancel the fetch and do not retry', async () =>
   setTimeout(() => ac.abort(), 30);
   await assert.rejects(
     () =>
-      fetchArticleSafely('http://203.0.113.7/cancel', {
+      fetchArticleSafely('http://8.8.8.8/cancel', {
         timeoutMs: 5000,
         maxBytes: 4000,
         signal: ac.signal,
@@ -639,33 +664,36 @@ test('slow body and caller abort cancel the fetch and do not retry', async () =>
 });
 
 test('pinned lookup helper never calls dns and makePinnedLookup returns only the pin', async () => {
-  const lookup = makePinnedLookup({ address: '203.0.113.7', family: 4 });
+  const lookup = makePinnedLookup({ address: '8.8.8.8', family: 4 });
   const once = await new Promise((resolve, reject) => {
     lookup('rebind.test', {}, (err, address, family) => {
       if (err) reject(err);
       else resolve({ address, family });
     });
   });
-  assert.deepEqual(once, { address: '203.0.113.7', family: 4 });
+  assert.deepEqual(once, { address: '8.8.8.8', family: 4 });
   const all = await new Promise((resolve, reject) => {
     lookup('rebind.test', { all: true }, (err, addresses) => {
       if (err) reject(err);
       else resolve(addresses);
     });
   });
-  assert.deepEqual(all, [{ address: '203.0.113.7', family: 4 }]);
+  assert.deepEqual(all, [{ address: '8.8.8.8', family: 4 }]);
 });
 
-test('parseArticleUrl rejects userinfo and keeps TEST-NET literals', () => {
-  assert.throws(() => parseArticleUrl('http://user:pass@203.0.113.7/'), hasCode('BAD_URL'));
-  const parsed = parseArticleUrl('http://203.0.113.7/a');
+test('parseArticleUrl rejects userinfo, allows public IPv4 literals, and blocks TEST-NET', () => {
+  assert.throws(() => parseArticleUrl('http://user:pass@8.8.8.8/'), hasCode('BAD_URL'));
+  const parsed = parseArticleUrl('http://8.8.8.8/a');
   assert.equal(parsed.kind, 'ipv4');
   assert.equal(parsed.classified.disposition, 'allow_public');
+  assert.throws(() => parseArticleUrl('http://192.0.2.7/a'), hasCode('BLOCKED_HOST'));
+  assert.throws(() => parseArticleUrl('http://198.51.100.7/a'), hasCode('BLOCKED_HOST'));
+  assert.throws(() => parseArticleUrl('http://203.0.113.7/a'), hasCode('BLOCKED_HOST'));
 });
 
 test('script tags in fetched HTML are data, and worker fetch modules do not eval', async () => {
   const html = '<!doctype html><html><body><script>throw new Error("executed")</script><p>ok</p></body></html>';
-  const result = await fetchArticleSafely('http://203.0.113.7/script', {
+  const result = await fetchArticleSafely('http://8.8.8.8/script', {
     timeoutMs: 500,
     maxBytes: 4000,
     requestImpl: async ({ pin }) => htmlResponse(pin, html)

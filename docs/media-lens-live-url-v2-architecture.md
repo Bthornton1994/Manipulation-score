@@ -228,7 +228,7 @@ Every resolved or literal address is classified as `allow_public` or `block`. Un
 | `224.0.0.0/4` | block | Multicast |
 | `240.0.0.0/4` | block | Reserved |
 | `255.255.255.255` | block | Broadcast |
-| `192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24` | **allow_public** (classifier only) | TEST-NET. Not an SSRF interior target. Not a real article host. Tests use these as public stand-ins. Live TCP to them should fail harmlessly. |
+| `192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24` | **block** (`block_documentation`) | RFC 5737 TEST-NET documentation space. IANA: non-global, non-forwardable. Not a public article host. Classifier embeddings inherit this IPv4 table. Mocked/no-connect tests use globally routable stand-ins such as `8.8.8.8` and `1.1.1.1` instead. |
 | Other globally routed unicast | allow_public | Still subject to hostname and scheme policy |
 
 ### 6.2 IPv6 and IPv4-embedded forms
@@ -265,30 +265,32 @@ NAT64 / ISATAP worked examples (classifier only; live URL remains disabled):
 
 | Id | Address | Disposition |
 | --- | --- | --- |
-| `nat64-wk-public` | `64:ff9b::cb00:7107` (`203.0.113.7`) | **allow_public** (well-known prefix, public IPv4) |
+| `nat64-wk-public` | `64:ff9b::808:808` (`8.8.8.8`) | **allow_public** (well-known prefix, public IPv4; mocked/no-connect only) |
+| `nat64-wk-test-net` | `64:ff9b::cb00:7107` (`203.0.113.7`) | **block** (RFC 5737 documentation IPv4) |
 | `nat64-wk-loopback` | `64:ff9b::7f00:1` | block |
 | `nat64-wk-imds` | `64:ff9b::a9fe:a9fe` | block |
-| `nat64-local-public` | `64:ff9b:1:cb00:71:700::` | block (extra prefix) |
+| `nat64-local-public` | `64:ff9b:1:808:8:800::` | block (extra prefix) |
 | `nat64-unknown-32` | `64:ff9b:2::1` | block |
 | `nat64-extra-sparse-loopback` | `2001:470:1::7f00:1` | block |
-| `nat64-extra-sparse-public` | `2001:470:1::cb00:7107` | **allow_public** (native unicast; last-32 public IPv4) |
+| `nat64-extra-sparse-public` | `2001:470:1::808:808` (`8.8.8.8`) | **allow_public** (native unicast; last-32 public IPv4) |
+| `nat64-extra-sparse-test-net` | `2001:470:1::cb00:7107` (`203.0.113.7`) | **block** as extra NAT64 (RFC 5737 last-32) |
 | `nat64-extra-nonzero-64-95-loopback` | `2001:67c:27e4:64:ff:9b:7f00:1` | block |
 | `nat64-extra-nonzero-64-95-imds` | `2606:4700:4700:1:2:3:a9fe:a9fe` | block |
 | `nat64-extra-nonzero-64-95-rfc1918-10` | `2001:470:1:2:3:4:a00:1` | block |
 | `nat64-extra-nonzero-64-95-rfc1918-192` | `2a00:1450:4001:80e:1:2:c0a8:101` | block |
-| `nat64-extra-nonzero-64-95-public` | `2001:67c:27e4:64:ff:9b:cb00:7107` | **allow_public** (native unicast; last-32 public IPv4) |
+| `nat64-extra-nonzero-64-95-public` | `2001:67c:27e4:64:ff:9b:808:808` (`8.8.8.8`) | **allow_public** (native unicast; last-32 public IPv4) |
 | `cloudflare-aaaa-public-last32` | `2606:4700:10::6814:179a` (`104.20.23.154`) | **allow_public** (native unicast; not extra NAT64) |
 | `isatap-loopback` | `2001:470:1:2:0:5efe:7f00:1` | block |
-| `isatap-public` | `2001:470:1:2:0:5efe:cb00:7107` | block |
+| `isatap-public` | `2001:470:1:2:0:5efe:808:808` | block (ISATAP even when inner IPv4 is public) |
 | `isatap-ulbit-imds` | `2001:470:1:2:200:5efe:a9fe:a9fe` | block |
-| `isatap-public-gbit` | `2001:470:1:2:100:5efe:cb00:7107` | block |
-| `isatap-public-ugbit` | `2001:470:1:2:300:5efe:cb00:7107` | block |
+| `isatap-public-gbit` | `2001:470:1:2:100:5efe:808:808` | block |
+| `isatap-public-ugbit` | `2001:470:1:2:300:5efe:808:808` | block |
 | `v6-site-local` | `fec0::1` | block (RFC 3879 site-local) |
 | `v6-site-local-end` | `feff::1` | block |
 | `v6-6bone` | `3ffe::1` | block (retired 6bone) |
 | `v6-6bone-end` | `3ffe:ffff::1` | block |
 
-A residual last-32 whose decoded IPv4 is blocked by the IPv4 table is **block** as extra NAT64. A residual last-32 whose decoded IPv4 is public is native unicast `allow_public` (Cloudflare-style AAAA, including public TEST-NET last-32), **except** ISATAP-shaped IIDs (`0000:5efe` / `0100:5efe` / `0200:5efe` / `0300:5efe`), which remain **block** / `block_isatap` on that residual path even if the dedicated ISATAP detector is removed. Well-known `64:ff9b::/96` remains the only **NAT64** form that may be `allow_public`. Native unicast whose last 32 bits decode to an IPv4 in `0.0.0.0/8` (first octet 0) stays native (for example `2001:4860:4860::8888`). Deprecated site-local `fec0::/10` and retired 6bone `3ffe::/16` are **block** even when the last 32 bits look like a public IPv4. Mapped and SIIT are unchanged.
+A residual last-32 whose decoded IPv4 is blocked by the IPv4 table is **block** as extra NAT64. A residual last-32 whose decoded IPv4 is public is native unicast `allow_public` (Cloudflare-style AAAA, including last-32 forms of globally routable mocked controls such as `8.8.8.8`), **except** ISATAP-shaped IIDs (`0000:5efe` / `0100:5efe` / `0200:5efe` / `0300:5efe`), which remain **block** / `block_isatap` on that residual path even if the dedicated ISATAP detector is removed. RFC 5737 TEST-NET last-32 forms are documentation IPv4 and therefore extra-NAT64 **block**, not native unicast. Well-known `64:ff9b::/96` remains the only **NAT64** form that may be `allow_public`. Native unicast whose last 32 bits decode to an IPv4 in `0.0.0.0/8` (first octet 0) stays native (for example `2001:4860:4860::8888`). Deprecated site-local `fec0::/10` and retired 6bone `3ffe::/16` are **block** even when the last 32 bits look like a public IPv4. Mapped and SIIT are unchanged.
 
 ### 6.3 Ambiguous and dual-stack
 

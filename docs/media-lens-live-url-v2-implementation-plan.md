@@ -171,7 +171,7 @@ Live URL may be considered for **production review** only when all of the follow
 - Runner: `node --test tests/*.test.js` (CI Node 20).
 - New files: `tests/media-lens-ssrf-*.test.js` (or extend `tests/media-lens-security-hardening.test.js` if still readable).
 - No real cloud-metadata calls. Use mocked `lookup` / pinned client / loopback sinks.
-- Do not treat TEST-NET (`203.0.113.0/24`) as blocked; it is the public stand-in.
+- Treat RFC 5737 TEST-NET (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`) as blocked documentation space. Mocked/no-connect public stand-ins are globally routable addresses such as `8.8.8.8` (primary) and `1.1.1.1` (secondary). Do not live-connect to those stand-ins.
 - Live URL default-off tests must remain green without keys.
 
 ### 6.2 Adversarial fixture catalog (minimum)
@@ -186,9 +186,9 @@ Each row: construct input, expect code, no connect to a blocked address (assert 
 | `ipv4-hex` | `http://0x7f.0.0.1/` | same |
 | `ipv4-decimal` | `http://2130706433/` | same |
 | `ipv4-short` | `http://127.1/` | same |
-| `ipv4-userinfo` | `http://127.0.0.1#@203.0.113.7/` and `http://foo@127.0.0.1/` | reject userinfo / blocked host (cover parser tricks) |
+| `ipv4-userinfo` | `http://127.0.0.1#@8.8.8.8/` and `http://foo@127.0.0.1/` | reject userinfo / blocked host (cover parser tricks) |
 | `scheme-file` | `file:///etc/passwd` | `BAD_SCHEME`, fetch not called |
-| `scheme-gopher` | `gopher://203.0.113.7/` | `BAD_SCHEME` |
+| `scheme-gopher` | `gopher://8.8.8.8/` | `BAD_SCHEME` |
 
 #### IPv4 policy
 
@@ -205,7 +205,10 @@ Each row: construct input, expect code, no connect to a blocked address (assert 
 | `multicast` | `224.0.0.1` | block |
 | `reserved` | `240.0.0.1` | block |
 | `this-network` | `0.0.0.0` | block |
-| `test-net` | `203.0.113.7` | allow_public (classifier) |
+| `test-net-1` | `192.0.2.7` | block (`block_documentation`) |
+| `test-net-2` | `198.51.100.7` | block (`block_documentation`) |
+| `test-net-3` | `203.0.113.7` | block (`block_documentation`) |
+| `public-control` | `8.8.8.8` | allow_public (classifier; mocked/no-connect only) |
 
 #### IPv6 / embeddings
 
@@ -227,26 +230,29 @@ Deprecated site-local `fec0::/10` (RFC 3879) and retired 6bone `3ffe::/16` are *
 | `mapped-hex` | `::ffff:7f00:1` | block |
 | `mapped-expanded` | `0:0:0:0:0:ffff:7f00:1` | block |
 | `mapped-imds-hex` | `::ffff:a9fe:a9fe` | block |
-| `mapped-public` | `::ffff:203.0.113.7` | allow_public |
+| `mapped-public` | `::ffff:8.8.8.8` | allow_public |
+| `mapped-test-net` | `::ffff:203.0.113.7` | block (RFC 5737 documentation IPv4) |
 | `siit-loopback` | `::ffff:0:7f00:1` | block |
 | `siit-imds` | `::ffff:0:a9fe:a9fe` | block |
 | `nat64-wk-loopback` | `64:ff9b::7f00:1` | block |
 | `nat64-wk-imds` | `64:ff9b::a9fe:a9fe` | block |
-| `nat64-wk-public` | `64:ff9b::cb00:7107` (`203.0.113.7`) | allow_public |
-| `nat64-local-public` | `64:ff9b:1:cb00:71:700::` | block (extra prefix) |
+| `nat64-wk-public` | `64:ff9b::808:808` (`8.8.8.8`) | allow_public |
+| `nat64-wk-test-net` | `64:ff9b::cb00:7107` (`203.0.113.7`) | block (RFC 5737 documentation IPv4) |
+| `nat64-local-public` | `64:ff9b:1:808:8:800::` | block (extra prefix) |
 | `nat64-extra-sparse-loopback` | `2001:470:1::7f00:1` | block |
-| `nat64-extra-sparse-public` | `2001:470:1::cb00:7107` | allow_public (native unicast) |
+| `nat64-extra-sparse-public` | `2001:470:1::808:808` | allow_public (native unicast) |
+| `nat64-extra-sparse-test-net` | `2001:470:1::cb00:7107` | block as extra NAT64 (RFC 5737 last-32) |
 | `nat64-extra-nonzero-64-95-loopback` | `2001:67c:27e4:64:ff:9b:7f00:1` | block |
 | `nat64-extra-nonzero-64-95-imds` | `2606:4700:4700:1:2:3:a9fe:a9fe` | block |
 | `nat64-extra-nonzero-64-95-rfc1918-10` | `2001:470:1:2:3:4:a00:1` | block |
 | `nat64-extra-nonzero-64-95-rfc1918-192` | `2a00:1450:4001:80e:1:2:c0a8:101` | block |
-| `nat64-extra-nonzero-64-95-public` | `2001:67c:27e4:64:ff:9b:cb00:7107` | allow_public (native unicast) |
+| `nat64-extra-nonzero-64-95-public` | `2001:67c:27e4:64:ff:9b:808:808` | allow_public (native unicast) |
 | `cloudflare-aaaa-public-last32` | `2606:4700:10::6814:179a` | allow_public (native unicast) |
 | `isatap-loopback` | `2001:470:1:2:0:5efe:7f00:1` | block |
 | `isatap-rfc1918-dotted` | `2001:470:1:2:0:5efe:10.0.0.1` | block |
-| `isatap-public` | `2001:470:1:2:0:5efe:cb00:7107` | block |
-| `isatap-public-gbit` | `2001:470:1:2:100:5efe:cb00:7107` | block |
-| `isatap-public-ugbit` | `2001:470:1:2:300:5efe:cb00:7107` | block |
+| `isatap-public` | `2001:470:1:2:0:5efe:808:808` | block |
+| `isatap-public-gbit` | `2001:470:1:2:100:5efe:808:808` | block |
+| `isatap-public-ugbit` | `2001:470:1:2:300:5efe:808:808` | block |
 | `compat-96-loopback` | `::7f00:1` | block |
 | `compat-96-dotted` | `::127.0.0.1` | block |
 | `6to4-loopback` | `2002:7f00:0001::` | block |
@@ -258,11 +264,11 @@ Deprecated site-local `fec0::/10` (RFC 3879) and retired 6bone `3ffe::/16` are *
 
 | Id | Mock lookup sequence | Expect |
 | --- | --- | --- |
-| `rebind-ttl` | first call `203.0.113.7`, second call `127.0.0.1` | pin client never issues second lookup; connect only to first pin **or**, if policy requires single-shot all-addresses, only one lookup occurs |
-| `mixed-public-private-a` | `[203.0.113.7, 10.0.0.1]` | `BLOCKED_HOST`, no connect |
-| `mixed-aaaa-ula` | A `203.0.113.7`, AAAA `fd00::1` | `BLOCKED_HOST` |
-| `mixed-aaaa-site-local` | A `203.0.113.7`, AAAA `fec0::1` | `BLOCKED_HOST` |
-| `mixed-aaaa-6bone` | A `203.0.113.7`, AAAA `3ffe::1` | `BLOCKED_HOST` |
+| `rebind-ttl` | first call `8.8.8.8`, second call `127.0.0.1` | pin client never issues second lookup; connect only to first pin **or**, if policy requires single-shot all-addresses, only one lookup occurs |
+| `mixed-public-private-a` | `[8.8.8.8, 10.0.0.1]` | `BLOCKED_HOST`, no connect |
+| `mixed-aaaa-ula` | A `8.8.8.8`, AAAA `fd00::1` | `BLOCKED_HOST` |
+| `mixed-aaaa-site-local` | A `8.8.8.8`, AAAA `fec0::1` | `BLOCKED_HOST` |
+| `mixed-aaaa-6bone` | A `8.8.8.8`, AAAA `3ffe::1` | `BLOCKED_HOST` |
 | `mixed-aaaa-cloudflare-public-last32` | A `93.184.216.34`, AAAA `2606:4700:10::6814:179a` | pin succeeds; not `BLOCKED_HOST` |
 | `empty-dns` | `[]` | `DNS_ERROR` |
 | `localhost-name` | `localhost` | `BLOCKED_HOST` no lookup required |
@@ -275,7 +281,7 @@ For `rebind-ttl`, the **normative** architecture is: one lookup, classify all, p
 
 | Id | Scenario | Expect |
 | --- | --- | --- |
-| `redir-imds` | `203.0.113.7` → `http://169.254.169.254/` | `BLOCKED_HOST` before second connect |
+| `redir-imds` | `8.8.8.8` → `http://169.254.169.254/` | `BLOCKED_HOST` before second connect |
 | `redir-v6-loopback` | → `http://[::1]/` | `BLOCKED_HOST` |
 | `redir-site-local` | → `http://[fec0::1]/` | `BLOCKED_HOST` before second connect |
 | `redir-6bone` | → `http://[3ffe::1]/` | `BLOCKED_HOST` before second connect |
@@ -284,7 +290,7 @@ For `rebind-ttl`, the **normative** architecture is: one lookup, classify all, p
 | `redir-nat64-extra-nonzero-64-95` | → `http://[2001:67c:27e4:64:ff:9b:7f00:1]/` | `BLOCKED_HOST` before second connect; lookups=0 |
 | `redir-isatap` | → `http://[2001:470:1:2:0:5efe:7f00:1]/` | `BLOCKED_HOST` before second connect |
 | `redir-mapped-hex` | → `http://[::ffff:7f00:1]/` | `BLOCKED_HOST` |
-| `redir-downgrade` | `https://203.0.113.7/` → `http://203.0.113.8/` | `REDIRECT_DOWNGRADE` |
+| `redir-downgrade` | `https://8.8.8.8/` → `http://1.1.1.1/` | `REDIRECT_DOWNGRADE` |
 | `redir-relative` | `Location: /next` then still public | followed with re-pin of same host |
 | `redir-allowlist-relative` | allowlisted host, `Location: /next` | followed; hop host remains allowlisted |
 | `redir-off-allowlist` | allowlisted initial → `http://other.example/` | `live_url_not_allowlisted` before second connect; hop must not return 200 |

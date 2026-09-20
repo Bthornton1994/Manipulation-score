@@ -72,7 +72,7 @@ const SITE_LOCAL_6BONE_TABLE = [
   },
   {
     id: 'v6-site-local-public-looking-tail',
-    ip: 'fec0::cb00:7107',
+    ip: 'fec0::808:808',
     disposition: 'block',
     reason: 'block_site_local',
     embeddedIPv4: null
@@ -93,7 +93,7 @@ const SITE_LOCAL_6BONE_TABLE = [
   },
   {
     id: 'v6-6bone-public-looking-tail',
-    ip: '3ffe::cb00:7107',
+    ip: '3ffe::808:808',
     disposition: 'block',
     reason: 'block_6bone',
     embeddedIPv4: null
@@ -101,14 +101,17 @@ const SITE_LOCAL_6BONE_TABLE = [
 ];
 
 const NAT64_ISATAP_MAPPED_UNCHANGED = [
-  ['64:ff9b::cb00:7107', 'allow_public', 'allow_public_via_nat64', '203.0.113.7'],
+  ['64:ff9b::808:808', 'allow_public', 'allow_public_via_nat64', '8.8.8.8'],
+  ['64:ff9b::cb00:7107', 'block', 'block_documentation_via_nat64', '203.0.113.7'],
   ['64:ff9b::7f00:1', 'block', 'block_loopback_via_nat64', '127.0.0.1'],
-  ['64:ff9b:1:cb00:71:700::', 'block', 'block_nat64_local', '203.0.113.7'],
-  ['2001:470:1::cb00:7107', 'allow_public', 'allow_public', null],
-  ['2001:470:1:2:0:5efe:cb00:7107', 'block', 'block_isatap', '203.0.113.7'],
-  ['::ffff:203.0.113.7', 'allow_public', 'allow_public_via_mapped', '203.0.113.7'],
-  ['::ffff:0:cb00:7107', 'allow_public', 'allow_public_via_siit', '203.0.113.7'],
-  ['::cb00:7107', 'allow_public', 'allow_public_via_compat96', '203.0.113.7'],
+  ['64:ff9b:1:808:8:800::', 'block', 'block_nat64_local', '8.8.8.8'],
+  ['2001:470:1::808:808', 'allow_public', 'allow_public', null],
+  ['2001:470:1::cb00:7107', 'block', 'block_documentation_via_nat64_extra', '203.0.113.7'],
+  ['2001:470:1:2:0:5efe:808:808', 'block', 'block_isatap', '8.8.8.8'],
+  ['::ffff:8.8.8.8', 'allow_public', 'allow_public_via_mapped', '8.8.8.8'],
+  ['::ffff:203.0.113.7', 'block', 'block_documentation_via_mapped', '203.0.113.7'],
+  ['::ffff:0:808:808', 'allow_public', 'allow_public_via_siit', '8.8.8.8'],
+  ['::808:808', 'allow_public', 'allow_public_via_compat96', '8.8.8.8'],
   ['2001:4860:4860::8888', 'allow_public', 'allow_public', null]
 ];
 
@@ -217,7 +220,7 @@ test('DNS AAAA site-local or 6bone fails closed even when mixed with public A', 
           lookupImpl: async () => {
             lookups += 1;
             return [
-              { address: '203.0.113.7', family: 4 },
+              { address: '8.8.8.8', family: 4 },
               { address: row.ip, family: 6 }
             ];
           },
@@ -262,7 +265,7 @@ test('allowlisted DNS name that resolves only to site-local or 6bone is BLOCKED_
 });
 
 test('redirects to site-local or 6bone are BLOCKED_HOST before the second connect', async () => {
-  const start = 'http://203.0.113.7/start';
+  const start = 'http://8.8.8.8/start';
   const locations = ['http://[fec0::1]/', 'http://[feff::1]/', 'http://[3ffe::1]/', 'http://[3ffe:ffff::1]/'];
   for (const location of locations) {
     let lookups = 0;
@@ -292,11 +295,11 @@ test('redirects to site-local or 6bone are BLOCKED_HOST before the second connec
 });
 
 test('well-known public NAT64 may still connect after site-local/6bone remediation', async () => {
-  const fetched = await fetchArticleSafely('http://[64:ff9b::cb00:7107]/article', {
+  const fetched = await fetchArticleSafely('http://[64:ff9b::808:808]/article', {
     timeoutMs: 500,
     maxBytes: 4000,
     requestImpl: async ({ pin }) => {
-      assert.equal(pin.address, '64:ff9b::cb00:7107');
+      assert.equal(pin.address, '64:ff9b::808:808');
       return htmlResponse(pin);
     }
   });

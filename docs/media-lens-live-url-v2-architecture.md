@@ -667,7 +667,7 @@ Fail closed. Unknown or misspelled values do not enable anything. Only the exact
 | `MEDIA_LENS_TYPESAFE_API_KEY` | unset | Required to start live mode; never logged |
 | `MEDIA_LENS_TYPESAFE_BASE_URL` | `https://api.typesafe.ai` | Test override |
 | `MEDIA_LENS_KILL_SWITCH` | unset | If `true`, live URL fetch and live Jev calls fail closed immediately (worker may still serve fixture if mode is fixture; if mode is live, `/analyze` returns `503 live_killed`) |
-| `MEDIA_LENS_KILL_SWITCH_FILE` | unset | If set and the file exists, same as kill switch (ops can `touch` a file without restarting env injection) |
+| `MEDIA_LENS_KILL_SWITCH_FILE` | unset | If set and the file exists, same as kill switch (ops can `touch` a file without restarting env injection). A missing file does not assert. Permission, IO, and other `stat` errors fail-closed as asserted. |
 
 `createServer()` already calls `assertLiveModeIsReady`. URL fetch must re-check kill switch and `ENABLE_LIVE_URL` inside `preparePayload`, not only at process start, so a flipped env/file can stop the next request after a documented reload strategy. File-based kill should be read per request or watched; at minimum per request `access()` is acceptable for v2.
 

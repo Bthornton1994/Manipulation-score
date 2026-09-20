@@ -190,6 +190,52 @@ test('kill switch file fail-closes pin-verify with zero network calls even when 
   assert.equal(report.networkCalls, 0);
 });
 
+function throwingStat(code) {
+  return () => {
+    const err = new Error(code || 'kill-file stat failed');
+    if (code) err.code = code;
+    throw err;
+  };
+}
+
+test('kill-file stat errors fail-close pin-verify with zero network calls', async () => {
+  const missing = join(tmpdir(), 'media-lens-missing-kill-l2-never-exists');
+  const io = { statSync: throwingStat('EACCES') };
+
+  assert.equal(evaluateJevVerifyGate({ ...VERIFY_ENV, MEDIA_LENS_KILL_SWITCH_FILE: missing }).allowed, true);
+  assert.equal(
+    evaluateJevVerifyGate({ ...VERIFY_ENV, MEDIA_LENS_KILL_SWITCH_FILE: missing }, io).reason,
+    JEV_PIN_VERIFY_REASONS.KILL_SWITCH
+  );
+  assert.equal(
+    evaluateJevVerifyGate(
+      { ...VERIFY_ENV, MEDIA_LENS_KILL_SWITCH_FILE: missing },
+      { statSync: throwingStat('ENOENT') }
+    ).allowed,
+    true
+  );
+
+  const unreadable = join(tmpdir(), 'x'.repeat(5000));
+  assert.equal(
+    evaluateJevVerifyGate({ ...VERIFY_ENV, MEDIA_LENS_KILL_SWITCH_FILE: unreadable }).reason,
+    JEV_PIN_VERIFY_REASONS.KILL_SWITCH
+  );
+
+  const report = await runJevPinVerify({
+    env: {
+      ...VERIFY_ENV,
+      MEDIA_LENS_KILL_SWITCH_FILE: unreadable,
+      MEDIA_LENS_TYPESAFE_BASE_URL: 'http://127.0.0.1:9'
+    },
+    fetchImpl: forbiddenNetwork(),
+    commitSha: 'test-sha-kill-file-stat-error'
+  });
+  assert.equal(report.pass, false);
+  assert.equal(report.reason, JEV_PIN_VERIFY_REASONS.KILL_SWITCH);
+  assert.equal(report.networkCalls, 0);
+  assert.equal(report.production_ready, false);
+});
+
 test('CI default environment does not enable isolated Jev pin verify', () => {
   assert.notEqual(process.env.MEDIA_LENS_JEV_VERIFY, 'true');
   assert.notEqual(process.env.MEDIA_LENS_ENABLE_LIVE, 'true');

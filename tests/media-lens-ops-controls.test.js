@@ -226,6 +226,106 @@ test('kill file is re-checked per request without restart', async () => {
   }
 });
 
+function throwingStat(code) {
+  return () => {
+    const err = new Error(code || 'kill-file stat failed');
+    if (code) err.code = code;
+    throw err;
+  };
+}
+
+test('MEDIA_LENS_KILL_SWITCH=true asserts immediately without a kill-file stat', () => {
+  let calls = 0;
+  const asserted = isKillSwitchAsserted(
+    loadConfig({
+      MEDIA_LENS_KILL_SWITCH: 'true',
+      MEDIA_LENS_KILL_SWITCH_FILE: '/var/lib/media-lens/KILL'
+    }),
+    {
+      statSync: () => {
+        calls += 1;
+        throw new Error('kill-file stat must not run when env is true');
+      }
+    }
+  );
+  assert.equal(asserted, true);
+  assert.equal(calls, 0);
+});
+
+test('kill-file stat errors fail closed; missing file does not', () => {
+  const missing = join(tmpdir(), 'media-lens-missing-kill-l2-never-exists');
+  const config = loadConfig({ MEDIA_LENS_KILL_SWITCH_FILE: missing });
+
+  assert.equal(isKillSwitchAsserted(config), false);
+  assert.equal(isKillSwitchAsserted(config, { statSync: throwingStat('ENOENT') }), false);
+  assert.equal(effectiveLiveFlags(config).killSwitch, false);
+
+  for (const code of ['EACCES', 'EPERM', 'EIO', 'ENOTDIR', 'ENAMETOOLONG', undefined]) {
+    const io = { statSync: throwingStat(code) };
+    assert.equal(isKillSwitchAsserted(config, io), true, `stat ${code || 'untyped'} must fail closed`);
+  }
+
+  const live = loadConfig({
+    MEDIA_LENS_MODE: 'live',
+    MEDIA_LENS_ENABLE_LIVE: 'true',
+    MEDIA_LENS_ENABLE_LIVE_URL: 'true',
+    MEDIA_LENS_KILL_SWITCH_FILE: missing
+  });
+  assert.equal(isKillSwitchAsserted(live, { statSync: throwingStat('EACCES') }), true);
+  assert.equal(effectiveLiveFlags(live).killSwitch, false);
+});
+
+test('unreadable kill-file path fail-closes live /analyze with zero provider calls', async () => {
+  const unreadable = join(tmpdir(), 'x'.repeat(5000));
+  const audit = collectAudit();
+  let fetchHits = 0;
+  let jevHits = 0;
+  const mockJev = http.createServer((req, res) => {
+    jevHits += 1;
+    req.resume();
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ model: 'jev-1.13.0', answers: {} }));
+  });
+  await new Promise((resolve) => mockJev.listen(0, '127.0.0.1', resolve));
+
+  const config = liveUrlConfig({
+    MEDIA_LENS_TYPESAFE_BASE_URL: `http://127.0.0.1:${mockJev.address().port}`,
+    MEDIA_LENS_KILL_SWITCH_FILE: unreadable
+  });
+  assert.equal(isKillSwitchAsserted(config), true);
+  assert.equal(effectiveLiveFlags(config).liveUrlEnabled, false);
+  assert.equal(effectiveLiveFlags(config).liveEnabled, false);
+
+  const server = await listen(
+    createServer(config, {
+      auditLogger: audit.logger,
+      fetchArticle: async () => {
+        fetchHits += 1;
+        throw new Error('fetch must not run when kill-file stat errors');
+      }
+    })
+  );
+  try {
+    const health = await requestJson(server, { method: 'GET', path: '/health' });
+    assert.equal(health.status, 200);
+    assert.equal(health.body.killSwitch, true);
+
+    const res = await requestJson(server, {
+      method: 'POST',
+      path: '/analyze',
+      body: { user_asserted_public: true, mode: 'url', url: 'http://203.0.113.7/article' }
+    });
+    assert.equal(res.status, 503);
+    assert.equal(res.body.error, 'live_killed');
+    assert.equal(fetchHits, 0);
+    assert.equal(jevHits, 0);
+    assert.ok(audit.events().some((event) => event.event === 'kill_switch'));
+  } finally {
+    server.close();
+    mockJev.close();
+  }
+});
+
 test('fixture mode still analyzes when the kill switch is asserted', async () => {
   const config = loadConfig({ MEDIA_LENS_MODE: 'fixture', MEDIA_LENS_KILL_SWITCH: 'true' });
   const server = await listen(createServer(config));
@@ -505,6 +605,7 @@ test('ops runbook exists, stays off Pages, and does not claim production readine
   assert.match(body, /Only the analyses\/minute limiter runs before the body is read/);
   assert.match(body, /Fixture `mode: "url"` is `400 URL_MODE_REQUIRES_LIVE` even when the kill switch is on/);
   assert.match(body, /Kill switch asserted on a live-mode `\/analyze`/);
+  assert.match(body, /non-`ENOENT` `stat` errors/);
   assert.match(body, /Latency/);
   assert.match(body, /Abstentions/);
   assert.match(body, /SSRF blocks/);

@@ -38,7 +38,7 @@ Worker environment variables (read only by `worker/config.js`, never logged, nev
 | `MEDIA_LENS_CLASSIFIER_DEV_MAX_DAILY_CLASSIFICATIONS` | in-process daily classification budget (default 200) |
 | `MEDIA_LENS_CLASSIFIER_DEV_MIN_CONFIDENCE_FOR_ESCALATION` | Jev confidence below this may escalate (default 0.7) |
 | `MEDIA_LENS_KILL_SWITCH` | exact value `true` forces live URL fetch, live Jev, isolated pin verification, and classifier.dev off regardless of the enable flags (default: unset/false) |
-| `MEDIA_LENS_KILL_SWITCH_FILE` | if set and the path exists, same as kill switch; re-checked per request so ops can `touch` the file |
+| `MEDIA_LENS_KILL_SWITCH_FILE` | if set and the path exists, same as kill switch; a missing file does not assert; permission/IO/`stat` errors fail-closed as asserted; re-checked per request so ops can `touch` the file |
 | `MEDIA_LENS_URL_ALLOWLIST` | optional comma-separated exact hostnames for canary; empty means public-address policy only. When set, every redirect hop is re-checked against the list before pin/connect |
 | `MEDIA_LENS_MAX_ANALYSES_PER_MINUTE` | per-process `/analyze` budget (default 10) |
 | `MEDIA_LENS_MAX_LIVE_URL_PER_MINUTE` | per-process live URL attempt budget (default 10) |
@@ -86,7 +86,7 @@ python3 -m http.server 4173                                    # open http://loc
 
 Default CI stays fixture-only. This does not enable live URL. It does not enable live pasted-text. It is not production-ready and not a quality study.
 
-When `MEDIA_LENS_JEV_VERIFY=true` and `MEDIA_LENS_TYPESAFE_API_KEY` are both set, `scripts/jev-pin-verify.js` sends synthetic spans from `media-lens/fixtures/articles/` with `model: "jev-1.13.0"`. If the API rejects the versioned id or reports any other model, the gate fails. It does not fall back to `jev-latest`. `MEDIA_LENS_KILL_SWITCH=true` (exact) or an existing `MEDIA_LENS_KILL_SWITCH_FILE` fail-closes immediately with reason `verify_kill_switch`, zero network calls, and no TypeSafe adapter invocation — even when the verify flag and key are set. The report (commit SHA, timestamp, pass/fail) is a local or CI artifact, never an accuracy claim in `docs/`.
+When `MEDIA_LENS_JEV_VERIFY=true` and `MEDIA_LENS_TYPESAFE_API_KEY` are both set, `scripts/jev-pin-verify.js` sends synthetic spans from `media-lens/fixtures/articles/` with `model: "jev-1.13.0"`. If the API rejects the versioned id or reports any other model, the gate fails. It does not fall back to `jev-latest`. `MEDIA_LENS_KILL_SWITCH=true` (exact), an existing `MEDIA_LENS_KILL_SWITCH_FILE`, or a kill-file `stat` error fail-closes immediately with reason `verify_kill_switch`, zero network calls, and no TypeSafe adapter invocation — even when the verify flag and key are set. A missing kill file does not assert. The report (commit SHA, timestamp, pass/fail) is a local or CI artifact, never an accuracy claim in `docs/`.
 
 ```bash
 MEDIA_LENS_JEV_VERIFY=true MEDIA_LENS_TYPESAFE_API_KEY=... node scripts/jev-pin-verify.js

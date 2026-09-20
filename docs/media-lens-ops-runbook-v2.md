@@ -27,7 +27,7 @@ Repository and CI defaults:
 | `MEDIA_LENS_ENABLE_CLASSIFIER_DEV` | unset / false | Exact string `true` required before the evaluation-only classifier.dev adapter may make outbound calls. Default-off. Not a second independent model |
 | `MEDIA_LENS_CLASSIFIER_DEV_TIER` | `fast` | Unset/empty → `fast`. Smart escalation requires exact `MEDIA_LENS_CLASSIFIER_DEV_TIER=smart`. `SMART` / `Smart` do not select smart |
 | `MEDIA_LENS_KILL_SWITCH` | unset / false | Exact string `true` only (same rule as the ENABLE flags). Forces live URL, live Jev, isolated pin verification, and classifier.dev off |
-| `MEDIA_LENS_KILL_SWITCH_FILE` | unset | If set and the path exists, same as kill switch |
+| `MEDIA_LENS_KILL_SWITCH_FILE` | unset | If set and the path exists, same as kill switch. Missing file does not assert. Permission/IO/`stat` errors fail-closed as asserted |
 | `MEDIA_LENS_URL_ALLOWLIST` | empty | Empty means public-address policy only. Canary should set exact hostnames. When set, every redirect hop is re-checked before pin/connect; off-list hops are `live_url_not_allowlisted` |
 
 Misspellings and `TRUE` / `1` / `yes` do not enable anything. They also do not assert the kill switch; use exact `true` or `touch` the kill file.
@@ -121,7 +121,7 @@ Other existing caps: 512 KiB request body, 60k prepared chars, 200 spans, 8s Jev
 Two equivalent controls, re-checked on each `/analyze` (and kill-file `stat` each time). Isolated pin verification uses the same assertion before any TypeSafe call:
 
 1. `MEDIA_LENS_KILL_SWITCH=true` — the exact string `true` only, same rule as `MEDIA_LENS_ENABLE_LIVE`, `MEDIA_LENS_ENABLE_LIVE_URL`, and `MEDIA_LENS_ENABLE_CLASSIFIER_DEV`. `TRUE`, `1`, and `yes` do not assert the kill switch.
-2. `touch` the path in `MEDIA_LENS_KILL_SWITCH_FILE` (existence, not file contents)
+2. `touch` the path in `MEDIA_LENS_KILL_SWITCH_FILE` (existence, not file contents). Permission, IO, and other non-`ENOENT` `stat` errors on that path fail-closed (treat as asserted). Only a missing path (`ENOENT`) is not a kill. `existsSync` is not used: Node reports permission failures as missing, which would fail open.
 
 The kill switch stops every external Jev-capable path, including isolated pin verification and classifier.dev:
 

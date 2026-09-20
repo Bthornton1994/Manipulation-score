@@ -50,8 +50,8 @@ export const JEV_PIN_VERIFY_REASONS = Object.freeze({
   OK: 'ok'
 });
 
-export function evaluateJevVerifyGate(env = {}) {
-  if (isKillSwitchAsserted(loadConfig(env))) {
+export function evaluateJevVerifyGate(env = {}, io) {
+  if (isKillSwitchAsserted(loadConfig(env), io)) {
     return { allowed: false, reason: JEV_PIN_VERIFY_REASONS.KILL_SWITCH, apiKey: null };
   }
   const flagOn = env.MEDIA_LENS_JEV_VERIFY === 'true';

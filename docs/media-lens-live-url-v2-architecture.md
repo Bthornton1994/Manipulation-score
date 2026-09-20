@@ -75,7 +75,7 @@ v2 architecture is the contract that closes those gaps **in later implementation
 - Guarantee the bytes read come from a destination that passed a **public-address policy at connect time**, not only at a prior DNS lookup.
 - Extract article-like HTML into the existing preparation layer; produce `influence-graph.v1` (or a strictly additive, validated successor) without collapsing the concept namespaces in §11.
 - Send Jev only **typed** questions and accept only **typed** answers. Code owns workflow, thresholds, and display.
-- Fail closed on ambiguous, private, loopback, link-local, multicast, benchmark, metadata, unparsable, or policy-unknown destinations.
+- Fail closed on ambiguous, private, loopback, link-local, deprecated site-local (`fec0::/10`), multicast, benchmark, metadata, unparsable, or policy-unknown destinations.
 - Stay disabled by default; remain abortable via kill switch; leave a rollback path that does not require rewriting git history.
 
 ### 3.2 Non-goals (this workstream and any implementation derived from it)
@@ -240,6 +240,7 @@ Extract an embedded IPv4 when the prefix is a **known embedding**. Apply the IPv
 | Unspecified | `::` | block |
 | Loopback | `::1` | block |
 | Link-local | `fe80::/10` | block |
+| Deprecated site-local | `fec0::/10` (RFC 3879) | **block**. Not ULA and not `fe80::/10`. Fail closed before connect. |
 | Unique local | `fc00::/7` | block |
 | Multicast | `ff00::/8` | block |
 | Documentation | `2001:db8::/32` | block |
@@ -253,6 +254,7 @@ Extract an embedded IPv4 when the prefix is a **known embedding**. Apply the IPv
 | ISATAP | IID `0000:5efe:IPv4` or `0200:5efe:IPv4` (RFC 5214), any unicast prefix | **block** (tunnel embedding; do not allow even if the embedded IPv4 is public) |
 | IPv4-compatible (deprecated) | `::/96` excluding `::` and `::1` (e.g. `::7f00:1`, `::127.0.0.1`) | extract IPv4 → IPv4 policy |
 | 6to4 | `2002::/16` | extract IPv4 from bits 16–47 → IPv4 policy |
+| Retired 6bone | `3ffe::/16` (RFC 2471 / RFC 3701) | **block**. Not native unicast. Fail closed before connect. |
 | Teredo | `2001:0::/32` | **block** (tunnel obfuscation; do not attempt to decode client IPv4 in v2) |
 | AWS link-local metadata | `fd00:ec2::254` | block (ULA already blocked; name it in tests anyway) |
 | Native global unicast otherwise | | allow_public |
@@ -278,12 +280,16 @@ NAT64 / ISATAP worked examples (classifier only; live URL remains disabled):
 | `isatap-loopback` | `2001:470:1:2:0:5efe:7f00:1` | block |
 | `isatap-public` | `2001:470:1:2:0:5efe:cb00:7107` | block |
 | `isatap-ulbit-imds` | `2001:470:1:2:200:5efe:a9fe:a9fe` | block |
+| `v6-site-local` | `fec0::1` | block (RFC 3879 site-local) |
+| `v6-site-local-end` | `feff::1` | block |
+| `v6-6bone` | `3ffe::1` | block (retired 6bone) |
+| `v6-6bone-end` | `3ffe:ffff::1` | block |
 
-Custom NAT64 `/96` (sparse or with non-zero bits 64–95) whose last 32 bits decode to an IPv4 with a non-zero first octet is **block**, including when that IPv4 is public TEST-NET. Well-known `64:ff9b::/96` remains the only NAT64 form that may be `allow_public`. Native unicast whose last 32 bits decode to an IPv4 in `0.0.0.0/8` (first octet 0) stays native (for example `2001:4860:4860::8888`).
+Custom NAT64 `/96` (sparse or with non-zero bits 64–95) whose last 32 bits decode to an IPv4 with a non-zero first octet is **block**, including when that IPv4 is public TEST-NET. Well-known `64:ff9b::/96` remains the only NAT64 form that may be `allow_public`. Native unicast whose last 32 bits decode to an IPv4 in `0.0.0.0/8` (first octet 0) stays native (for example `2001:4860:4860::8888`). Deprecated site-local `fec0::/10` and retired 6bone `3ffe::/16` are **block** even when the last 32 bits look like a public IPv4.
 
 ### 6.3 Ambiguous and dual-stack
 
-- Mixed A (public) + AAAA (ULA/link-local): **block the host**.
+- Mixed A (public) + AAAA (ULA/link-local/site-local/6bone): **block the host**.
 - Mixed A (private) + AAAA (global): **block the host**.
 - Happy Eyeballs must not be allowed to pick a second address after policy. Pin **one** `allow_public` address chosen from an answer set that is **entirely** `allow_public`.
 - Address family preference when both v4 and v6 are public: prefer IPv6, then IPv4. Document the choice in `engine` metadata (`pinned_family`) without logging the IP by default.

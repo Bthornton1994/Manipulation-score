@@ -4,8 +4,9 @@
 // block. Known IPv4-in-IPv6 embeddings extract an IPv4 and reuse the IPv4
 // table. Well-known NAT64 64:ff9b::/96 may be allow_public only when that
 // IPv4 is public. Extra NAT64 (including RFC 8215 local-use), ISATAP, and
-// other unknown embeddings are block. Mixed public+private DNS is block.
-// This module does no I/O.
+// other unknown embeddings are block. Deprecated site-local fec0::/10
+// (RFC 3879) and retired 6bone 3ffe::/16 are block. Mixed public+private
+// DNS is block. This module does no I/O.
 
 export function taggedError(message, code) {
   return Object.assign(new Error(message), { code });
@@ -223,6 +224,9 @@ function classifyIPv6(ip) {
     return blockResult('block_loopback', { family: 6, canonical });
   }
   if ((words[0] & 0xffc0) === 0xfe80) return blockResult('block_link_local', { family: 6, canonical });
+  // Deprecated RFC 3879 site-local fec0::/10. Architecture blocks ULA and
+  // fe80::/10; this range is not either of those and is not globally routed.
+  if ((words[0] & 0xffc0) === 0xfec0) return blockResult('block_site_local', { family: 6, canonical });
   if ((words[0] & 0xfe00) === 0xfc00) return blockResult('block_ula', { family: 6, canonical });
   if ((words[0] & 0xff00) === 0xff00) return blockResult('block_multicast', { family: 6, canonical });
   if (words[0] === 0x2001 && words[1] === 0xdb8) return blockResult('block_documentation', { family: 6, canonical });
@@ -244,6 +248,8 @@ function classifyIPv6(ip) {
   if (words[0] === 0x2001 && words[1] === 0) {
     return blockResult('block_teredo', { family: 6, canonical });
   }
+  // Retired 6bone 3ffe::/16 (RFC 2471 / RFC 3701). Not native unicast.
+  if (words[0] === 0x3ffe) return blockResult('block_6bone', { family: 6, canonical });
   // 6to4: 2002::/16 → IPv4 from bits 16–47.
   if (words[0] === 0x2002) {
     return classifyEmbeddedIPv4(hextetToIPv4(words[1], words[2]), 6, canonical, '6to4');

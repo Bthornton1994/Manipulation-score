@@ -87,6 +87,9 @@ test('Live URL v2 architecture keeps the eight concepts distinct and forbids emi
   assert.match(architecture, /connect-time destination pinning/i);
   assert.match(architecture, /NAT64/);
   assert.match(architecture, /ISATAP/);
+  assert.match(architecture, /fec0::\/10/);
+  assert.match(architecture, /3ffe::\/16/);
+  assert.match(architecture, /RFC 3879/);
   assert.match(architecture, /nat64-extra-nonzero-64-95-loopback/);
   assert.match(architecture, /SIIT/);
   assert.match(architecture, /::\/96/);
@@ -109,6 +112,10 @@ test('Live URL v2 implementation plan maps Issue #118 gates and separates the se
   assert.match(plan, /isatap-loopback/);
   assert.match(plan, /siit-loopback/);
   assert.match(plan, /compat-96-loopback/);
+  assert.match(plan, /v6-site-local/);
+  assert.match(plan, /v6-6bone/);
+  assert.match(plan, /fec0::\/10/);
+  assert.match(plan, /3ffe::\/16/);
   assert.match(plan, /MEDIA_LENS_ENABLE_LIVE_URL/);
   assert.match(plan, /MEDIA_LENS_KILL_SWITCH/);
   assert.match(plan, /media-lens-canary-drill-v1/);

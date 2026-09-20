@@ -135,6 +135,30 @@ test('mutation: dropping IPv6 benchmarking 2001:2::/48 would allow it as public 
   assert.equal(mutant.classifyIp('2001:2::1').disposition, 'allow_public');
 });
 
+test('mutation: dropping RFC 3879 site-local fec0::/10 would allow it as public unicast', async () => {
+  assert.equal(classifyIp('fec0::1').reason, 'block_site_local');
+  const mutant = await loadMutatedAddressPolicy((src) =>
+    src.replace(
+      'if ((words[0] & 0xffc0) === 0xfec0)',
+      'if (false && (words[0] & 0xffc0) === 0xfec0)'
+    )
+  );
+  assert.equal(mutant.classifyIp('fec0::1').disposition, 'allow_public');
+  assert.equal(mutant.classifyIp('feff::1').disposition, 'allow_public');
+});
+
+test('mutation: dropping 6bone 3ffe::/16 would allow it as public unicast', async () => {
+  assert.equal(classifyIp('3ffe::1').reason, 'block_6bone');
+  const mutant = await loadMutatedAddressPolicy((src) =>
+    src.replace(
+      'if (words[0] === 0x3ffe)',
+      'if (false && words[0] === 0x3ffe)'
+    )
+  );
+  assert.equal(mutant.classifyIp('3ffe::1').disposition, 'allow_public');
+  assert.equal(mutant.classifyIp('3ffe:ffff::1').disposition, 'allow_public');
+});
+
 test('mutation: dropping SIIT extraction still blocks via extra-NAT64 catch-all', async () => {
   assert.equal(classifyIp('::ffff:0:7f00:1').disposition, 'block');
   const mutant = await loadMutatedAddressPolicy((src) =>

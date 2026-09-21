@@ -109,7 +109,7 @@ test('media-lens.js never writes to localStorage, sessionStorage, or indexedDB',
 test('index.html discloses public-only scope and links to Clarity for private messages', async () => {
   const html = await readFile('media-lens/index.html', 'utf8');
   assert.match(html, /public material/i);
-  assert.match(html, /href="\.\.\/analyze\.html"/);
+  assert.match(html, /href="https:\/\/manipulationscore\.com\/analyze\.html"/);
 });
 
 test('M2: coverage freshness status and rationale are rendered, not silently discarded', async () => {
@@ -152,6 +152,26 @@ test('L3: the browser sends the consent-checkbox timestamp, not just a boolean, 
   assert.match(js, /consent_at:\s*consentCheckedAt/);
 });
 
+test('live frontend resolves the worker through same origin and never embeds provider configuration', async () => {
+  const js = await readFile('media-lens/media-lens.js', 'utf8');
+  assert.match(js, /window\.location\.origin/);
+  assert.match(js, /LOCAL_WORKER_BASE_URL/);
+  assert.match(js, /liveUrlReady/);
+  assert.match(js, /payload\.url = url/);
+  assert.doesNotMatch(js, /MEDIA_LENS_TYPESAFE_API_KEY/);
+  assert.doesNotMatch(js, /process\.env/);
+});
+
+test('frontend deployment serves only the UI surface and shared assets', async () => {
+  const caddy = await readFile('media-lens/deploy/Caddyfile', 'utf8');
+  assert.match(caddy, /reverse_proxy 127\.0\.0\.1:8787/);
+  assert.match(caddy, /\/media-lens\/index\.html/);
+  assert.match(caddy, /\/media-lens\/media-lens\.js/);
+  assert.match(caddy, /\/media-lens\/media-lens\.css/);
+  assert.match(caddy, /respond 404/);
+  assert.doesNotMatch(caddy, /path \/media-lens\/\*/);
+});
+
 test('L1: docs describe claim support as always not_checked, matching fusion.js (no operator-supplied-evidence path exists)', async () => {
   const limitations = await readFile('limitations.html', 'utf8');
   assert.doesNotMatch(limitations, /unless a fixture or an operator-supplied Newsjack artifact provides evidence/);
@@ -177,7 +197,7 @@ test('index.html requires the consent checkbox before the submit button is usabl
   assert.match(html, /id="analyze-submit"[^>]*disabled/);
   const js = await readFile('media-lens/media-lens.js', 'utf8');
   assert.match(js, /consent-checkbox/);
-  assert.match(js, /submit\.disabled = !consent\.checked/);
+  assert.match(js, /submit\.disabled = isSubmitting \|\| !consent\.checked \|\| !hasInput/);
 });
 
 const CONSENT_CHECKBOX_V2 =
@@ -205,8 +225,11 @@ test('index.html uses the v2 consent checkbox and keeps the full live-URL disclo
   assert.match(urlField[0], /\shidden(?:[\s>=])/);
   assert.doesNotMatch(urlField[0], /id="ml-live-url-notice"/);
 
-  assert.match(html, /unreleased fixture\/local preview/);
-  assert.match(html, /Live URL analysis is not available and not production-ready/);
+  assert.match(html, /Limited Jev-only experimental preview/);
+  assert.match(html, /Jev-only live URL mode/);
+  assert.match(html, /secondary classifier are disabled/);
+  assert.match(html, /not production-ready for general use/);
+  assert.match(html, /Analyze an approved public URL/);
+  assert.match(html, /id="article-url"[^>]*disabled/);
   assert.match(html, /Live pasted-text analysis stays disabled/);
-  assert.doesNotMatch(html, /classifier\.dev/);
 });

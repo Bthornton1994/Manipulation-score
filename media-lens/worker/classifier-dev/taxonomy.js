@@ -96,9 +96,9 @@ export function validateTaxonomyDocument(doc) {
   return Object.freeze([...CDEV_LABEL_IDS]);
 }
 
-export async function loadClassifierDevTaxonomy() {
+export async function loadClassifierDevTaxonomy({ signal } = {}) {
   if (cached) return cached;
-  const raw = await readFile(TAXONOMY_PATH, 'utf8');
+  const raw = await readFile(TAXONOMY_PATH, { encoding: 'utf8', signal });
   const document = JSON.parse(raw);
   validateTaxonomyDocument(document);
   const sha256 = createHash('sha256').update(canonicalStringify(document), 'utf8').digest('hex');

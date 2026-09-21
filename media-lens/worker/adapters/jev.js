@@ -54,13 +54,13 @@ const SIGNAL_NONE = 'none';
 
 let cachedQuestionSet = null;
 
-export async function loadQuestionSet() {
+export async function loadQuestionSet({ signal } = {}) {
   if (cachedQuestionSet) return cachedQuestionSet;
-  const raw = await readFile(QUESTIONS_PATH, 'utf8');
+  const raw = await readFile(QUESTIONS_PATH, { encoding: 'utf8', signal });
   const questions = JSON.parse(raw);
   const optionIds = validateQuestionSetContract(questions);
   const sha256 = createHash('sha256').update(canonicalStringify(questions), 'utf8').digest('hex');
-  const committed = (await readFile(QUESTIONS_HASH_PATH, 'utf8')).trim();
+  const committed = (await readFile(QUESTIONS_HASH_PATH, { encoding: 'utf8', signal })).trim();
   cachedQuestionSet = { questions, sha256, committed, name: QUESTION_SET_NAME, optionIds };
   return cachedQuestionSet;
 }
@@ -313,7 +313,8 @@ function emptySpanResult() {
     failures: 0,
     elapsedMs: 0,
     modelReported: null,
-    modelMatch: null
+    modelMatch: null,
+    capReached: false
   };
 }
 
@@ -345,7 +346,8 @@ function finalizeSpanResult(bucket, startedAt, modelReported) {
     failures: bucket.failedSpanIds.size,
     elapsedMs: Date.now() - startedAt,
     modelReported,
-    modelMatch: modelReported ? modelReported === MODEL_REQUESTED : null
+    modelMatch: modelReported ? modelReported === MODEL_REQUESTED : null,
+    capReached: Boolean(bucket.capReached)
   };
 }
 
@@ -443,6 +445,7 @@ export function createJevAdapter({
   fetchImpl = null,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   concurrency = DEFAULT_CONCURRENCY,
+  maxCallsPerAnalysis = null,
   lookupImpl = undefined,
   classifyImpl = undefined,
   createConnectionImpl = undefined,
@@ -497,9 +500,16 @@ export function createJevAdapter({
     if (mode === 'live') {
       const bucket = emptySpanResult();
       let modelReported = null;
+      const cap =
+        Number.isInteger(maxCallsPerAnalysis) && maxCallsPerAnalysis > 0 ? maxCallsPerAnalysis : null;
 
       await runWithConcurrency(spans, concurrency, async (span, index) => {
         if (signal?.aborted) return;
+        if (cap != null && bucket.calls >= cap) {
+          bucket.capReached = true;
+          recordUnavailable(bucket, span.id, 'jev_call_cap');
+          return;
+        }
         bucket.calls += 1;
         const before = spans[index - 1]?.text || null;
         const after = spans[index + 1]?.text || null;

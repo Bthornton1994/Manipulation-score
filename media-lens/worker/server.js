@@ -27,6 +27,8 @@ import { validate } from '../schema/validate.js';
 import { createAuditLogger, AUDIT_EVENTS } from './audit.js';
 import { createFixedWindowLimiter, createKeyedFixedWindowLimiter, createConcurrencyGate } from './rate-limit.js';
 import { hostIsAllowlisted, rateLimitHostKeys, safeUrlAuditFields } from './host-key.js';
+import { createTypesafeBudget } from './typesafe-budget.js';
+import { buildBudgetWarnAlert, createAlertTransport, readAlertCredential } from './alert.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const FIXTURES_DIR = join(__dirname, '..', 'fixtures');
@@ -124,7 +126,8 @@ async function buildAdapters({ config, payload, classifierDevFetch }) {
     apiKey: config.secrets.typesafeApiKey,
     // H2: without this, the adapter silently falls back to its own
     // hardcoded default and the advertised /health limit is dead.
-    timeoutMs: config.limits.jevCallTimeoutMs
+    timeoutMs: config.limits.jevCallTimeoutMs,
+    maxCallsPerAnalysis: config.limits.maxJevCallsPerAnalysis
   });
 
   let newsjackMode = 'fixture';
@@ -353,6 +356,21 @@ export function createServer(config = loadConfig(), options = {}) {
   // Test/programmatic only. Unused by startServer() / the CLI.
   const fetchArticle = options.fetchArticle || null;
   const classifierDevFetch = options.classifierDevFetch || null;
+  const typesafeBudget =
+    options.typesafeBudget ||
+    createTypesafeBudget({
+      estimatedUsdPerCall: config.typesafeBudget.estimatedUsdPerCall,
+      estimatedTokensPerCall: config.typesafeBudget.estimatedTokensPerCall,
+      warnUsd: config.typesafeBudget.warnUsd,
+      stopUsd: config.typesafeBudget.stopUsd,
+      storePath: config.typesafeBudget.storeFile,
+      io: options.budgetIo || {}
+    });
+  const alertTransport =
+    options.alertTransport ||
+    createAlertTransport({
+      credential: readAlertCredential(config._env, options.alertIo || {})
+    });
   const checkRateLimit = createFixedWindowLimiter(config.limits.maxAnalysesPerMinute);
   const consumeLiveUrl = createFixedWindowLimiter(config.limits.maxLiveUrlPerMinute);
   const consumeLiveUrlHost = createKeyedFixedWindowLimiter(config.limits.maxLiveUrlPerHostPerMinute);
@@ -551,10 +569,25 @@ export function createServer(config = loadConfig(), options = {}) {
             jevAdapter,
             newsjackAdapter,
             classifierDevAdapter,
+            typesafeBudget,
             userAssertedPublic: true,
             consentAt,
             disclosureShown: true
           });
+
+          if (jevAdapter.mode === 'live' && (rawGraph.engine?.jev?.calls || 0) > 0) {
+            const budgetRecord = typesafeBudget.recordCalls(rawGraph.engine.jev.calls);
+            if (budgetRecord.shouldWarn) {
+              const alertMessage = buildBudgetWarnAlert({
+                estimatedUsd: budgetRecord.estimatedUsd,
+                warnUsd: config.typesafeBudget.warnUsd,
+                stopUsd: config.typesafeBudget.stopUsd,
+                basis: budgetRecord.basis,
+                calculationInputs: budgetRecord.calculationInputs
+              });
+              alertTransport.send(alertMessage).catch(() => {});
+            }
+          }
 
           // H1: never serve a document that fails its own schema.
           const graph = await validateOrAbstain({ graph: rawGraph, prepared, config, consentAt });

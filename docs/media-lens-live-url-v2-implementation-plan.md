@@ -105,7 +105,9 @@ CI default remains fixture-only (`tests/media-lens-jev-adapter.test.js` mock ser
 
 **`ops-controls` PR:** `MEDIA_LENS_KILL_SWITCH` / kill file, per-request re-check, JSON audit lines with redaction tests, `/health` still secret-free, incident section in `media-lens/README.md` pointing at architecture §20 (do not paste secrets). Canary allowlist env.
 
-**Exit:** tests flip kill switch and prove URL fetch and live Jev do not run. Redaction tests fail if span text or `sk-` keys appear in a captured log helper.
+**Follow-on (Jev-only production controls, still default-off):** 160 Jev calls/analysis cap, 15 s whole-pipeline timeout with shared `AbortController` through newsjack and Jev, live URL rate limits (5/min, 2/host/min, 1 concurrent), ESTIMATED TypeSafe monthly budget warn $20 / stop $30 with durable locked ledger (`typesafe-budget.js`, `typesafe-budget-store.js`), and budget warn alerts via LoadCredential SMTP/webhook (`alert.js`). Operator detail: `docs/media-lens-ops-runbook-v2.md` §3; tests in `tests/media-lens-jev-production-controls.test.js`. Does not enable live URL or close Issue #118.
+
+**Exit:** tests flip kill switch and prove URL fetch and live Jev do not run. Redaction tests fail if span text or `sk-` keys appear in a captured log helper. Budget and alert behavior covered by the follow-on test file when live flags are on in isolated operator configs.
 
 ### Phase 6 — Privacy / consent (owner-gated)
 

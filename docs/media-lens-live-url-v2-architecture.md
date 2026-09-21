@@ -622,22 +622,55 @@ Do not imply that the destination site "analyzes" the user, or that TypeSafe fet
 
 ## 16. Rate limits and abuse controls
 
-Existing (keep):
+Implemented in `worker/config.js`, `worker/server.js`, `worker/rate-limit.js`, `worker/analyze.js`, and `worker/safe-fetch.js`. Operator overrides and abstention copy are documented in `docs/media-lens-ops-runbook-v2.md` §3. Defaults remain conservative; live URL is still disabled by default.
 
-- 512 KiB request body
-- 10 analyses / minute / worker, checked before body read
-- 200 spans, 60k prepared chars
-- 8s Jev call, 30s analysis, 8s URL fetch, 2 MiB URL bytes, 3 redirects
+### 16.1 Request and pipeline caps
 
-Add before live URL enablement:
+| Control | Default | Env override | When enforced |
+| --- | --- | --- | --- |
+| Request body | 512 KiB | — | Before JSON parse |
+| Prepared text | 60,000 chars | — | After prepare |
+| Spans | 200 | — | After prepare |
+| Analyses / minute / worker | 5 | `MEDIA_LENS_MAX_ANALYSES_PER_MINUTE` | Before body read |
+| Jev calls / analysis | 160 | `MEDIA_LENS_MAX_JEV_CALLS_PER_ANALYSIS` | Before live Jev; also enforced inside the adapter |
+| Jev call timeout | 8 s | — | Per Jev HTTP attempt |
+| Whole analysis timeout | 15 s | `MEDIA_LENS_PER_ANALYSIS_TIMEOUT_MS` | Races the full Jev → newsjack → fusion pipeline; aborts in-flight work via a shared `AbortController` |
+| URL fetch timeout | 8 s | — | Per hop in `safe-fetch.js` |
+| URL fetch bytes | 2 MiB | — | Compressed and decoded caps |
+| Redirect hops | 3 | — | Manual redirect chain |
 
-| Control | Initial contract |
+Live URL oversized input returns the exact abstention copy documented in the runbook. Exceeding a limit returns HTTP 413/429 (or a controlled abstention graph for Jev cap / budget / timeout) rather than a partial result.
+
+### 16.2 Live URL rate limits (when `MEDIA_LENS_ENABLE_LIVE_URL=true`)
+
+| Control | Default | Env override | Notes |
+| --- | --- | --- | --- |
+| Live URL attempts / minute | 5 | `MEDIA_LENS_MAX_LIVE_URL_PER_MINUTE` | After JSON parse on `mode: "url"` |
+| Live URL attempts / host / minute | 2 | `MEDIA_LENS_MAX_LIVE_URL_PER_HOST_PER_MINUTE` | Host key uses exact hostname plus a registrable-domain approximation |
+| Concurrent live URL fetches | 1 | `MEDIA_LENS_MAX_CONCURRENT_LIVE_URL` | Also serialized inside `safe-fetch.js` |
+
+### 16.3 TypeSafe ESTIMATED monthly budget (Jev only)
+
+Figures are **ESTIMATED** planning math unless the operator has verified provider billing separately. The worker records call counts and ESTIMATED token inputs only; it never stores article or span text in budget records.
+
+| Control | Default | Env override | Effect |
+| --- | --- | --- | --- |
+| ESTIMATED USD / call | 0.002 | `MEDIA_LENS_TYPESAFE_ESTIMATED_USD_PER_CALL` | Multiplier for monthly tracking |
+| ESTIMATED tokens / call | 1500 | `MEDIA_LENS_TYPESAFE_ESTIMATED_TOKENS_PER_CALL` | Recorded alongside calls |
+| Warn threshold | $20 | `MEDIA_LENS_TYPESAFE_BUDGET_WARN_USD` | Sends one budget warn alert per UTC month when crossed |
+| Hard stop | $30 | `MEDIA_LENS_TYPESAFE_BUDGET_STOP_USD` | Live Jev fail-closes before new calls when the ESTIMATED month total would exceed the stop |
+
+Durable counter: default `/var/lib/media-lens/typesafe-budget.json` (`MEDIA_LENS_TYPESAFE_BUDGET_FILE`), exclusive lock file, atomic tmp/rename writes, mode `0600`, schema fields `month`, `calls`, `estimatedTokens`, `warnEmitted`, `version` only. `/health` exposes `typesafeBudget.basis: "ESTIMATED"` without secrets.
+
+Budget warn alerts target `bthornton9415@gmail.com` via systemd `LoadCredential=media-lens-alert` or `MEDIA_LENS_ALERT_CREDENTIAL_FILE`. Supported transports: authenticated SMTP (`smtp://` with STARTTLS or `smtps://`) or **https://** webhook. Until a valid credential is present, delivery remains `BLOCKED_ALERT_TRANSPORT`. See runbook §3 for credential shapes and the optional `MEDIA_LENS_ALERT_DELIVERY_TEST=true` integration path.
+
+### 16.4 Other abuse controls
+
+| Control | Policy |
 | --- | --- |
-| Per-destination-host analyses | 3 / minute / worker (eTLD+1 of the **user URL**, not of redirects — redirect storms still count as one analysis but hop-limited) |
-| Concurrent URL fetches | 1 per worker (simplifies pin/reuse reasoning) |
-| Bind address | Default `127.0.0.1`. Document that `0.0.0.0` makes the worker a network service and is out of scope for enablement |
-| Fixture id | Already constrained to `^[a-z0-9-]+$` and known files (M1) |
-| URL allowlist | Optional canary-only `MEDIA_LENS_URL_ALLOWLIST` (exact hostnames). Empty means "policy only" (public IPs). Canary should set an allowlist. When set, **every redirect hop** is re-validated against the list, not only the initial user URL |
+| Bind address | Default `127.0.0.1`. `0.0.0.0` makes the worker a network service and is an abuse amplifier; not part of v2 enablement |
+| Fixture id | Constrained to `^[a-z0-9-]+$` and known files (M1) |
+| URL allowlist | Optional canary-only `MEDIA_LENS_URL_ALLOWLIST` (exact hostnames). Empty means public-address policy only. When set, **every redirect hop** is re-validated before pin/connect |
 | Bulk intake | No array of URLs. One URL per `/analyze` |
 
 Abuse cases (product, not only network): automated scoring of named journalists, brigading, leaderboards. Acceptable-use already forbids these. Design does not add a public API on Pages that would make bulk abuse easy.
@@ -650,11 +683,11 @@ Default logs are **operational**, not content.
 
 **Never log:** TypeSafe key, `Authorization`, cookie headers, article body, span text, prepared text, query string, userinfo, full URL with path+query (path can contain tokens), Clarity messages.
 
-**May log (JSON line, no PII beyond what loopback already implies):** timestamp, `graph_id`, mode, `input_mode`, error code, hop count, scheme, eTLD+1 hostname, `pinned_family`, duration_ms, byte_length, jev calls/failures, `model_match`, kill-switch state, rate-limit hits.
+**May log (JSON line, no PII beyond what loopback already implies):** timestamp, `graph_id`, mode, `input_mode`, error code, hop count, scheme, eTLD+1 hostname, `pinned_family`, duration_ms, byte_length, jev calls/failures, `model_match`, kill-switch state, rate-limit hits. Budget warn alerts never log credential contents or article text.
+
+`/health` (via `publicConfig`) may expose ESTIMATED budget thresholds, store path, alert recipient, and whether a credential is configured (`transport: BLOCKED_ALERT_TRANSPORT` when not). It never returns key values or credential file contents.
 
 **Debug (`MEDIA_LENS_DEBUG_NETWORK=true`):** may log classifier decision (`block_loopback`, `block_nat64_private`, …) and **not** interior RFC1918 literals by default (avoids leaking the operator LAN layout into shared logs). Owner-only local debugging may enable `MEDIA_LENS_DEBUG_PINNED_IP=true`; still never log bodies.
-
-`/health` remains presence-booleans only (`publicConfig`).
 
 Invalid graphs: existing `console.error` of validator errors must not dump span text. Implementation PRs should redact `errors` that embed sample strings from the graph.
 

@@ -143,7 +143,28 @@ Live URL fetch remains disabled by default. `MEDIA_LENS_TYPESAFE_BASE_URL` may p
 
 The gate sends `model: "jev-1.13.0"` with invented spans from `media-lens/fixtures/articles/`. It asserts `response.model === "jev-1.13.0"`. If the API rejects the versioned id, the gate fails. It does not fall back to `jev-latest`. Answers must match the typed adapter shape; extra keys are ignored; out-of-taxonomy choices fail closed through the existing adapter. The JSON report (commit SHA, timestamp, pass/fail, optional diagnostic diff vs fixture answers) is a local or CI artifact. It is not an accuracy claim, not a quality study, and not production-ready. Do not copy that report into `docs/`. Optional workflow: `.github/workflows/jev-pin-verify.yml` (`workflow_dispatch` only).
 
-## 8. Assumed vs unverified
+## 8. Jev-only production controls (Issue #118 follow-on)
+
+Implemented in `worker/analyze.js`, `worker/adapters/jev.js`, `worker/adapters/newsjack.js`, `worker/typesafe-budget.js`, `worker/typesafe-budget-store.js`, and `worker/alert.js`. Live flags remain off by default. This is operational plumbing, not production enablement or a billing guarantee.
+
+| Control | Default | Module | Behavior |
+| --- | --- | --- | --- |
+| Jev calls / analysis | 160 | `config.js`, `analyze.js`, `adapters/jev.js` | Fail-closed abstention before and during live Jev if span budget would exceed the cap |
+| Whole analysis timeout | 15 s | `analyze.js`, `abort-utils.js` | Shared pipeline `AbortController`; aborts in-flight Jev retries and blocks newsjack/classifier.dev after timeout |
+| Live URL rates | 5/min, 2/host/min, 1 concurrent | `server.js`, `rate-limit.js` | Checked after JSON parse on `mode: "url"` when live URL is enabled |
+| ESTIMATED monthly budget | warn $20 / stop $30 | `typesafe-budget.js` | UTC month counter; `wouldExceed` / `isStopped` gate live Jev; durable store at `/var/lib/media-lens/typesafe-budget.json` with exclusive lock |
+| Budget warn alert | recipient fixed | `alert.js` | Once per UTC month when warn threshold crossed; SMTP STARTTLS/`smtps://` or **https://** webhook via LoadCredential; `BLOCKED_ALERT_TRANSPORT` without credential |
+
+Abstention messages (verified in `tests/media-lens-jev-production-controls.test.js`):
+
+- Jev cap: “This analysis would exceed the configured Jev call cap…” / “…exceeded the configured Jev call cap…”
+- Budget stop: “TypeSafe ESTIMATED monthly spend reached the configured stop threshold…”
+- Budget would exceed: “…would exceed the configured TypeSafe ESTIMATED monthly budget…”
+- Timeout: “The analysis took longer than the configured limit and was stopped before completion.”
+
+Operator runbook: `docs/media-lens-ops-runbook-v2.md` §3. Architecture tables: `docs/media-lens-live-url-v2-architecture.md` §16. `/health` exposes ESTIMATED budget thresholds and alert transport status via `publicConfig`; never key values or credential contents.
+
+## 9. Assumed vs unverified
 
 | Topic | Status |
 | --- | --- |
@@ -155,3 +176,4 @@ The gate sends `model: "jev-1.13.0"` with invented spans from `media-lens/fixtur
 | Real-world FP/FN of influence classification | Unverified; synthetic fixtures only |
 | DNS rebinding / connect-time pinning for article fetch | Implemented in `safe-fetch.js` (still default-off; not production-ready) |
 | DNS rebinding / connect-time pinning for live Jev and classifier.dev | Implemented in `provider-pinned-fetch.js` for network paths only (still default-off; not production-ready) |
+| ESTIMATED TypeSafe monthly budget and alert delivery | Implemented with defaults warn $20 / stop $30; figures are planning estimates only unless operator verifies billing separately |

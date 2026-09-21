@@ -5,15 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self' http://127.0.0.1:8787 http://localhost:8787; base-uri 'self'; form-action 'none';"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self' http://127.0.0.1:8787 http://localhost:8787; base-uri 'self'; form-action 'none'; object-src 'none';"
     />
     <meta name="robots" content="noindex, nofollow" />
     <meta
       name="description"
-      content="Media Lens (preview): evidence-linked language, claims, coverage, and source-context signals for public articles. Not deployed; requires a local worker."
+      content="Media Lens: a limited Jev-only preview for evidence-linked language, claims, coverage, and source context in approved public articles."
     />
     <link rel="icon" href="../icon.svg" type="image/svg+xml" />
-    <title>Media Lens (preview) | Manipulation Score</title>
+    <title>Media Lens | Manipulation Score</title>
     <link rel="stylesheet" href="../fonts.css" />
     <link rel="stylesheet" href="../styles.css" />
     <link rel="stylesheet" href="./media-lens.css" />
@@ -22,21 +22,21 @@
     <a class="skip-link" href="#main">Skip to content</a>
 
     <header class="site-header site-header-static">
-      <a class="brand" href="../" aria-label="Manipulation Score home">
+      <a class="brand" href="https://manipulationscore.com/" aria-label="Manipulation Score home">
         <span class="brand-mark" aria-hidden="true"><i></i><i></i></span>
         <span class="brand-text">
           <span class="brand-name">Media Lens</span>
-          <span class="brand-sub">preview, by Manipulation Score</span>
+          <span class="brand-sub">limited preview, by Manipulation Score</span>
         </span>
       </a>
       <nav class="legal-mini-nav" aria-label="Section">
-        <a href="../">Home</a>
-        <a href="../analyze.html">Clarity (private messages)</a>
+        <a href="https://manipulationscore.com/">Home</a>
+        <a href="https://manipulationscore.com/analyze.html">Clarity (private messages)</a>
       </nav>
     </header>
 
     <main id="main" class="ml-main" tabindex="-1">
-      <p class="eyebrow"><span></span> Unreleased fixture/local preview, not deployed</p>
+      <p class="eyebrow"><span></span> Limited Jev-only experimental preview</p>
       <h1>Media Lens</h1>
       <p class="ml-lede">
         Media Lens looks at public articles, advertisements, speeches, and campaign material for evidence-linked language, claim,
@@ -49,22 +49,21 @@
         <p>
           Media Lens is for <strong>public material you are allowed to analyze</strong>, such as a published article, ad, speech, or
           campaign page. It is not the place for private messages or conversations; use
-          <a href="../analyze.html">Clarity</a> for those instead. Clarity never sends your text anywhere.
+          <a href="https://manipulationscore.com/analyze.html">Clarity</a> for those instead. Clarity never sends your text anywhere.
         </p>
         <p>
-          A local worker process that you or an operator run performs the analysis. In <strong>fixture mode</strong> (the default in
-          this preview), the worker reads pre-recorded example answers and makes no network calls at all. In <strong>live mode</strong>
-          (disabled by default; requires <code>MEDIA_LENS_ENABLE_LIVE=true</code> and an operator-configured key; not used in automated
-          testing), URL fetch is experimental and not production-ready, and live pasted-text analysis is disabled. Newsjack provenance
-          data, when used, comes from files an operator already has on this computer; the worker never calls a Newsjack service.
+          Media Lens can run in <strong>fixture mode</strong> for local development, where pre-recorded example answers make no network
+          calls. On the approved operator host, it can run a limited <strong>Jev-only live URL mode</strong> for public hosts on an
+          operator allowlist. Live pasted-text analysis and the secondary classifier are disabled. Newsjack provenance data, when used, comes
+          from files an operator already has; the worker never calls a Newsjack service.
         </p>
         <p>
           Full article text is not stored by default. Nothing here is downloaded, uploaded, or exported unless you choose the export
           action after results appear.
         </p>
         <p>
-          This page is an unreleased fixture/local preview. Live URL analysis is not available and not production-ready. If an
-          operator later enables live URL, this notice applies before you submit:
+          Live URL access is limited, can be turned off by the operator, and is not production-ready for general use, a fact-checking
+          service, or an accuracy claim. The disclosure below applies before you submit:
         </p>
         <p id="ml-live-url-notice">
           Before you analyze: the local worker will request the public page at the URL you enter. The destination site (and its CDN) will see this computer’s network address. Prepared public span text from that page may be sent to TypeSafe’s Jev classifier under TypeSafe’s own policy. TypeSafe does not fetch the URL. Full article text is not kept by Media Lens by default. Do not submit private messages, passwords, medical or financial records, information about children, paywalled content you are not authorized to fetch, or non-public/internal addresses. Live pasted-text analysis stays disabled — use Clarity for private messages.
@@ -73,7 +72,7 @@
 
       <p class="ml-status" id="worker-status" data-state="checking" role="status">
         <span class="ml-status-dot" aria-hidden="true"></span>
-        <span id="worker-status-text">Checking for a local worker at 127.0.0.1:8787...</span>
+        <span id="worker-status-text">Checking the Media Lens service...</span>
       </p>
 
       <form class="ml-form" id="analyze-form">
@@ -84,13 +83,13 @@
               <input type="radio" name="input-mode" value="fixture" checked />
               <span>Try an example</span>
             </label>
-            <label>
+            <label data-local-only="pasted-text">
               <input type="radio" name="input-mode" value="pasted_text" />
-              <span>Paste public text</span>
+              <span>Paste public text locally</span>
             </label>
             <label>
               <input type="radio" name="input-mode" value="url" />
-              <span>Enter a URL (experimental, not production-ready)</span>
+              <span>Analyze an approved public URL</span>
             </label>
           </div>
         </fieldset>
@@ -114,11 +113,10 @@
 
         <div id="url-field" hidden>
           <label class="ml-field-label" for="article-url">Article URL</label>
-          <input type="url" id="article-url" name="url" placeholder="https://example.com/article" disabled />
-          <p class="ml-form-note">
-            URL analysis is experimental and not production-ready. It needs the worker running with
-            <code>MEDIA_LENS_MODE=live</code>, <code>MEDIA_LENS_ENABLE_LIVE=true</code>, and an operator-configured key. Live
-            pasted-text analysis is disabled. URL fetch is disabled in this fixture-mode preview.
+          <input type="url" id="article-url" name="url" placeholder="https://en.wikipedia.org/wiki/Yes" aria-describedby="article-url-help" disabled />
+          <p class="ml-form-note" id="article-url-help">
+            Use a public <code>https://</code> URL from the operator allowlist. Long pages may abstain before Jev runs. Private,
+            paywalled, internal, and unauthorized material is not allowed.
           </p>
         </div>
 
@@ -177,9 +175,10 @@
       </div>
 
       <p class="ml-footer-note">
-        Media Lens is experimental and not deployed. It produces no overall score for an article, person, or outlet. See
-        <a href="../methodology.html">Methodology</a>, <a href="../limitations.html">Limitations</a>, and
-        <a href="../acceptable-use.html">Acceptable Use</a> for how this differs from Clarity.
+        Media Lens is a limited Jev-only preview. It produces no overall score for an article, person, or outlet. See
+        <a href="https://manipulationscore.com/methodology.html">Methodology</a>,
+        <a href="https://manipulationscore.com/limitations.html">Limitations</a>, and
+        <a href="https://manipulationscore.com/acceptable-use.html">Acceptable Use</a> for how this differs from Clarity.
       </p>
     </main>
 

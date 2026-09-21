@@ -289,4 +289,3 @@ test('results renderer binds taxonomy labels and coverage origin from the graph 
     assert.match(js, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
 });
-

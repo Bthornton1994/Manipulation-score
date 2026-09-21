@@ -1,0 +1,31 @@
+# Limited same-origin frontend for the Jev-only Media Lens preview.
+#
+# Deploy this file only on the already-authorized ml-jev host after copying
+# the repository checkout to /opt/media-lens/app. The worker remains bound to
+# loopback. Only the UI files and shared Clarity assets are served; worker
+# source, fixtures, tests, and documentation are not exposed by file_server.
+
+ml-jev.manipulationscore.com {
+	encode gzip
+	root * /opt/media-lens/app
+
+	@api path /health /analyze
+	handle @api {
+		reverse_proxy 127.0.0.1:8787
+	}
+
+	@media_lens_root path /media-lens
+	redir @media_lens_root /media-lens/ 308
+
+	@media_lens_ui path /media-lens/ /media-lens/index.html /media-lens/media-lens.js /media-lens/media-lens.css
+	handle @media_lens_ui {
+		file_server
+	}
+
+	@shared_assets path /fonts.css /styles.css /icon.svg /fonts/*
+	handle @shared_assets {
+		file_server
+	}
+
+	respond 404
+}

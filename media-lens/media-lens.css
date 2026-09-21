@@ -34,6 +34,20 @@
   text-wrap: pretty;
 }
 
+.ml-fixture-preview-marker {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--line-dark);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.ml-fixture-preview-marker[hidden] {
+  display: none;
+}
+
 .ml-hero-copy .ml-form {
   margin-top: 20px;
 }
@@ -92,6 +106,7 @@
   color: var(--text);
   font-size: 14px;
   line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 
 .ml-sample-signal {
@@ -452,7 +467,8 @@
 #ml-language-heading,
 #ml-claims-heading,
 #ml-coverage-heading,
-#ml-source-context-heading {
+#ml-source-context-heading,
+#ml-abstention-heading {
   scroll-margin-top: 96px;
 }
 
@@ -500,6 +516,7 @@
   font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 3px;
+  overflow-wrap: anywhere;
 }
 
 .ml-cluster-link:focus-visible {
@@ -607,6 +624,7 @@
   color: var(--text);
   font-size: 14px;
   line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .ml-observation-explain {
@@ -630,6 +648,7 @@
   border: 1px solid var(--warning);
   color: var(--text);
   font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .ml-coverage-grid {
@@ -687,6 +706,26 @@
 }
 
 @media (max-width: 768px) {
+  .media-lens-page .site-header {
+    height: auto;
+    min-height: 68px;
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 8px;
+    padding-block: 10px;
+  }
+
+  .media-lens-page .legal-mini-nav {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    width: 100%;
+    row-gap: 8px;
+  }
+
+  .media-lens-page .legal-mini-nav a:nth-child(3) {
+    display: block;
+  }
+
   .ml-main {
     padding: 24px 18px 80px;
   }

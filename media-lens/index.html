@@ -45,6 +45,9 @@
       </div>
 
       <div id="landing-view">
+        <p class="ml-fixture-preview-marker" id="fixture-preview-marker" role="status" hidden>
+          Fixture preview. In-repo examples only. Live URL is disabled. Jev is unavailable. Pasted text is disabled.
+        </p>
         <section class="ml-hero" aria-labelledby="ml-hero-heading">
           <div class="ml-hero-copy">
             <p class="eyebrow"><span></span> Limited Jev-only experimental preview</p>
@@ -117,9 +120,9 @@
 
               <dialog class="ml-consent-dialog" id="consent-dialog" aria-labelledby="consent-dialog-title">
                 <h2 id="consent-dialog-title">Confirm public-material consent</h2>
-                <p>
-                  This run may fetch the URL you entered and send prepared public spans to TypeSafe’s Jev service. It will not score a
-                  person or outlet.
+                <p id="consent-fetch-notice">
+                  In operator-hosted live mode, the approved operator host may request the URL you entered. Prepared public spans may be
+                  sent to TypeSafe AI’s Jev service. It will not score a person or outlet.
                 </p>
                 <div class="ml-consent-row">
                   <input type="checkbox" id="consent-checkbox" required />
@@ -149,17 +152,18 @@
               Static excerpt of the in-repo golden graph. Not a live fetch and not an accuracy claim.
             </p>
             <ul class="ml-sample-findings">
-              <li>
-                <span class="ml-chip">Quoted language not attributed as authorial</span>
+              <li data-observation-id="obs-jev-1">
+                <span class="ml-chip" data-strength="observed">Quoted language not attributed as authorial</span>
                 <q>We will fix the flooding problem this year,</q>
                 <span class="ml-sample-signal">Urgency framing, quoted as the mayor</span>
               </li>
-              <li>
-                <span class="ml-chip" data-strength="observed">Observed influence signal</span>
+              <li data-observation-id="obs-jev-2">
+                <span class="ml-chip" data-strength="candidate">Observed influence signal</span>
                 <q>The council said it would fix the flooding problem this year, directing staff to begin engineering work within 30 days.</q>
                 <span class="ml-sample-signal">Certainty beyond evidence</span>
               </li>
-              <li>
+              <li data-observation-id="obs-jev-3">
+                <span class="ml-chip" data-strength="candidate">Observed influence signal</span>
                 <span class="ml-chip" data-review="needs_review">Needs review</span>
                 <q>Sources close to the situation report growing frustration among residents who have filed dozens of complaints this year.</q>
                 <span class="ml-sample-signal">Vague authority</span>
@@ -197,7 +201,7 @@
             be turned off by the operator, and is not production-ready for general use.
           </p>
           <p id="ml-live-url-notice">
-            Before you analyze: the local worker will request the public page at the URL you enter. The destination site (and its CDN) will see this computer’s network address. Prepared public span text from that page may be sent to TypeSafe’s Jev classifier under TypeSafe’s own policy. TypeSafe does not fetch the URL. Full article text is not kept by Media Lens by default. Do not submit private messages, passwords, medical or financial records, information about children, paywalled content you are not authorized to fetch, or non-public/internal addresses. Live pasted-text analysis stays disabled — use Clarity for private messages.
+            Before you analyze: in operator-hosted live mode, the approved operator host requests the public page at the URL you enter. The destination site (and its CDN) may see the operator host’s network address. Prepared public span text from that page may be sent to TypeSafe AI’s Jev service under TypeSafe’s own policy. TypeSafe does not fetch the URL. Full article text is not kept by Media Lens by default. Do not submit private messages, passwords, medical or financial records, information about children, paywalled content you are not authorized to fetch, or non-public/internal addresses. Live pasted-text analysis stays disabled — use Clarity for private messages.
           </p>
         </section>
 
@@ -276,7 +280,10 @@
           <p class="ml-dimension-note" id="source-context-note"></p>
         </section>
 
-        <ul class="ml-abstention-list" id="abstention-list" aria-label="Abstentions and limits"></ul>
+        <section class="ml-dimension" id="analysis-limitations" aria-labelledby="ml-abstention-heading">
+          <h2 id="ml-abstention-heading">Analysis limitations</h2>
+          <ul class="ml-abstention-list" id="abstention-list"></ul>
+        </section>
 
         <details class="ml-engine-details">
           <summary>Engine and privacy record</summary>

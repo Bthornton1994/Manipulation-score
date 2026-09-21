@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { liveUrlDisclosure, consentDisclosure } from '../media-lens/media-lens.js';
 
 const BANNED_PHRASES = ['manipulative', 'proves', 'misinformation', 'unsafe', 'propaganda'];
 const ALLOWED_UI_PHRASES = [
@@ -202,8 +203,6 @@ test('index.html requires the consent checkbox before the submit button is usabl
 
 const CONSENT_CHECKBOX_V2 =
   'I confirm this is public material I am allowed to analyze, and I understand that live URL mode may send prepared public spans to TypeSafe AI\u2019s Jev service.';
-const LIVE_URL_NOTICE_V2 =
-  'Before you analyze: the local worker will request the public page at the URL you enter. The destination site (and its CDN) will see this computer\u2019s network address. Prepared public span text from that page may be sent to TypeSafe\u2019s Jev classifier under TypeSafe\u2019s own policy. TypeSafe does not fetch the URL. Full article text is not kept by Media Lens by default. Do not submit private messages, passwords, medical or financial records, information about children, paywalled content you are not authorized to fetch, or non-public/internal addresses. Live pasted-text analysis stays disabled \u2014 use Clarity for private messages.';
 
 test('index.html uses the v2 consent checkbox and keeps the full live-URL disclosure visible before submit', async () => {
   const html = await readFile('media-lens/index.html', 'utf8');
@@ -218,7 +217,10 @@ test('index.html uses the v2 consent checkbox and keeps the full live-URL disclo
   assert.doesNotMatch(disclosure[0], /\shidden(?:[\s>=])/);
   const notice = html.match(/<p id="ml-live-url-notice">\s*([\s\S]*?)\s*<\/p>/);
   assert.ok(notice, 'live URL notice missing');
-  assert.equal(notice[1].replace(/\s+/g, ' ').trim(), LIVE_URL_NOTICE_V2);
+  assert.equal(notice[1].replace(/\s+/g, ' ').trim(), liveUrlDisclosure('operator'));
+  const consentNotice = html.match(/<p id="consent-fetch-notice">\s*([\s\S]*?)\s*<\/p>/);
+  assert.ok(consentNotice, 'consent fetch notice missing');
+  assert.equal(consentNotice[1].replace(/\s+/g, ' ').trim(), consentDisclosure('operator'));
 
   const urlField = html.match(/<div id="url-field"[^>]*>[\s\S]*?<\/div>/);
   assert.ok(urlField);

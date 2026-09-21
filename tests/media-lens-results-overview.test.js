@@ -2,11 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import {
+  ABSTENTION_EMPTY_COPY,
   COVERAGE_FRAMES_EMPTY_COPY,
+  COVERAGE_OBSERVATIONS_EMPTY_COPY,
   buildAnalysisOverview,
+  consentDisclosure,
+  liveUrlDisclosure,
+  renderAbstentionList,
   renderAnalysisOverview,
   renderClusterMember,
-  renderCoverageFrames
+  renderCoverageFrames,
+  renderCoverageObservationList,
+  safeHttpsUrl
 } from '../media-lens/media-lens.js';
 
 const FORBIDDEN_PUBLIC_COPY = /fusion currently|schema includes a frames list|the schema includes/i;
@@ -163,6 +170,153 @@ test('malicious titles are escaped and non-URL labels stay plain text', () => {
   assert.doesNotMatch(overview, /<svg/);
 });
 
+test('static sample strength labels match the synthetic-01 golden graph', async () => {
+  const html = await readFile('media-lens/index.html', 'utf8');
+  const graph = await fixture('synthetic-01-quoted-vs-authorial');
+  const sampleStart = html.indexOf('<ul class="ml-sample-findings">');
+  const sampleEnd = html.indexOf('</ul>', sampleStart);
+  const sample = html.slice(sampleStart, sampleEnd);
+  const items = [...sample.matchAll(/<li\b([^>]*)>([\s\S]*?)<\/li>/g)];
+  assert.equal(items.length, graph.observations.length);
+  for (const [, attrs, body] of items) {
+    const id = attrs.match(/data-observation-id="([^"]+)"/)?.[1];
+    const obs = graph.observations.find((entry) => entry.id === id);
+    assert.ok(obs, `sample finding is not a graph observation: ${id}`);
+    const strengthChip = body.match(/<span class="ml-chip" data-strength="([^"]+)">([^<]*)<\/span>/);
+    assert.ok(strengthChip, `${id} is missing a strength chip`);
+    assert.equal(strengthChip[1], obs.strength, id);
+    assert.equal(strengthChip[2], obs.ui_phrase, id);
+    const strengths = [...body.matchAll(/data-strength="([^"]+)"/g)].map((match) => match[1]);
+    assert.deepEqual(strengths, [obs.strength], id);
+    if (obs.review_status === 'needs_review') {
+      assert.match(body, /data-review="needs_review">Needs review</);
+    } else {
+      assert.doesNotMatch(body, /data-review=/);
+    }
+    const span = graph.spans.find((entry) => entry.id === obs.span_ids[0]);
+    assert.match(body, new RegExp(span.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    const signal = body.match(/class="ml-sample-signal">([^<]+)</)[1];
+    if (obs.signal === 'urgency') {
+      assert.equal(signal, `Urgency framing, quoted as ${span.attribution.speaker}`);
+    } else if (obs.signal === 'certainty_beyond_evidence') {
+      assert.equal(signal, 'Certainty beyond evidence');
+    } else if (obs.signal === 'vague_authority') {
+      assert.equal(signal, 'Vague authority');
+    } else {
+      assert.fail(`unexpected sample signal ${obs.signal}`);
+    }
+  }
+  assert.equal(
+    graph.observations.find((entry) => entry.id === 'obs-jev-2').strength,
+    'candidate'
+  );
+  assert.match(
+    html,
+    new RegExp(`<dt>Independent sources</dt>\\s*<dd>${graph.coverage.cluster.independent_sources_estimate}</dd>`)
+  );
+  assert.match(
+    html,
+    new RegExp(`<dt>Duplicate or syndicated</dt>\\s*<dd>${graph.coverage.cluster.duplicate_or_syndicated_count}</dd>`)
+  );
+  assert.match(html, new RegExp(`<dt>Freshness</dt>\\s*<dd>${graph.coverage.freshness_gate.computed_status}</dd>`));
+  assert.match(html, new RegExp(graph.coverage.freshness_gate.rationale.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('missing coverage observations and abstentions use neutral accessible copy', async () => {
+  const html = await readFile('media-lens/index.html', 'utf8');
+  const graph = await fixture('synthetic-01-quoted-vs-authorial');
+  assert.equal(graph.observations.filter((obs) => obs.dimension === 'coverage').length, 0);
+  const coverage = renderCoverageObservationList(graph);
+  assert.equal(COVERAGE_OBSERVATIONS_EMPTY_COPY, 'No coverage observations were recorded for this analysis.');
+  assert.match(coverage, /No coverage observations were recorded for this analysis\./);
+  assert.equal(renderCoverageFrames(graph.coverage), 'No coverage-frame comparison was available for this analysis.');
+  assert.doesNotMatch(coverage, SCORE_LANGUAGE);
+  assert.doesNotMatch(coverage, FORBIDDEN_PUBLIC_COPY);
+  assert.match(html, /<h2 id="ml-abstention-heading">Analysis limitations<\/h2>/);
+  assert.match(html, /aria-labelledby="ml-abstention-heading"/);
+  const limitations = renderAbstentionList(graph);
+  assert.match(limitations, /The typed classifier did not return a usable answer/);
+  const empty = renderAbstentionList({ abstentions: [] });
+  assert.equal(ABSTENTION_EMPTY_COPY, 'No abstentions were recorded for this analysis.');
+  assert.match(empty, /No abstentions were recorded for this analysis\./);
+  assert.doesNotMatch(`${coverage} ${empty} ${html.slice(html.indexOf('id="analysis-limitations"'), html.indexOf('id="engine-stats"'))}`, SCORE_LANGUAGE);
+});
+
+test('operator-hosted disclosure names the operator host and TypeSafe AI’s Jev service', async () => {
+  const html = await readFile('media-lens/index.html', 'utf8');
+  const operator = liveUrlDisclosure('operator');
+  const local = liveUrlDisclosure('local');
+  const fixturePreview = liveUrlDisclosure('fixture-preview');
+  assert.match(operator, /approved operator host requests the public page/);
+  assert.match(operator, /operator host\u2019s network address/);
+  assert.match(operator, /TypeSafe AI\u2019s Jev service/);
+  assert.doesNotMatch(operator, /this computer\u2019s network address/);
+  assert.doesNotMatch(operator, /your computer/);
+  assert.doesNotMatch(operator, /TypeSafe\u2019s Jev classifier/);
+  assert.match(local, /the request may originate from your computer/);
+  assert.match(local, /this computer\u2019s network address/);
+  assert.doesNotMatch(local, /approved operator host requests/);
+  assert.match(fixturePreview, /does not request the article URL/);
+  assert.match(fixturePreview, /Neither your computer nor an operator host contacts the destination site/);
+  assert.doesNotMatch(fixturePreview, /this computer\u2019s network address/);
+  assert.doesNotMatch(fixturePreview, /will see the operator host/);
+  for (const text of [operator, local, fixturePreview]) {
+    assert.match(text, /TypeSafe AI\u2019s Jev service/);
+    assert.match(text, /Full article text is not kept by Media Lens by default/);
+    assert.match(text, /private messages/);
+    assert.match(text, /information about children/);
+    assert.match(text, /paywalled content/);
+    assert.match(text, /non-public\/internal addresses/);
+    assert.match(text, /Live pasted-text analysis stays disabled/);
+    assert.doesNotMatch(text, /\b(accuracy|credibility|ranking)\b/i);
+    assert.doesNotMatch(text, /TypeSafe\u2019s Jev classifier/);
+  }
+  assert.match(consentDisclosure('operator'), /approved operator host may request/);
+  assert.match(consentDisclosure('operator'), /TypeSafe AI\u2019s Jev service/);
+  assert.doesNotMatch(consentDisclosure('operator'), /this computer\u2019s network address/);
+  assert.match(consentDisclosure('local'), /may originate from your computer/);
+  assert.match(consentDisclosure('local'), /TypeSafe AI\u2019s Jev service/);
+  assert.doesNotMatch(consentDisclosure('fixture-preview'), /this computer\u2019s network address/);
+  assert.match(consentDisclosure('fixture-preview'), /does not request an article URL/);
+  assert.match(operator, /TypeSafe does not fetch the URL/);
+  assert.match(operator, /Live pasted-text analysis stays disabled/);
+  assert.match(local, /TypeSafe does not fetch the URL/);
+  assert.match(fixturePreview, /Live pasted-text analysis stays disabled/);
+  assert.match(html, /TypeSafe AI\u2019s Jev service/);
+  assert.doesNotMatch(html, /TypeSafe\u2019s Jev classifier/);
+  assert.doesNotMatch(html, /this computer\u2019s network address/);
+});
+
+test('percent-encoded line breaks and tabs never become HTTPS links', () => {
+  const rejected = [
+    'https://example.com/%0A',
+    'https://example.com/%0a',
+    'https://example.com/%0D',
+    'https://example.com/%0d',
+    'https://example.com/%09',
+    'https://example.com/path%0Asecret',
+    'https://example.com/?next=%0d%0aSet-Cookie:%09x',
+    'https://example.com/%250A',
+    'https://example.com/%250d',
+    'https://example.com/%2509'
+  ];
+  for (const url of rejected) {
+    assert.equal(safeHttpsUrl(url), null, url);
+    const html = renderClusterMember({ url, source: 'Example', relation: 'same_story' });
+    assert.doesNotMatch(html, /<a\b/, url);
+    assert.doesNotMatch(html, /%0a|%0d|%09/i, url);
+    assert.match(html, /Example/, url);
+  }
+  const ordinary = renderClusterMember({
+    url: 'https://example.com/ordinary/path?q=1&x=%2Fok',
+    source: 'Example',
+    relation: 'same_story'
+  });
+  assert.match(ordinary, /<a class="ml-cluster-link"/);
+  assert.match(ordinary, /href="https:\/\/example.com\/ordinary\/path\?q=1&amp;x=%2Fok"/);
+  assert.ok(safeHttpsUrl('https://example.com/ordinary/path?q=hello'));
+});
+
 test('cancelled consent is not stored as a retryable analysis payload', async () => {
   const js = await readFile('media-lens/media-lens.js', 'utf8');
   const openConsent = js.slice(js.indexOf('function requestConsentThenAnalyze'), js.indexOf('async function handleSubmit'));
@@ -170,6 +324,8 @@ test('cancelled consent is not stored as a retryable analysis payload', async ()
   assert.doesNotMatch(openConsent, /lastPayload\s*=/);
   assert.match(js, /consent-dialog'\)\.addEventListener\('close'/);
   assert.match(js, /pendingPayload = null/);
+  assert.match(js, /consentTrigger = document\.activeElement/);
+  assert.match(js, /trigger\.focus\(\)/);
   const submit = js.slice(js.indexOf('async function handleSubmit'), js.indexOf('function setup()'));
   assert.match(submit, /pendingPayload \? \{ payload: pendingPayload \}/);
   assert.doesNotMatch(submit, /lastPayload \?/);

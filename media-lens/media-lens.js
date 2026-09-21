@@ -87,10 +87,17 @@ let pendingPayload = null;
 let analyzeAbort = null;
 let stageTimer = null;
 let consentCheckedAt = null;
+let consentTrigger = null;
 
 function isLocalPreviewPage() {
   if (typeof window === 'undefined') return false;
   return window.location.protocol === 'file:' || LOCAL_HOSTNAMES.has(window.location.hostname);
+}
+
+function isFixturePreviewPage() {
+  if (typeof document === 'undefined') return false;
+  const value = document.querySelector('meta[name="media-lens-fixture-preview"]')?.content?.trim().toLowerCase();
+  return value === 'true' || value === '1';
 }
 
 function normalizeBaseUrl(value) {
@@ -114,6 +121,7 @@ function resolveWorkerBaseUrl() {
 }
 
 const IS_LOCAL_PREVIEW = isLocalPreviewPage();
+const IS_FIXTURE_PREVIEW = isFixturePreviewPage();
 const WORKER_BASE_URL = resolveWorkerBaseUrl();
 
 function byId(id) {
@@ -123,7 +131,7 @@ function byId(id) {
 function updateUrlInputAvailability() {
   const articleUrl = byId('article-url');
   const mode = document.querySelector('input[name="input-mode"]:checked')?.value || 'url';
-  if (articleUrl) articleUrl.disabled = mode !== 'url' || IS_LOCAL_PREVIEW || !liveUrlReady;
+  if (articleUrl) articleUrl.disabled = mode !== 'url' || IS_LOCAL_PREVIEW || IS_FIXTURE_PREVIEW || !liveUrlReady;
 }
 
 function currentMode() {
@@ -162,7 +170,18 @@ function setupInputModeToggle() {
   const articleUrl = byId('article-url');
   const sampleAnalyze = byId('sample-analyze');
 
-  if (!IS_LOCAL_PREVIEW) {
+  if (IS_FIXTURE_PREVIEW) {
+    pastedRadio.disabled = true;
+    pastedRadio.closest('label').hidden = true;
+    urlRadio.disabled = true;
+    fixtureRadio.checked = true;
+    if (sampleAnalyze) {
+      sampleAnalyze.hidden = false;
+      sampleAnalyze.textContent = 'Analyze this example';
+    }
+    const marker = byId('fixture-preview-marker');
+    if (marker) marker.hidden = false;
+  } else if (!IS_LOCAL_PREVIEW) {
     fixtureRadio.disabled = true;
     pastedRadio.disabled = true;
     fixtureRadio.closest('label').hidden = true;
@@ -199,13 +218,17 @@ async function checkHealth() {
     const health = await res.json();
     liveUrlReady =
       !IS_LOCAL_PREVIEW &&
+      !IS_FIXTURE_PREVIEW &&
       health.mode === 'live' &&
       health.liveEnabled === true &&
       health.liveUrlEnabled === true &&
       health.killSwitch !== true &&
       health.jev?.hasApiKey === true;
     statusEl.dataset.state = 'ready';
-    if (IS_LOCAL_PREVIEW) {
+    if (IS_FIXTURE_PREVIEW) {
+      liveUrlReady = false;
+      textEl.textContent = 'Fixture preview. Live URL is disabled and Jev is not configured.';
+    } else if (IS_LOCAL_PREVIEW) {
       textEl.textContent = `Worker reachable: ${health.mode} mode.`;
     } else if (health.killSwitch === true) {
       textEl.textContent = 'Live analysis is paused by the operator kill switch.';
@@ -341,7 +364,23 @@ function renderCoverageOrigin(coverage) {
 }
 
 const COVERAGE_FRAMES_EMPTY_COPY = 'No coverage-frame comparison was available for this analysis.';
+const COVERAGE_OBSERVATIONS_EMPTY_COPY = 'No coverage observations were recorded for this analysis.';
+const ABSTENTION_EMPTY_COPY = 'No abstentions were recorded for this analysis.';
+const SHARED_PRIVACY_LIMITS =
+  'Full article text is not kept by Media Lens by default. Do not submit private messages, passwords, medical or financial records, information about children, paywalled content you are not authorized to fetch, or non-public/internal addresses. Live pasted-text analysis stays disabled — use Clarity for private messages.';
+const SERVICE_CLAUSE =
+  'Prepared public span text from that page may be sent to TypeSafe AI\u2019s Jev service under TypeSafe\u2019s own policy. TypeSafe does not fetch the URL.';
+const OPERATOR_LIVE_URL_NOTICE = `Before you analyze: in operator-hosted live mode, the approved operator host requests the public page at the URL you enter. The destination site (and its CDN) may see the operator host\u2019s network address. ${SERVICE_CLAUSE} ${SHARED_PRIVACY_LIMITS}`;
+const LOCAL_LIVE_URL_NOTICE = `Before you analyze: in local mode, the request may originate from your computer. The destination site (and its CDN) may see this computer\u2019s network address. ${SERVICE_CLAUSE} ${SHARED_PRIVACY_LIMITS}`;
+const FIXTURE_PREVIEW_NOTICE = `Before you analyze: this fixture preview does not request the article URL. Neither your computer nor an operator host contacts the destination site. Prepared public spans are not sent to TypeSafe AI\u2019s Jev service. ${SHARED_PRIVACY_LIMITS}`;
+const OPERATOR_CONSENT_NOTICE =
+  'In operator-hosted live mode, the approved operator host may request the URL you entered. Prepared public spans may be sent to TypeSafe AI\u2019s Jev service. It will not score a person or outlet.';
+const LOCAL_CONSENT_NOTICE =
+  'In local mode, the request may originate from your computer. Prepared public spans may be sent to TypeSafe AI\u2019s Jev service. It will not score a person or outlet.';
+const FIXTURE_PREVIEW_CONSENT_NOTICE =
+  'This fixture preview does not request an article URL and does not send text to TypeSafe AI\u2019s Jev service. It will not score a person or outlet.';
 const CONTROL_CHARS = /[\u0000-\u001F\u007F\u2028\u2029]/;
+const ENCODED_ASCII_CONTROL = /%(?:0[0-9a-f]|1[0-9a-f]|7f)/i;
 const INSUFFICIENT_ABSTENTION_REASONS = new Set(['insufficient_text', 'low_confidence', 'no_provenance', 'no_timestamp']);
 const ABSTAIN_REASONS = new Set([
   'engine_disabled',
@@ -358,10 +397,53 @@ function countPhrase(count, singular, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
+function containsControlEncoding(value) {
+  if (typeof value !== 'string' || value.length === 0) return false;
+  let current = value;
+  for (let i = 0; i < 3; i += 1) {
+    if (CONTROL_CHARS.test(current) || ENCODED_ASCII_CONTROL.test(current)) return true;
+    let decoded;
+    try {
+      decoded = decodeURIComponent(current);
+    } catch {
+      return false;
+    }
+    if (decoded === current) return false;
+    current = decoded;
+  }
+  return CONTROL_CHARS.test(current) || ENCODED_ASCII_CONTROL.test(current);
+}
+
+function liveUrlDisclosure(mode = 'operator') {
+  if (mode === 'local') return LOCAL_LIVE_URL_NOTICE;
+  if (mode === 'fixture-preview') return FIXTURE_PREVIEW_NOTICE;
+  return OPERATOR_LIVE_URL_NOTICE;
+}
+
+function consentDisclosure(mode = 'operator') {
+  if (mode === 'local') return LOCAL_CONSENT_NOTICE;
+  if (mode === 'fixture-preview') return FIXTURE_PREVIEW_CONSENT_NOTICE;
+  return OPERATOR_CONSENT_NOTICE;
+}
+
+function disclosureMode() {
+  if (IS_FIXTURE_PREVIEW) return 'fixture-preview';
+  if (IS_LOCAL_PREVIEW) return 'local';
+  return 'operator';
+}
+
+function applyDisclosure() {
+  const notice = byId('ml-live-url-notice');
+  if (notice) notice.textContent = liveUrlDisclosure(disclosureMode());
+  const consent = byId('consent-fetch-notice');
+  if (consent) consent.textContent = consentDisclosure(disclosureMode());
+}
+
 function safeHttpsUrl(value) {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
-  if (!trimmed || trimmed.length > 2048 || CONTROL_CHARS.test(value) || CONTROL_CHARS.test(trimmed)) return null;
+  if (!trimmed || trimmed.length > 2048) return null;
+  if (containsControlEncoding(value) || containsControlEncoding(trimmed)) return null;
   let url;
   try {
     url = new URL(trimmed);
@@ -371,7 +453,15 @@ function safeHttpsUrl(value) {
   if (url.protocol !== 'https:') return null;
   if (url.username || url.password) return null;
   if (!url.hostname) return null;
-  if (CONTROL_CHARS.test(url.href) || CONTROL_CHARS.test(url.hostname)) return null;
+  if (
+    containsControlEncoding(url.href) ||
+    containsControlEncoding(url.hostname) ||
+    containsControlEncoding(url.pathname) ||
+    containsControlEncoding(url.search) ||
+    containsControlEncoding(url.hash)
+  ) {
+    return null;
+  }
   return url;
 }
 
@@ -409,6 +499,23 @@ function renderCoverageFrames(coverage) {
   if (frames.length === 0) return COVERAGE_FRAMES_EMPTY_COPY;
   if (frames.length === 1) return '1 coverage-frame record is included in this result.';
   return `${frames.length} coverage-frame records are included in this result.`;
+}
+
+function renderCoverageObservationList(graph) {
+  const observations = Array.isArray(graph?.observations) ? graph.observations : [];
+  const coverageObservations = observations.filter((obs) => obs && obs.dimension === 'coverage');
+  if (coverageObservations.length === 0) {
+    return `<li class="ml-empty-state">${escapeHtml(COVERAGE_OBSERVATIONS_EMPTY_COPY)}</li>`;
+  }
+  return coverageObservations.map((obs) => renderObservation(graph, obs)).join('');
+}
+
+function renderAbstentionList(graph) {
+  const items = Array.isArray(graph?.abstentions) ? graph.abstentions.filter(Boolean) : [];
+  if (items.length === 0) {
+    return `<li class="ml-empty-state">${escapeHtml(ABSTENTION_EMPTY_COPY)}</li>`;
+  }
+  return items.map((item) => renderAbstention(item)).join('');
 }
 
 function abstentionsFor(graph, target) {
@@ -594,7 +701,6 @@ function renderGraph(graph) {
   currentGraph = graph;
 
   const languageObservations = graph.observations.filter((o) => o.dimension === 'language');
-  const coverageObservations = graph.observations.filter((o) => o.dimension === 'coverage');
   const artifact = graph.artifact || {};
 
   byId('result-title').textContent = artifact.title || 'Untitled public article';
@@ -613,12 +719,12 @@ function renderGraph(graph) {
   byId('coverage-origin').innerHTML = renderCoverageOrigin(graph.coverage);
   byId('coverage-cluster').innerHTML = renderClusterMembers(graph.coverage);
   byId('coverage-frames').textContent = renderCoverageFrames(graph.coverage);
-  byId('coverage-list').innerHTML = coverageObservations.map((o) => renderObservation(graph, o)).join('');
+  byId('coverage-list').innerHTML = renderCoverageObservationList(graph);
 
   byId('source-context-stats').innerHTML = renderSourceContextStats(graph.source_context);
   byId('source-context-note').textContent = graph.source_context?.note || '';
 
-  byId('abstention-list').innerHTML = graph.abstentions.map(renderAbstention).join('');
+  byId('abstention-list').innerHTML = renderAbstentionList(graph);
   byId('engine-stats').innerHTML = renderEngineStats(graph);
 
   showView('results');
@@ -772,6 +878,9 @@ function buildPayload() {
   if (parsedUrl.protocol !== 'https:') {
     return { error: 'Use an https:// public URL.', urlError: true };
   }
+  if (IS_FIXTURE_PREVIEW) {
+    return { error: 'Live URL analysis is disabled in this fixture preview.' };
+  }
   if (IS_LOCAL_PREVIEW) {
     return { error: 'Live URL analysis is available from the approved Media Lens host. Use a fixture example for local development.' };
   }
@@ -881,6 +990,7 @@ function requestConsentThenAnalyze() {
     return;
   }
   pendingPayload = built.payload;
+  consentTrigger = document.activeElement;
   openConsentDialog();
 }
 
@@ -917,6 +1027,9 @@ function setup() {
   byId('consent-cancel').addEventListener('click', () => closeConsentDialog());
   byId('consent-dialog').addEventListener('close', () => {
     pendingPayload = null;
+    const trigger = consentTrigger;
+    consentTrigger = null;
+    if (!isSubmitting && trigger && typeof trigger.focus === 'function') trigger.focus();
   });
   byId('analyze-cancel').addEventListener('click', () => {
     if (analyzeAbort) analyzeAbort.abort();
@@ -943,6 +1056,7 @@ function setup() {
   });
   byId('results').setAttribute('tabindex', '-1');
   byId('loading-panel').setAttribute('tabindex', '-1');
+  applyDisclosure();
   checkHealth();
 }
 
@@ -956,10 +1070,16 @@ if (typeof document !== 'undefined') {
 
 export {
   COVERAGE_FRAMES_EMPTY_COPY,
+  COVERAGE_OBSERVATIONS_EMPTY_COPY,
+  ABSTENTION_EMPTY_COPY,
   buildAnalysisOverview,
+  consentDisclosure,
+  liveUrlDisclosure,
+  renderAbstentionList,
   renderAnalysisOverview,
   renderClusterMember,
   renderClusterMembers,
   renderCoverageFrames,
+  renderCoverageObservationList,
   safeHttpsUrl
 };

@@ -19,18 +19,24 @@ import {
   readClassifierDevTier,
   resolveClassifierDevBaseUrl
 } from './classifier-dev/contract.js';
+import { DEFAULT_TYPESAFE_BUDGET } from './typesafe-budget.js';
+import { BLOCKED_ALERT_TRANSPORT, readAlertCredential, resolveAlertCredentialPath } from './alert.js';
+
+export const LIVE_URL_OVERSIZED_MESSAGE =
+  'This public page is too long for Media Lens live analysis. No manipulation analysis or score was generated. Try a shorter public article.';
 
 export const DEFAULT_LIMITS = Object.freeze({
   maxRequestBodyBytes: 512 * 1024,
   maxPreparedTextChars: 60000,
   minAnalyzableChars: 200,
   maxSpans: 200,
-  maxAnalysesPerMinute: 10,
-  maxLiveUrlPerMinute: 10,
-  maxLiveUrlPerHostPerMinute: 3,
+  maxAnalysesPerMinute: 5,
+  maxLiveUrlPerMinute: 5,
+  maxLiveUrlPerHostPerMinute: 2,
   maxConcurrentLiveUrl: 1,
+  maxJevCallsPerAnalysis: 160,
   jevCallTimeoutMs: 8000,
-  perAnalysisTimeoutMs: 30000,
+  perAnalysisTimeoutMs: 15000,
   urlFetchTimeoutMs: 8000,
   urlFetchMaxBytes: 2 * 1024 * 1024,
   urlFetchMaxRedirects: 3,
@@ -110,7 +116,40 @@ export function loadConfig(env = process.env) {
       ),
       maxConcurrentLiveUrl: readInt(env, 'MEDIA_LENS_MAX_CONCURRENT_LIVE_URL', DEFAULT_LIMITS.maxConcurrentLiveUrl, {
         min: 0
-      })
+      }),
+      maxJevCallsPerAnalysis: readInt(
+        env,
+        'MEDIA_LENS_MAX_JEV_CALLS_PER_ANALYSIS',
+        DEFAULT_LIMITS.maxJevCallsPerAnalysis,
+        { min: 1, max: 10000 }
+      ),
+      perAnalysisTimeoutMs: readInt(
+        env,
+        'MEDIA_LENS_PER_ANALYSIS_TIMEOUT_MS',
+        DEFAULT_LIMITS.perAnalysisTimeoutMs,
+        { min: 1000, max: 300000 }
+      )
+    },
+    typesafeBudget: {
+      estimatedUsdPerCall: readNumber(
+        env,
+        'MEDIA_LENS_TYPESAFE_ESTIMATED_USD_PER_CALL',
+        DEFAULT_TYPESAFE_BUDGET.estimatedUsdPerCall,
+        { min: 0, max: 10 }
+      ),
+      estimatedTokensPerCall: readInt(
+        env,
+        'MEDIA_LENS_TYPESAFE_ESTIMATED_TOKENS_PER_CALL',
+        DEFAULT_TYPESAFE_BUDGET.estimatedTokensPerCall,
+        { min: 1, max: 1000000 }
+      ),
+      warnUsd: readNumber(env, 'MEDIA_LENS_TYPESAFE_BUDGET_WARN_USD', DEFAULT_TYPESAFE_BUDGET.warnUsd, { min: 0, max: 100000 }),
+      stopUsd: readNumber(env, 'MEDIA_LENS_TYPESAFE_BUDGET_STOP_USD', DEFAULT_TYPESAFE_BUDGET.stopUsd, { min: 0, max: 100000 })
+    },
+    alert: {
+      credentialPath: resolveAlertCredentialPath(env),
+      credentialPresent: Boolean(readAlertCredential(env)),
+      deliveryTestEnabled: env.MEDIA_LENS_ALERT_DELIVERY_TEST === 'true'
     },
     jev: {
       baseUrl: env.MEDIA_LENS_TYPESAFE_BASE_URL || 'https://api.typesafe.ai',
@@ -234,6 +273,19 @@ export function publicConfig(config) {
       maxBatch: config.classifierDev.maxBatch,
       maxDailyClassifications: config.classifierDev.maxDailyClassifications,
       minConfidenceForEscalation: config.classifierDev.minConfidenceForEscalation
+    },
+    typesafeBudget: {
+      estimatedUsdPerCall: config.typesafeBudget.estimatedUsdPerCall,
+      estimatedTokensPerCall: config.typesafeBudget.estimatedTokensPerCall,
+      warnUsd: config.typesafeBudget.warnUsd,
+      stopUsd: config.typesafeBudget.stopUsd,
+      basis: 'ESTIMATED'
+    },
+    alert: {
+      recipient: 'bthornton9415@gmail.com',
+      credentialConfigured: Boolean(config.alert.credentialPresent),
+      transport: config.alert.credentialPresent ? 'webhook_or_smtp_via_loadcredential' : BLOCKED_ALERT_TRANSPORT,
+      deliveryTestEnabled: Boolean(config.alert.deliveryTestEnabled)
     }
   };
 }

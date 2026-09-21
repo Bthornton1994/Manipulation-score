@@ -313,7 +313,8 @@ function emptySpanResult() {
     failures: 0,
     elapsedMs: 0,
     modelReported: null,
-    modelMatch: null
+    modelMatch: null,
+    capReached: false
   };
 }
 
@@ -345,7 +346,8 @@ function finalizeSpanResult(bucket, startedAt, modelReported) {
     failures: bucket.failedSpanIds.size,
     elapsedMs: Date.now() - startedAt,
     modelReported,
-    modelMatch: modelReported ? modelReported === MODEL_REQUESTED : null
+    modelMatch: modelReported ? modelReported === MODEL_REQUESTED : null,
+    capReached: Boolean(bucket.capReached)
   };
 }
 
@@ -443,6 +445,7 @@ export function createJevAdapter({
   fetchImpl = null,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   concurrency = DEFAULT_CONCURRENCY,
+  maxCallsPerAnalysis = null,
   lookupImpl = undefined,
   classifyImpl = undefined,
   createConnectionImpl = undefined,
@@ -497,9 +500,16 @@ export function createJevAdapter({
     if (mode === 'live') {
       const bucket = emptySpanResult();
       let modelReported = null;
+      const cap =
+        Number.isInteger(maxCallsPerAnalysis) && maxCallsPerAnalysis > 0 ? maxCallsPerAnalysis : null;
 
       await runWithConcurrency(spans, concurrency, async (span, index) => {
         if (signal?.aborted) return;
+        if (cap != null && bucket.calls >= cap) {
+          bucket.capReached = true;
+          recordUnavailable(bucket, span.id, 'jev_call_cap');
+          return;
+        }
         bucket.calls += 1;
         const before = spans[index - 1]?.text || null;
         const after = spans[index + 1]?.text || null;

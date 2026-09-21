@@ -55,7 +55,7 @@ MEDIA_LENS_TYPESAFE_BASE_URL=https://api.typesafe.ai   # or a documented mock
 MEDIA_LENS_HOST=127.0.0.1
 MEDIA_LENS_PORT=8787
 MEDIA_LENS_KILL_SWITCH_FILE=/var/lib/media-lens/KILL
-MEDIA_LENS_MAX_ANALYSES_PER_MINUTE=10
+MEDIA_LENS_MAX_ANALYSES_PER_MINUTE=5
 ```
 
 Expected: fixture and live pasted-text stay rejected for paste; `mode: "url"` returns `400 live_url_disabled`. No DNS for user URLs.
@@ -72,9 +72,9 @@ MEDIA_LENS_TYPESAFE_API_KEY=<secret store>
 MEDIA_LENS_HOST=127.0.0.1
 MEDIA_LENS_URL_ALLOWLIST=example.com,www.example.com
 MEDIA_LENS_KILL_SWITCH_FILE=/var/lib/media-lens/KILL
-MEDIA_LENS_MAX_ANALYSES_PER_MINUTE=10
-MEDIA_LENS_MAX_LIVE_URL_PER_MINUTE=10
-MEDIA_LENS_MAX_LIVE_URL_PER_HOST_PER_MINUTE=3
+MEDIA_LENS_MAX_ANALYSES_PER_MINUTE=5
+MEDIA_LENS_MAX_LIVE_URL_PER_MINUTE=5
+MEDIA_LENS_MAX_LIVE_URL_PER_HOST_PER_MINUTE=2
 MEDIA_LENS_MAX_CONCURRENT_LIVE_URL=1
 ```
 
@@ -103,16 +103,40 @@ Per worker process, fixed one-minute windows (except concurrency, which is in-fl
 
 | Limit | Default | Env override | When checked |
 | --- | --- | --- | --- |
-| Analyses / minute | 10 | `MEDIA_LENS_MAX_ANALYSES_PER_MINUTE` | Before the `/analyze` body is read |
-| Live URL attempts / minute | 10 | `MEDIA_LENS_MAX_LIVE_URL_PER_MINUTE` | After JSON parse, on `mode: "url"` |
-| Live URL attempts / host / minute | 3 | `MEDIA_LENS_MAX_LIVE_URL_PER_HOST_PER_MINUTE` | After JSON parse, on `mode: "url"` |
+| Analyses / minute | 5 | `MEDIA_LENS_MAX_ANALYSES_PER_MINUTE` | Before the `/analyze` body is read |
+| Live URL attempts / minute | 5 | `MEDIA_LENS_MAX_LIVE_URL_PER_MINUTE` | After JSON parse, on `mode: "url"` |
+| Live URL attempts / host / minute | 2 | `MEDIA_LENS_MAX_LIVE_URL_PER_HOST_PER_MINUTE` | After JSON parse, on `mode: "url"` |
 | Concurrent live URL fetches | 1 | `MEDIA_LENS_MAX_CONCURRENT_LIVE_URL` | After JSON parse, on `mode: "url"` |
 
 Only the analyses/minute limiter runs before the body is read. Live-URL, per-host, and concurrent limiters need `payload.mode` and the URL, so they run after JSON parse.
 
 Host budget keys on the exact hostname and a registrable-domain approximation (not the full Public Suffix List). Concurrent fetch is also serialized inside `safe-fetch.js`. Exhaustion returns `429 rate_limited`. Setting a live-URL max to `0` rejects all live URL attempts (an extra local brake, not a substitute for the kill switch).
 
-Other existing caps: 512 KiB request body, 60k prepared chars, 200 spans, 8s Jev call, 30s analysis, 8s URL fetch, 2 MiB URL bytes, 3 redirects. Oversized bodies are `413` unless the analyze rate limit already fired (`429` wins).
+Other existing caps: 512 KiB request body, 60k prepared chars, 200 spans, 160 Jev calls/analysis, 8s Jev call, 15s analysis, 8s URL fetch, 2 MiB URL bytes, 3 redirects. Live URL oversized input uses the exact abstention copy: “This public page is too long for Media Lens live analysis. No manipulation analysis or score was generated. Try a shorter public article.” Oversized bodies are `413` unless the analyze rate limit already fired (`429` wins).
+
+### Jev call cap and analysis timeout
+
+| Control | Default | Env override | Effect |
+| --- | --- | --- | --- |
+| Jev calls / analysis | 160 | `MEDIA_LENS_MAX_JEV_CALLS_PER_ANALYSIS` | Live Jev fail-closes to a controlled abstention graph when the span budget would exceed the cap |
+| Whole analysis timeout | 15s | `MEDIA_LENS_PER_ANALYSIS_TIMEOUT_MS` | Aborts in-flight Jev requests and retries via the shared pipeline `AbortController`; no work continues after timeout |
+
+### TypeSafe ESTIMATED monthly budget (Jev only)
+
+Figures are **ESTIMATED** planning math unless the operator has verified provider billing separately. The worker records call counts and ESTIMATED token inputs only; it never stores article or span text in budget records.
+
+| Control | Default | Env override | Effect |
+| --- | --- | --- | --- |
+| ESTIMATED USD / call | 0.002 | `MEDIA_LENS_TYPESAFE_ESTIMATED_USD_PER_CALL` | Multiplier for in-process monthly tracking |
+| ESTIMATED tokens / call | 1500 | `MEDIA_LENS_TYPESAFE_ESTIMATED_TOKENS_PER_CALL` | Recorded alongside calls; not article text |
+| Warn threshold | $20 | `MEDIA_LENS_TYPESAFE_BUDGET_WARN_USD` | Sends a budget warn alert once per UTC month when crossed |
+| Hard stop | $30 | `MEDIA_LENS_TYPESAFE_BUDGET_STOP_USD` | Live Jev fail-closes before new calls when the ESTIMATED month total would exceed the stop |
+
+### Alert delivery (budget warn)
+
+Recipient: `bthornton9415@gmail.com`. Credential path: systemd `LoadCredential=media-lens-alert` → `${CREDENTIALS_DIRECTORY}/media-lens-alert`, or explicit `MEDIA_LENS_ALERT_CREDENTIAL_FILE`. Never commit credentials to git, `worker.env`, or logs.
+
+Until a credential is injected on the host, real alert delivery remains **`BLOCKED_ALERT_TRANSPORT`**. CI uses mock transport only. Optional real delivery integration test runs only when `MEDIA_LENS_ALERT_DELIVERY_TEST=true` and a credential file is readable.
 
 ---
 

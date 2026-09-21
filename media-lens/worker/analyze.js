@@ -9,9 +9,20 @@ import { assembleGraph } from './graph.js';
 import { loadQuestionSet } from './adapters/jev.js';
 import { loadClassifierDevTaxonomy } from './classifier-dev/taxonomy.js';
 import { applyCascadeDispositions, cascadeEngineMeta, runSelectiveCascade } from './classifier-dev/cascade.js';
+import { LIVE_URL_OVERSIZED_MESSAGE } from './config.js';
 
 const SPAN_ROLES_EXCLUDED_FROM_JEV = new Set(['boilerplate', 'byline_meta']);
 const TIMED_OUT = Symbol('media-lens-analysis-timed-out');
+
+function oversizedInputMessage(prepared) {
+  if (prepared.artifact.inputMode === 'url') return LIVE_URL_OVERSIZED_MESSAGE;
+  return 'This article is longer than the analysis limit, so it was not processed. Try a shorter excerpt.';
+}
+
+function oversizedSpanMessage(prepared) {
+  if (prepared.artifact.inputMode === 'url') return LIVE_URL_OVERSIZED_MESSAGE;
+  return 'This article has more sections than the analysis limit allows, so it was not processed.';
+}
 
 async function resolveQuestionSetHash() {
   try {
@@ -73,6 +84,7 @@ async function buildAbstentionOnlyGraph({ prepared, reason, message, config, use
  * @param {object} args.jevAdapter - created by adapters/jev.js createJevAdapter
  * @param {object} args.newsjackAdapter - created by adapters/newsjack.js createNewsjackAdapter
  * @param {object|null} [args.classifierDevAdapter] - evaluation-only classifier.dev adapter
+ * @param {object|null} [args.typesafeBudget] - in-process ESTIMATED monthly budget tracker
  * @param {boolean} args.userAssertedPublic
  * @param {string|null} args.consentAt
  * @param {boolean} args.disclosureShown
@@ -83,6 +95,7 @@ export async function analyze({
   jevAdapter,
   newsjackAdapter,
   classifierDevAdapter = null,
+  typesafeBudget = null,
   userAssertedPublic,
   consentAt,
   disclosureShown = true
@@ -104,7 +117,7 @@ export async function analyze({
     return buildAbstentionOnlyGraph({
       prepared,
       reason: 'oversized_input',
-      message: 'This article is longer than the analysis limit, so it was not processed. Try a shorter excerpt.',
+      message: oversizedInputMessage(prepared),
       config,
       userAssertedPublic,
       consentAt
@@ -114,7 +127,40 @@ export async function analyze({
     return buildAbstentionOnlyGraph({
       prepared,
       reason: 'oversized_input',
-      message: 'This article has more sections than the analysis limit allows, so it was not processed.',
+      message: oversizedSpanMessage(prepared),
+      config,
+      userAssertedPublic,
+      consentAt
+    });
+  }
+
+  const spansForJev = prepared.spans.filter((s) => !SPAN_ROLES_EXCLUDED_FROM_JEV.has(s.role));
+  const maxJevCalls = config.limits.maxJevCallsPerAnalysis;
+  if (jevAdapter.mode === 'live' && spansForJev.length > maxJevCalls) {
+    return buildAbstentionOnlyGraph({
+      prepared,
+      reason: 'engine_unavailable',
+      message: 'This analysis would exceed the configured Jev call cap, so no manipulation analysis or score was generated.',
+      config,
+      userAssertedPublic,
+      consentAt
+    });
+  }
+  if (jevAdapter.mode === 'live' && typesafeBudget?.isStopped?.()) {
+    return buildAbstentionOnlyGraph({
+      prepared,
+      reason: 'engine_unavailable',
+      message: 'TypeSafe ESTIMATED monthly spend reached the configured stop threshold, so no live Jev analysis was performed.',
+      config,
+      userAssertedPublic,
+      consentAt
+    });
+  }
+  if (jevAdapter.mode === 'live' && typesafeBudget?.wouldExceed?.(spansForJev.length)) {
+    return buildAbstentionOnlyGraph({
+      prepared,
+      reason: 'engine_unavailable',
+      message: 'This analysis would exceed the configured TypeSafe ESTIMATED monthly budget, so no live Jev analysis was performed.',
       config,
       userAssertedPublic,
       consentAt
@@ -129,12 +175,22 @@ export async function analyze({
   const pipelineAbortController = new AbortController();
 
   async function runPipeline() {
-    const spansForJev = prepared.spans.filter((s) => !SPAN_ROLES_EXCLUDED_FROM_JEV.has(s.role));
     const jevResult = await jevAdapter.analyzeSpans(
       spansForJev,
       { kind: prepared.artifact.kind, title: prepared.artifact.title },
       { signal: pipelineAbortController.signal }
     );
+
+    if (jevAdapter.mode === 'live' && (jevResult.capReached || jevResult.calls > maxJevCalls)) {
+      return buildAbstentionOnlyGraph({
+        prepared,
+        reason: 'engine_unavailable',
+        message: 'This analysis exceeded the configured Jev call cap, so no manipulation analysis or score was generated.',
+        config,
+        userAssertedPublic,
+        consentAt
+      });
+    }
 
     const newsjackResult = await newsjackAdapter.getStoryContext({
       url: prepared.artifact.url,
@@ -264,4 +320,4 @@ export async function analyze({
   }
 }
 
-export { buildAbstentionOnlyGraph };
+export { buildAbstentionOnlyGraph, LIVE_URL_OVERSIZED_MESSAGE, oversizedInputMessage };

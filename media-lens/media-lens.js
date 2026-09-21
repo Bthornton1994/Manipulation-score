@@ -328,7 +328,7 @@ function renderCoverageOrigin(coverage) {
   }
   const rows = [
     ['Original source', origin.original_source || 'Unknown'],
-    ['First public', origin.first_public_at || 'Unknown'],
+    ['First public', formatTimestamp(origin.first_public_at) || 'Unknown'],
     ['Same-story assessment', (origin.same_story_assessment || 'unknown').replace(/_/g, ' ')]
   ];
   const rationale = origin.rationale
@@ -389,11 +389,21 @@ function renderEngineStats(graph) {
   return stats.map(([label, value]) => statRow(label, value)).join('');
 }
 
+function formatTimestamp(value, precision) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  if (precision === 'none') return 'Unknown';
+  const iso = date.toISOString();
+  if (precision === 'date') return iso.slice(0, 10);
+  return `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
+}
+
 function formatArtifactMeta(artifact) {
   const parts = [];
   if (artifact.byline) parts.push(artifact.byline);
   if (artifact.publisher?.domain) parts.push(artifact.publisher.domain);
-  if (artifact.published_at) parts.push(artifact.published_at);
+  if (artifact.published_at) parts.push(formatTimestamp(artifact.published_at, artifact.timestamp_precision));
   if (artifact.paywall_detected) parts.push('Paywall detected');
   if (artifact.kind) parts.push(artifact.kind.replace(/_/g, ' '));
   return parts.join(' · ');

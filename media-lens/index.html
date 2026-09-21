@@ -38,6 +38,12 @@
     </header>
 
     <main id="main" class="ml-main" tabindex="-1">
+      <p class="ml-status ml-error-banner" id="analyze-error" data-state="error" role="alert" tabindex="-1" hidden></p>
+      <div class="ml-error-actions" id="error-actions" hidden>
+        <button class="button" type="button" id="analyze-retry">Retry</button>
+        <button class="button button-secondary" type="button" id="analyze-reset">Start over</button>
+      </div>
+
       <div id="landing-view">
         <section class="ml-hero" aria-labelledby="ml-hero-heading">
           <div class="ml-hero-copy">
@@ -215,12 +221,6 @@
         </ol>
         <button class="button button-secondary" type="button" id="analyze-cancel">Cancel analysis</button>
       </section>
-
-      <p class="ml-status ml-error-banner" id="analyze-error" data-state="error" role="alert" tabindex="-1" hidden></p>
-      <div class="ml-error-actions" id="error-actions" hidden>
-        <button class="button" type="button" id="analyze-retry">Retry</button>
-        <button class="button button-secondary" type="button" id="analyze-reset">Start over</button>
-      </div>
 
       <!-- Info fix: a small, dedicated live region announces a brief
            summary on each update, instead of aria-live on the whole

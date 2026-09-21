@@ -1,11 +1,14 @@
-// Media Lens renderer. Talks only to the local worker at the two loopback
-// origins allowed by this page's CSP. This file runs in the browser and
-// never reads Node-style environment variables, never writes to
-// localStorage/sessionStorage/indexedDB, and never persists full article
-// text: it only holds the current in-memory graph until the page is
-// closed or a new analysis replaces it.
+// Media Lens renderer. The browser talks to the worker through the same
+// origin when this page is served by the approved live host, or through the
+// loopback worker during local fixture development. This file never reads
+// Node-style environment variables, never writes to localStorage,
+// sessionStorage, or indexedDB, and never persists full article text.
 
-const WORKER_BASE_URL = 'http://127.0.0.1:8787';
+const LOCAL_WORKER_BASE_URL = 'http://127.0.0.1:8787';
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
+const LIVE_SCOPE_MESSAGE = 'Live URL is experimental and not production-ready for general use.';
+const OVERSIZED_INPUT_MESSAGE =
+  'This public page is too long for Media Lens live analysis. No manipulation analysis or score was generated. Try a shorter public article.';
 
 const ALLOWED_UI_PHRASES = new Set([
   'Observed influence signal',
@@ -16,10 +19,44 @@ const ALLOWED_UI_PHRASES = new Set([
 ]);
 
 let currentGraph = null;
+let liveUrlReady = false;
+let isSubmitting = false;
 // L3: capture the moment the consent checkbox is actually checked, so the
 // worker can record *that* timestamp as artifact.authorization.consent_at
 // instead of only ever seeing server-receive time.
 let consentCheckedAt = null;
+
+function isLocalPreviewPage() {
+  return window.location.protocol === 'file:' || LOCAL_HOSTNAMES.has(window.location.hostname);
+}
+
+function normalizeBaseUrl(value) {
+  if (!value) return '';
+  try {
+    const url = new URL(value, window.location.href);
+    if (!['http:', 'https:'].includes(url.protocol)) return '';
+    return url.href.replace(/\/+$/, '');
+  } catch {
+    return '';
+  }
+}
+
+function resolveWorkerBaseUrl() {
+  const configured = document.querySelector('meta[name="media-lens-api-base"]')?.content?.trim();
+  const configuredUrl = normalizeBaseUrl(configured);
+  if (configuredUrl) return configuredUrl;
+  if (isLocalPreviewPage()) return LOCAL_WORKER_BASE_URL;
+  return window.location.origin;
+}
+
+const IS_LOCAL_PREVIEW = isLocalPreviewPage();
+const WORKER_BASE_URL = resolveWorkerBaseUrl();
+
+function updateUrlInputAvailability() {
+  const articleUrl = byId('article-url');
+  const mode = document.querySelector('input[name="input-mode"]:checked')?.value || 'fixture';
+  if (articleUrl) articleUrl.disabled = mode !== 'url' || IS_LOCAL_PREVIEW || !liveUrlReady;
+}
 
 function byId(id) {
   return document.getElementById(id);
@@ -32,13 +69,36 @@ async function checkHealth() {
     const res = await fetch(`${WORKER_BASE_URL}/health`, { method: 'GET' });
     if (!res.ok) throw new Error(`health check failed with status ${res.status}`);
     const health = await res.json();
+    liveUrlReady =
+      !IS_LOCAL_PREVIEW &&
+      health.mode === 'live' &&
+      health.liveEnabled === true &&
+      health.liveUrlEnabled === true &&
+      health.killSwitch !== true &&
+      health.jev?.hasApiKey === true;
     statusEl.dataset.state = 'ready';
-    textEl.textContent = `Worker reachable: ${health.mode} mode.`;
+    if (IS_LOCAL_PREVIEW) {
+      textEl.textContent = `Worker reachable: ${health.mode} mode.`;
+    } else if (health.killSwitch === true) {
+      textEl.textContent = 'Live analysis is paused by the operator kill switch.';
+      statusEl.dataset.state = 'error';
+    } else if (liveUrlReady) {
+      textEl.textContent = `Live URL ready for approved public sources. Jev only. ${LIVE_SCOPE_MESSAGE}`;
+    } else {
+      textEl.textContent = 'Worker reachable, but live URL analysis is not currently available.';
+      statusEl.dataset.state = 'error';
+    }
+    updateUrlInputAvailability();
+    updateSubmitEnabled();
     return true;
   } catch {
+    liveUrlReady = false;
     statusEl.dataset.state = 'error';
-    textEl.textContent =
-      'No local worker found at 127.0.0.1:8787. Start it with: node media-lens/worker/server.js (from the repository root).';
+    textEl.textContent = IS_LOCAL_PREVIEW
+      ? 'No local worker found at 127.0.0.1:8787. Start it with: node media-lens/worker/server.js.'
+      : 'The Media Lens service is unavailable. Try again later.';
+    updateUrlInputAvailability();
+    updateSubmitEnabled();
     return false;
   }
 }
@@ -46,8 +106,15 @@ async function checkHealth() {
 function updateSubmitEnabled() {
   const consent = byId('consent-checkbox');
   const submit = byId('analyze-submit');
-  submit.disabled = !consent.checked;
-  consentCheckedAt = consent.checked ? new Date().toISOString() : null;
+  const mode = document.querySelector('input[name="input-mode"]:checked')?.value || 'fixture';
+  const articleUrl = byId('article-url')?.value.trim() || '';
+  const hasInput =
+    mode === 'fixture' ||
+    (mode === 'pasted_text' && byId('pasted-text')?.value.trim()) ||
+    (mode === 'url' && articleUrl && liveUrlReady);
+  submit.disabled = isSubmitting || !consent.checked || !hasInput;
+  if (consent.checked && !consentCheckedAt) consentCheckedAt = new Date().toISOString();
+  if (!consent.checked) consentCheckedAt = null;
 }
 
 function setupInputModeToggle() {
@@ -55,15 +122,30 @@ function setupInputModeToggle() {
   const fixtureField = byId('fixture-field');
   const pastedField = byId('pasted-text-field');
   const urlField = byId('url-field');
+  const fixtureRadio = document.querySelector('input[name="input-mode"][value="fixture"]');
+  const pastedRadio = document.querySelector('input[name="input-mode"][value="pasted_text"]');
+  const urlRadio = document.querySelector('input[name="input-mode"][value="url"]');
+  const articleUrl = byId('article-url');
+
+  if (!IS_LOCAL_PREVIEW) {
+    fixtureRadio.disabled = true;
+    pastedRadio.disabled = true;
+    fixtureRadio.closest('label').hidden = true;
+    pastedRadio.closest('label').hidden = true;
+    urlRadio.checked = true;
+  }
 
   function apply() {
     const mode = document.querySelector('input[name="input-mode"]:checked')?.value || 'fixture';
     fixtureField.hidden = mode !== 'fixture';
     pastedField.hidden = mode !== 'pasted_text';
     urlField.hidden = mode !== 'url';
+    updateUrlInputAvailability();
+    updateSubmitEnabled();
   }
 
   radios.forEach((radio) => radio.addEventListener('change', apply));
+  articleUrl.addEventListener('input', updateSubmitEnabled);
   apply();
 }
 
@@ -229,6 +311,29 @@ function showError(message) {
 
 function clearError() {
   byId('analyze-error').hidden = true;
+  byId('article-url').setAttribute('aria-invalid', 'false');
+}
+
+function setUrlError(message) {
+  byId('article-url').setAttribute('aria-invalid', 'true');
+  showError(message);
+}
+
+function apiErrorMessage(body, status) {
+  switch (body?.error) {
+    case 'live_url_not_allowlisted':
+      return 'This source is not currently approved for live analysis. Try an approved public URL.';
+    case 'oversized_input':
+      return OVERSIZED_INPUT_MESSAGE;
+    case 'live_killed':
+      return 'Live analysis is temporarily paused by the operator. No analysis was run.';
+    case 'live_url_disabled':
+      return 'Live URL analysis is temporarily unavailable. No analysis was run.';
+    case 'rate_limited':
+      return body.message || 'The service is busy. Wait a minute and try again.';
+    default:
+      return body?.message || `The Media Lens service returned an error (${status}).`;
+  }
 }
 
 async function handleSubmit(event) {
@@ -250,13 +355,39 @@ async function handleSubmit(event) {
     payload.text = byId('pasted-text').value;
     payload.kind = 'other_public';
   } else if (mode === 'url') {
-    showError('URL analysis is experimental and not production-ready. It is not available in this preview.');
-    return;
+    const url = byId('article-url').value.trim();
+    if (!url) {
+      setUrlError('Enter an approved public URL.');
+      return;
+    }
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      setUrlError('Enter a complete https:// URL.');
+      return;
+    }
+    if (parsedUrl.protocol !== 'https:') {
+      setUrlError('Use an https:// public URL.');
+      return;
+    }
+    if (IS_LOCAL_PREVIEW) {
+      showError('Live URL analysis is available from the approved Media Lens host. Use a fixture example for local development.');
+      return;
+    }
+    if (!liveUrlReady) {
+      showError('Live URL analysis is temporarily unavailable. No analysis was run.');
+      return;
+    }
+    payload.url = url;
+    payload.kind = 'article';
   }
 
   const submitButton = byId('analyze-submit');
+  isSubmitting = true;
   submitButton.disabled = true;
   submitButton.textContent = 'Analyzing...';
+  byId('analyze-form').setAttribute('aria-busy', 'true');
 
   try {
     const res = await fetch(`${WORKER_BASE_URL}/analyze`, {
@@ -264,16 +395,18 @@ async function handleSubmit(event) {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    const body = await res.json();
+    const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      showError(body.message || `The worker returned an error (${res.status}).`);
+      showError(apiErrorMessage(body, res.status));
       return;
     }
     renderGraph(body);
   } catch (err) {
-    showError('Could not reach the local worker. Confirm it is running and try again.');
+    showError(IS_LOCAL_PREVIEW ? 'Could not reach the local worker. Confirm it is running and try again.' : 'Could not reach the Media Lens service. Try again later.');
   } finally {
-    submitButton.disabled = !byId('consent-checkbox').checked;
+    isSubmitting = false;
+    byId('analyze-form').removeAttribute('aria-busy');
+    updateSubmitEnabled();
     submitButton.textContent = 'Analyze';
   }
 }
@@ -281,6 +414,7 @@ async function handleSubmit(event) {
 function setup() {
   setupInputModeToggle();
   byId('consent-checkbox').addEventListener('change', updateSubmitEnabled);
+  byId('pasted-text').addEventListener('input', updateSubmitEnabled);
   byId('analyze-form').addEventListener('submit', handleSubmit);
   byId('export-json-btn').addEventListener('click', () => {
     if (!currentGraph) {

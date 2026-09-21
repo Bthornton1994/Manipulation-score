@@ -362,7 +362,9 @@ export function createServer(config = loadConfig(), options = {}) {
       estimatedUsdPerCall: config.typesafeBudget.estimatedUsdPerCall,
       estimatedTokensPerCall: config.typesafeBudget.estimatedTokensPerCall,
       warnUsd: config.typesafeBudget.warnUsd,
-      stopUsd: config.typesafeBudget.stopUsd
+      stopUsd: config.typesafeBudget.stopUsd,
+      storePath: config.typesafeBudget.storeFile,
+      io: options.budgetIo || {}
     });
   const alertTransport =
     options.alertTransport ||

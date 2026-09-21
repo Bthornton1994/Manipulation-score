@@ -20,6 +20,7 @@ import {
   resolveClassifierDevBaseUrl
 } from './classifier-dev/contract.js';
 import { DEFAULT_TYPESAFE_BUDGET } from './typesafe-budget.js';
+import { DEFAULT_TYPESAFE_BUDGET_STORE_FILE } from './typesafe-budget-store.js';
 import { BLOCKED_ALERT_TRANSPORT, readAlertCredential, resolveAlertCredentialPath } from './alert.js';
 
 export const LIVE_URL_OVERSIZED_MESSAGE =
@@ -144,7 +145,11 @@ export function loadConfig(env = process.env) {
         { min: 1, max: 1000000 }
       ),
       warnUsd: readNumber(env, 'MEDIA_LENS_TYPESAFE_BUDGET_WARN_USD', DEFAULT_TYPESAFE_BUDGET.warnUsd, { min: 0, max: 100000 }),
-      stopUsd: readNumber(env, 'MEDIA_LENS_TYPESAFE_BUDGET_STOP_USD', DEFAULT_TYPESAFE_BUDGET.stopUsd, { min: 0, max: 100000 })
+      stopUsd: readNumber(env, 'MEDIA_LENS_TYPESAFE_BUDGET_STOP_USD', DEFAULT_TYPESAFE_BUDGET.stopUsd, { min: 0, max: 100000 }),
+      storeFile:
+        typeof env.MEDIA_LENS_TYPESAFE_BUDGET_FILE === 'string' && env.MEDIA_LENS_TYPESAFE_BUDGET_FILE
+          ? env.MEDIA_LENS_TYPESAFE_BUDGET_FILE
+          : DEFAULT_TYPESAFE_BUDGET_STORE_FILE
     },
     alert: {
       credentialPath: resolveAlertCredentialPath(env),
@@ -279,6 +284,7 @@ export function publicConfig(config) {
       estimatedTokensPerCall: config.typesafeBudget.estimatedTokensPerCall,
       warnUsd: config.typesafeBudget.warnUsd,
       stopUsd: config.typesafeBudget.stopUsd,
+      storeFile: config.typesafeBudget.storeFile,
       basis: 'ESTIMATED'
     },
     alert: {

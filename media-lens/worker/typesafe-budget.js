@@ -1,6 +1,13 @@
-// In-process ESTIMATED TypeSafe (Jev) spend tracker for a single worker.
+// ESTIMATED TypeSafe (Jev) spend tracker with optional durable month counter.
 // Figures are planning estimates only unless the operator has verified
 // provider billing. Never records article or span text.
+
+import {
+  DEFAULT_TYPESAFE_BUDGET_STORE_FILE,
+  readBudgetStore,
+  TYPESAFE_BUDGET_STORE_VERSION,
+  writeBudgetStore
+} from './typesafe-budget-store.js';
 
 export const DEFAULT_TYPESAFE_BUDGET = Object.freeze({
   estimatedUsdPerCall: 0.002,
@@ -19,12 +26,37 @@ export function createTypesafeBudget({
   estimatedTokensPerCall = DEFAULT_TYPESAFE_BUDGET.estimatedTokensPerCall,
   warnUsd = DEFAULT_TYPESAFE_BUDGET.warnUsd,
   stopUsd = DEFAULT_TYPESAFE_BUDGET.stopUsd,
+  storePath = null,
+  io = {},
   now = () => Date.now()
 } = {}) {
-  let month = utcMonthKey(now());
-  let calls = 0;
-  let estimatedTokens = 0;
-  let warnEmitted = false;
+  const currentMonth = utcMonthKey(now());
+  const persisted = storePath ? readBudgetStore(storePath, io) : null;
+  let month = persisted && persisted.month === currentMonth ? persisted.month : currentMonth;
+  let calls = persisted && persisted.month === currentMonth ? persisted.calls : 0;
+  let estimatedTokens = persisted && persisted.month === currentMonth ? persisted.estimatedTokens : 0;
+  let warnEmitted = persisted && persisted.month === currentMonth ? persisted.warnEmitted : false;
+
+  function persist() {
+    if (!storePath) return;
+    try {
+      writeBudgetStore(
+        storePath,
+        {
+          version: TYPESAFE_BUDGET_STORE_VERSION,
+          month,
+          calls,
+          estimatedTokens,
+          warnEmitted
+        },
+        io
+      );
+    } catch {
+      // Best-effort durability: in-memory counters still apply for this process.
+      // Production expects MEDIA_LENS_TYPESAFE_BUDGET_FILE (default
+      // /var/lib/media-lens/typesafe-budget.json) to be writable by the worker user.
+    }
+  }
 
   function roll() {
     const current = utcMonthKey(now());
@@ -33,6 +65,7 @@ export function createTypesafeBudget({
       calls = 0;
       estimatedTokens = 0;
       warnEmitted = false;
+      persist();
     }
   }
 
@@ -49,6 +82,7 @@ export function createTypesafeBudget({
         estimatedTokens,
         estimatedUsd: estimatedUsdForCallCount(calls),
         basis: 'ESTIMATED',
+        persisted: Boolean(storePath),
         calculationInputs: {
           estimatedUsdPerCall,
           estimatedTokensPerCall,
@@ -81,6 +115,7 @@ export function createTypesafeBudget({
       else if (estimatedUsd >= warnUsd) level = 'warn';
       const shouldWarn = estimatedUsd >= warnUsd && !warnEmitted;
       if (shouldWarn) warnEmitted = true;
+      persist();
       return {
         month,
         calls,
@@ -100,3 +135,5 @@ export function createTypesafeBudget({
     }
   };
 }
+
+export { DEFAULT_TYPESAFE_BUDGET_STORE_FILE };

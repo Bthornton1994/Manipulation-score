@@ -119,7 +119,7 @@ Other existing caps: 512 KiB request body, 60k prepared chars, 200 spans, 160 Je
 | Control | Default | Env override | Effect |
 | --- | --- | --- | --- |
 | Jev calls / analysis | 160 | `MEDIA_LENS_MAX_JEV_CALLS_PER_ANALYSIS` | Live Jev fail-closes to a controlled abstention graph when the span budget would exceed the cap |
-| Whole analysis timeout | 15s | `MEDIA_LENS_PER_ANALYSIS_TIMEOUT_MS` | Aborts in-flight Jev requests and retries via the shared pipeline `AbortController`; no work continues after timeout |
+| Whole analysis timeout | 15s | `MEDIA_LENS_PER_ANALYSIS_TIMEOUT_MS` | Aborts in-flight Jev requests and retries via the shared pipeline `AbortController`; newsjack and downstream adapters do not run after the fail-closed timeout response |
 
 ### TypeSafe ESTIMATED monthly budget (Jev only)
 
@@ -131,6 +131,8 @@ Figures are **ESTIMATED** planning math unless the operator has verified provide
 | ESTIMATED tokens / call | 1500 | `MEDIA_LENS_TYPESAFE_ESTIMATED_TOKENS_PER_CALL` | Recorded alongside calls; not article text |
 | Warn threshold | $20 | `MEDIA_LENS_TYPESAFE_BUDGET_WARN_USD` | Sends a budget warn alert once per UTC month when crossed |
 | Hard stop | $30 | `MEDIA_LENS_TYPESAFE_BUDGET_STOP_USD` | Live Jev fail-closes before new calls when the ESTIMATED month total would exceed the stop |
+
+**Durable counter file (not LoadCredential):** default `/var/lib/media-lens/typesafe-budget.json`, override with `MEDIA_LENS_TYPESAFE_BUDGET_FILE`. The worker creates the parent directory if needed and writes atomically with mode `0600`. Store only `month`, `calls`, `estimatedTokens`, `warnEmitted`, and a schema `version`. No article text, URLs, or credentials. Owner: the same unprivileged user running the worker (recommended). Survives process restart within the same UTC month; rolls forward automatically on month change.
 
 ### Alert delivery (budget warn)
 

@@ -13,6 +13,7 @@
 
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { abortableDelay, throwIfAborted } from '../abort-utils.js';
 import { normalizedURLKey } from '../url-key.js';
 
 export function emptyStoryContext(provenance = 'none') {
@@ -24,12 +25,14 @@ export function emptyStoryContext(provenance = 'none') {
   };
 }
 
-async function readFixture(fixtureDir, fixtureId) {
+async function readFixture(fixtureDir, fixtureId, signal) {
+  throwIfAborted(signal);
   const path = join(fixtureDir, `${fixtureId}.json`);
   let raw;
   try {
-    raw = await readFile(path, 'utf8');
-  } catch {
+    raw = await readFile(path, { encoding: 'utf8', signal });
+  } catch (err) {
+    if (err?.name === 'AbortError') throw err;
     return emptyStoryContext('none');
   }
   const parsed = JSON.parse(raw);
@@ -41,25 +44,27 @@ async function readFixture(fixtureDir, fixtureId) {
   };
 }
 
-async function readArtifactsDir(artifactsDir, { url, canonical_url }) {
+async function readArtifactsDir(artifactsDir, { url, canonical_url, signal }) {
+  throwIfAborted(signal);
   let entries;
   try {
-    entries = await readdir(artifactsDir);
-  } catch {
+    entries = await readdir(artifactsDir, { signal });
+  } catch (err) {
+    if (err?.name === 'AbortError') throw err;
     return emptyStoryContext('none');
   }
   const candidatesFile = entries.find((f) => f === 'candidates.json');
   const clusterFile = entries.find((f) => f === 'cluster.json');
   if (!candidatesFile) return emptyStoryContext('none');
 
-  const candidates = JSON.parse(await readFile(join(artifactsDir, candidatesFile), 'utf8'));
+  const candidates = JSON.parse(await readFile(join(artifactsDir, candidatesFile), { encoding: 'utf8', signal }));
   const targetKey = normalizedURLKey(canonical_url) || normalizedURLKey(url);
   const match = (Array.isArray(candidates) ? candidates : candidates.items || []).find((c) => normalizedURLKey(c.url) === targetKey);
   if (!match) return emptyStoryContext('none');
 
   let cluster = null;
   if (clusterFile) {
-    const clusterData = JSON.parse(await readFile(join(artifactsDir, clusterFile), 'utf8'));
+    const clusterData = JSON.parse(await readFile(join(artifactsDir, clusterFile), { encoding: 'utf8', signal }));
     cluster = (Array.isArray(clusterData) ? clusterData : clusterData.clusters || []).find(
       (c) => (c.members || []).some((m) => normalizedURLKey(m.url) === targetKey)
     ) || null;
@@ -77,15 +82,17 @@ async function readArtifactsDir(artifactsDir, { url, canonical_url }) {
  * Create a Newsjack adapter bound to a mode.
  */
 export function createNewsjackAdapter({ mode, fixtureId = null, fixtureDir = null, artifactsDir = null }) {
-  async function getStoryContext({ url, canonical_url, title, published_at }) {
+  async function getStoryContext({ url, canonical_url, title, published_at, signal } = {}) {
+    throwIfAborted(signal);
     if (mode === 'disabled') return emptyStoryContext('none');
     if (mode === 'fixture') {
       if (!fixtureId) return emptyStoryContext('none');
-      return readFixture(fixtureDir, fixtureId);
+      return readFixture(fixtureDir, fixtureId, signal);
     }
     if (mode === 'artifacts') {
       if (!artifactsDir) return emptyStoryContext('none');
-      return readArtifactsDir(artifactsDir, { url, canonical_url, title, published_at });
+      await abortableDelay(0, signal);
+      return readArtifactsDir(artifactsDir, { url, canonical_url, title, published_at, signal });
     }
     if (mode === 'cli') {
       throw new Error('Newsjack CLI mode is not implemented in v1 (see plan section 6 / 11)');

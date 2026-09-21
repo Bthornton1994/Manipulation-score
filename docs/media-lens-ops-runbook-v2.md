@@ -132,7 +132,7 @@ Figures are **ESTIMATED** planning math unless the operator has verified provide
 | Warn threshold | $20 | `MEDIA_LENS_TYPESAFE_BUDGET_WARN_USD` | Sends a budget warn alert once per UTC month when crossed |
 | Hard stop | $30 | `MEDIA_LENS_TYPESAFE_BUDGET_STOP_USD` | Live Jev fail-closes before new calls when the ESTIMATED month total would exceed the stop |
 
-**Durable counter file (not LoadCredential):** default `/var/lib/media-lens/typesafe-budget.json`, override with `MEDIA_LENS_TYPESAFE_BUDGET_FILE`. The worker creates the parent directory if needed and writes atomically with mode `0600`. Store only `month`, `calls`, `estimatedTokens`, `warnEmitted`, and a schema `version`. No article text, URLs, or credentials. Owner: the same unprivileged user running the worker (recommended). Survives process restart within the same UTC month; rolls forward automatically on month change.
+**Durable counter file (not LoadCredential):** default `/var/lib/media-lens/typesafe-budget.json`, override with `MEDIA_LENS_TYPESAFE_BUDGET_FILE`. Updates use an exclusive lock file (`typesafe-budget.json.lock`, mode `0600`) plus atomic tmp/rename writes so concurrent worker processes cannot lose increments. The worker creates the parent directory if needed and writes atomically with mode `0600`. Store only `month`, `calls`, `estimatedTokens`, `warnEmitted`, and a schema `version`. No article text, URLs, or credentials. Owner: the same unprivileged user running the worker (recommended). Survives process restart within the same UTC month; rolls forward automatically on month change.
 
 ### Alert delivery (budget warn)
 
@@ -148,7 +148,7 @@ Supported credential file contents (choose one; never log the file contents):
 | JSON webhook | `{"type":"webhook","url":"https://hooks.example.test/media-lens-alert"}` |
 | Raw HTTPS webhook | `https://hooks.example.test/media-lens-alert` |
 
-SMTP delivery uses authenticated SMTP (`AUTH LOGIN`) over `smtp://` (STARTTLS when advertised) or implicit TLS on `smtps://`. Default ports: 587 for `smtp://`, 465 for `smtps://` when omitted. Webhook delivery POSTs JSON `{ to, subject, text }` to the configured HTTPS URL.
+SMTP delivery uses authenticated SMTP (`AUTH LOGIN`) only after TLS: `smtp://` requires STARTTLS on port 587 (plaintext AUTH is rejected when STARTTLS is missing); prefer `smtps://` on port 465 for implicit TLS. Webhook delivery accepts **https:// only** and POSTs JSON `{ to, subject, text }` to the configured URL.
 
 Until a valid credential is injected on the host, real alert delivery remains **`BLOCKED_ALERT_TRANSPORT`**. CI uses mock transport only. Optional real delivery integration test runs only when `MEDIA_LENS_ALERT_DELIVERY_TEST=true` and a credential file is readable.
 

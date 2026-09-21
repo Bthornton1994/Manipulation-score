@@ -10,6 +10,7 @@ import { loadQuestionSet } from './adapters/jev.js';
 import { loadClassifierDevTaxonomy } from './classifier-dev/taxonomy.js';
 import { applyCascadeDispositions, cascadeEngineMeta, runSelectiveCascade } from './classifier-dev/cascade.js';
 import { LIVE_URL_OVERSIZED_MESSAGE } from './config.js';
+import { isAbortError } from './abort-utils.js';
 
 const SPAN_ROLES_EXCLUDED_FROM_JEV = new Set(['boilerplate', 'byline_meta']);
 const TIMED_OUT = Symbol('media-lens-analysis-timed-out');
@@ -24,11 +25,12 @@ function oversizedSpanMessage(prepared) {
   return 'This article has more sections than the analysis limit allows, so it was not processed.';
 }
 
-async function resolveQuestionSetHash() {
+async function resolveQuestionSetHash(signal) {
   try {
-    const questionSet = await loadQuestionSet();
+    const questionSet = await loadQuestionSet({ signal });
     return questionSet.sha256;
-  } catch {
+  } catch (err) {
+    if (isAbortError(err)) throw err;
     return null;
   }
 }
@@ -200,12 +202,19 @@ export async function analyze({
 
     if (pipelineTimedOut()) return TIMED_OUT;
 
-    const newsjackResult = await newsjackAdapter.getStoryContext({
-      url: prepared.artifact.url,
-      canonical_url: prepared.artifact.canonicalUrl,
-      title: prepared.artifact.title,
-      published_at: prepared.artifact.publishedAt
-    });
+    let newsjackResult;
+    try {
+      newsjackResult = await newsjackAdapter.getStoryContext({
+        url: prepared.artifact.url,
+        canonical_url: prepared.artifact.canonicalUrl,
+        title: prepared.artifact.title,
+        published_at: prepared.artifact.publishedAt,
+        signal
+      });
+    } catch (err) {
+      if (isAbortError(err) || pipelineTimedOut()) return TIMED_OUT;
+      throw err;
+    }
     if (pipelineTimedOut()) return TIMED_OUT;
 
     const fusionResult = fuse({
@@ -225,7 +234,13 @@ export async function analyze({
     const classifierDevOn = Boolean(classifierDevAdapter?.enabled);
     if (classifierDevOn) {
       if (pipelineTimedOut()) return TIMED_OUT;
-      const taxonomy = await loadClassifierDevTaxonomy();
+      let taxonomy;
+      try {
+        taxonomy = await loadClassifierDevTaxonomy({ signal });
+      } catch (err) {
+        if (isAbortError(err) || pipelineTimedOut()) return TIMED_OUT;
+        throw err;
+      }
       if (pipelineTimedOut()) return TIMED_OUT;
       cascadeResult = await runSelectiveCascade({
         spans: spansForJev,
@@ -243,7 +258,13 @@ export async function analyze({
     const cascadeElapsedMs = Date.now() - cascadeStarted;
 
     const completedAt = new Date().toISOString();
-    const questionSetHash = await resolveQuestionSetHash();
+    let questionSetHash;
+    try {
+      questionSetHash = await resolveQuestionSetHash(signal);
+    } catch (err) {
+      if (isAbortError(err) || pipelineTimedOut()) return TIMED_OUT;
+      throw err;
+    }
 
     const externalProcessing = [];
     if (jevAdapter.mode === 'live') {

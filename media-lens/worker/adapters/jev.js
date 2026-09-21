@@ -54,13 +54,13 @@ const SIGNAL_NONE = 'none';
 
 let cachedQuestionSet = null;
 
-export async function loadQuestionSet() {
+export async function loadQuestionSet({ signal } = {}) {
   if (cachedQuestionSet) return cachedQuestionSet;
-  const raw = await readFile(QUESTIONS_PATH, 'utf8');
+  const raw = await readFile(QUESTIONS_PATH, { encoding: 'utf8', signal });
   const questions = JSON.parse(raw);
   const optionIds = validateQuestionSetContract(questions);
   const sha256 = createHash('sha256').update(canonicalStringify(questions), 'utf8').digest('hex');
-  const committed = (await readFile(QUESTIONS_HASH_PATH, 'utf8')).trim();
+  const committed = (await readFile(QUESTIONS_HASH_PATH, { encoding: 'utf8', signal })).trim();
   cachedQuestionSet = { questions, sha256, committed, name: QUESTION_SET_NAME, optionIds };
   return cachedQuestionSet;
 }

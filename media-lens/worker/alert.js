@@ -48,7 +48,7 @@ export function parseCredential(raw) {
     try {
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object') return null;
-      if (parsed.type === 'webhook' && typeof parsed.url === 'string' && /^https?:\/\//i.test(parsed.url)) {
+      if (parsed.type === 'webhook' && typeof parsed.url === 'string' && isHttpsWebhookUrl(parsed.url)) {
         return parsed;
       }
       if (parsed.type === 'smtp' && typeof parsed.url === 'string' && /^smtps?:\/\//i.test(parsed.url)) {
@@ -59,13 +59,22 @@ export function parseCredential(raw) {
       return null;
     }
   }
-  if (/^https?:\/\//i.test(raw)) {
+  if (isHttpsWebhookUrl(raw)) {
     return { type: 'webhook', url: raw };
   }
   if (/^smtps?:\/\//i.test(raw)) {
     return { type: 'smtp', url: raw };
   }
   return null;
+}
+
+function isHttpsWebhookUrl(urlString) {
+  if (typeof urlString !== 'string') return false;
+  try {
+    return new URL(urlString).protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 export function parseSmtpCredentialUrl(urlString) {
@@ -178,15 +187,17 @@ async function writeCommand(session, command) {
   return readSmtpResponse(session);
 }
 
-async function upgradeStartTls(session, smtp) {
+async function upgradeStartTls(session, smtp, startTlsImpl) {
   const resp = await writeCommand(session, 'STARTTLS');
   if (resp.code !== 220) {
     return { ok: false, reason: `smtp_starttls_${resp.code}` };
   }
-  const secureSocket = await new Promise((resolve, reject) => {
-    const upgraded = tls.connect({ socket: session.socket, servername: smtp.host }, () => resolve(upgraded));
-    upgraded.once('error', reject);
-  });
+  const secureSocket = startTlsImpl
+    ? await startTlsImpl(session.socket, smtp)
+    : await new Promise((resolve, reject) => {
+        const upgraded = tls.connect({ socket: session.socket, servername: smtp.host }, () => resolve(upgraded));
+        upgraded.once('error', reject);
+      });
   session.socket = secureSocket;
   session.buffer = '';
   return { ok: true };
@@ -208,7 +219,7 @@ function connectSmtpSocket(smtp, connectImpl) {
   });
 }
 
-export async function sendSmtpEmail({ smtp, message, connectImpl }) {
+export async function sendSmtpEmail({ smtp, message, connectImpl, startTlsImpl }) {
   const from = smtp.user.includes('@') ? smtp.user : `media-lens-alerts@${smtp.host}`;
   const body = formatEmailBody({
     from,
@@ -233,13 +244,14 @@ export async function sendSmtpEmail({ smtp, message, connectImpl }) {
 
     if (!smtp.secure) {
       const supportsStartTls = ehlo.lines.some((line) => /STARTTLS/i.test(line));
-      if (supportsStartTls) {
-        const upgraded = await upgradeStartTls(session, smtp);
-        if (!upgraded.ok) return upgraded;
-        ehlo = await writeCommand(session, 'EHLO media-lens.local');
-        if (ehlo.code !== 250) {
-          return { ok: false, reason: `smtp_ehlo_after_tls_${ehlo.code}` };
-        }
+      if (!supportsStartTls) {
+        return { ok: false, reason: 'smtp_starttls_required' };
+      }
+      const upgraded = await upgradeStartTls(session, smtp, startTlsImpl);
+      if (!upgraded.ok) return upgraded;
+      ehlo = await writeCommand(session, 'EHLO media-lens.local');
+      if (ehlo.code !== 250) {
+        return { ok: false, reason: `smtp_ehlo_after_tls_${ehlo.code}` };
       }
     }
 
@@ -282,7 +294,11 @@ export async function sendSmtpEmail({ smtp, message, connectImpl }) {
   } catch (err) {
     return { ok: false, reason: err.code || 'smtp_error' };
   } finally {
-    socket.end();
+    try {
+      session.socket.end();
+    } catch {
+      // Best-effort close for mocked transports in tests.
+    }
   }
 }
 

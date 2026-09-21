@@ -21,8 +21,10 @@ import { createClassifierDevAdapter } from '../media-lens/worker/adapters/classi
 import { createTypesafeBudget } from '../media-lens/worker/typesafe-budget.js';
 import {
   DEFAULT_TYPESAFE_BUDGET_STORE_FILE,
+  readBudgetStore,
   sanitizeBudgetStoreRecord
 } from '../media-lens/worker/typesafe-budget-store.js';
+import { abortableDelay } from '../media-lens/worker/abort-utils.js';
 import {
   ALERT_RECIPIENT,
   BLOCKED_ALERT_TRANSPORT,
@@ -32,6 +34,7 @@ import {
   parseSmtpCredentialUrl,
   redactedSmtpEndpoint,
   resolveAlertCredentialPath,
+  sendSmtpEmail,
   shouldRunAlertDeliveryTest
 } from '../media-lens/worker/alert.js';
 import { validate } from '../media-lens/schema/validate.js';
@@ -284,6 +287,60 @@ test('R1: per-analysis timeout return prevents newsjack and downstream adapter w
   assert.equal(cascadeCalls, 0);
 });
 
+test('Fix 1: in-flight newsjack observes shared AbortSignal when per-analysis timeout fires', async () => {
+  const config = loadConfig({ MEDIA_LENS_MODE: 'fixture' });
+  config.limits = { ...config.limits, perAnalysisTimeoutMs: 50, maxJevCallsPerAnalysis: 160 };
+
+  const prepared = prepareFromPastedText({ text: 'A '.repeat(150) + 'long enough body for in-flight newsjack abort test.' });
+  let newsjackStarted = false;
+  let newsjackAborted = false;
+
+  const jevAdapter = {
+    mode: 'live',
+    analyzeSpans: async () => ({
+      answersBySpanId: new Map(),
+      failedSpanIds: new Set(['span-1']),
+      reviewSpanIds: new Set(),
+      unavailableSpanIds: new Set(['span-1']),
+      dispositionsBySpanId: new Map(),
+      calls: 1,
+      failures: 1,
+      elapsedMs: 0,
+      modelReported: null,
+      modelMatch: null,
+      capReached: false
+    })
+  };
+
+  const newsjackAdapter = {
+    mode: 'artifacts',
+    getStoryContext: async ({ signal } = {}) => {
+      newsjackStarted = true;
+      try {
+        await abortableDelay(5000, signal);
+      } catch (err) {
+        if (err?.name === 'AbortError') newsjackAborted = true;
+        throw err;
+      }
+      return { story_origin: null, freshness_gate: null, cluster: null, provenance: 'newsjack_artifacts' };
+    }
+  };
+
+  const graph = await analyze({
+    prepared,
+    config,
+    jevAdapter,
+    newsjackAdapter,
+    classifierDevAdapter: createClassifierDevAdapter({ enabled: false }),
+    userAssertedPublic: true,
+    consentAt: '2026-09-21T00:00:00.000Z'
+  });
+
+  assert.ok(graph.abstentions.some((a) => a.reason === 'engine_unavailable'));
+  assert.equal(newsjackStarted, true);
+  assert.equal(newsjackAborted, true);
+});
+
 test('R2: ESTIMATED budget store persists across process restart within the same UTC month', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'media-lens-budget-store-'));
   const storePath = join(dir, 'typesafe-budget.json');
@@ -318,6 +375,31 @@ test('R2: ESTIMATED budget store persists across process restart within the same
   assert.equal(Object.hasOwn(raw, 'text'), false);
   assert.equal(sanitizeBudgetStoreRecord({ ...raw, text: 'article body' }), null);
   assert.equal(DEFAULT_TYPESAFE_BUDGET_STORE_FILE, '/var/lib/media-lens/typesafe-budget.json');
+});
+
+test('Fix 4: concurrent budget ledger warns at $20 and hard-stops at $30', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'media-lens-budget-concurrent-'));
+  const storePath = join(dir, 'typesafe-budget.json');
+  const fixedNow = () => Date.UTC(2026, 8, 21, 12, 0, 0);
+  const opts = { estimatedUsdPerCall: 1, warnUsd: 20, stopUsd: 30, storePath, now: fixedNow };
+
+  const warnResults = await Promise.all(
+    Array.from({ length: 25 }, () => createTypesafeBudget(opts).recordCalls(1))
+  );
+  const mid = readBudgetStore(storePath);
+  assert.equal(mid.calls, 25);
+  assert.equal(mid.warnEmitted, true);
+  assert.ok(warnResults.some((record) => record.shouldWarn));
+
+  const stopResults = await Promise.all(
+    Array.from({ length: 5 }, () => createTypesafeBudget(opts).recordCalls(1))
+  );
+  const final = readBudgetStore(storePath);
+  assert.equal(final.calls, 30);
+  assert.equal(final.warnEmitted, true);
+  assert.ok(stopResults.some((record) => record.level === 'stopped'));
+  assert.ok(stopResults.every((record) => record.level === 'stopped' || record.level === 'warn'));
+  assert.equal(createTypesafeBudget(opts).isStopped(), true);
 });
 
 test('default rate limits fail-closed at 5 analyses/min, 5 live URL/min, 2/host/min, concurrency 1', async () => {
@@ -616,12 +698,27 @@ test('valid smtp:// and smtps:// credentials select SMTP transport without loggi
 });
 
 test('malformed or non-alert credentials remain BLOCKED_ALERT_TRANSPORT', () => {
-  for (const credential of [null, '', 'not-a-url', '{"type":"smtp"}', '{"type":"webhook","url":"smtp://x"}', 'ftp://relay.example.test']) {
+  for (const credential of [
+    null,
+    '',
+    'not-a-url',
+    '{"type":"smtp"}',
+    '{"type":"webhook","url":"smtp://x"}',
+    '{"type":"webhook","url":"http://hooks.example.test/alert"}',
+    'http://hooks.example.test/alert',
+    'ftp://relay.example.test'
+  ]) {
     const transport = createAlertTransport({ credential });
     assert.equal(transport.status, BLOCKED_ALERT_TRANSPORT, `credential ${String(credential)} must block`);
   }
   assert.equal(parseCredential('{"type":"webhook","url":"https://hooks.example.test/alert"}')?.type, 'webhook');
   assert.equal(parseCredential('smtp://user:pass@mail.example.test:587')?.type, 'smtp');
+});
+
+test('Fix 3: webhook transport accepts only https:// URLs', () => {
+  assert.equal(parseCredential('http://hooks.example.test/alert'), null);
+  assert.equal(parseCredential('{"type":"webhook","url":"http://hooks.example.test/alert"}'), null);
+  assert.equal(createAlertTransport({ credential: 'http://hooks.example.test/alert' }).status, BLOCKED_ALERT_TRANSPORT);
 });
 
 test('webhook https credential still uses webhook transport', async () => {
@@ -645,6 +742,120 @@ test('webhook https credential still uses webhook transport', async () => {
   );
   assert.equal(result.ok, true);
   assert.equal(fetchCalled, true);
+});
+
+class MockSmtpSocket {
+  constructor(responses) {
+    this.pendingResponses = responses.slice();
+    this.written = [];
+    this.listeners = new Map();
+    this.dataBuffer = [];
+    if (this.pendingResponses.length > 0) {
+      this.queueData(this.pendingResponses.shift());
+    }
+  }
+
+  queueData(chunk) {
+    const handlers = this.listeners.get('data');
+    if (!handlers || handlers.size === 0) {
+      this.dataBuffer.push(chunk);
+      return;
+    }
+    queueMicrotask(() => this.emit('data', chunk));
+  }
+
+  write(data) {
+    this.written.push(data);
+    const chunk = this.pendingResponses.shift();
+    if (chunk) this.queueData(chunk);
+  }
+
+  once(event, handler) {
+    const wrapped = (...args) => {
+      this.off(event, wrapped);
+      handler(...args);
+    };
+    this.on(event, wrapped);
+    if (event === 'data' && this.dataBuffer.length > 0) {
+      const chunk = this.dataBuffer.shift();
+      queueMicrotask(() => wrapped(chunk));
+    }
+  }
+
+  on(event, handler) {
+    if (!this.listeners.has(event)) this.listeners.set(event, new Set());
+    this.listeners.get(event).add(handler);
+  }
+
+  off(event, handler) {
+    this.listeners.get(event)?.delete(handler);
+  }
+
+  emit(event, ...args) {
+    for (const handler of this.listeners.get(event) || []) handler(...args);
+  }
+
+  end() {}
+}
+
+function mockSmtpConnect(responses) {
+  return async () => new MockSmtpSocket(responses);
+}
+
+test('Fix 2: smtp:// without STARTTLS fails closed before AUTH', async () => {
+  const smtp = parseSmtpCredentialUrl('smtp://relay:secret@mail.example.test:587');
+  const result = await sendSmtpEmail({
+    smtp,
+    message: { subject: 'test', text: 'hello' },
+    connectImpl: mockSmtpConnect(['220 mail.example.test ESMTP\r\n', '250-mail.example.test\r\n250 SIZE 1234\r\n'])
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'smtp_starttls_required');
+});
+
+test('Fix 2: smtp:// negotiates STARTTLS before AUTH', async () => {
+  const smtp = parseSmtpCredentialUrl('smtp://relay:secret@mail.example.test:587');
+  const result = await sendSmtpEmail({
+    smtp,
+    message: { subject: 'test', text: 'hello' },
+    connectImpl: mockSmtpConnect([
+      '220 mail.example.test ESMTP\r\n',
+      '250-mail.example.test\r\n250 STARTTLS\r\n',
+      '220 Ready to start TLS\r\n',
+      '250-mail.example.test\r\n250 AUTH LOGIN\r\n',
+      '334 Username:\r\n',
+      '334 Password:\r\n',
+      '235 Authenticated\r\n',
+      '250 OK\r\n',
+      '250 OK\r\n',
+      '354 End data\r\n',
+      '250 OK\r\n',
+      '221 Bye\r\n'
+    ]),
+    startTlsImpl: async (socket) => socket
+  });
+  assert.equal(result.ok, true);
+});
+
+test('Fix 2: smtps://465 uses implicit TLS without STARTTLS upgrade', async () => {
+  const smtp = parseSmtpCredentialUrl('smtps://relay:secret@secure-mail.example.test:465');
+  const result = await sendSmtpEmail({
+    smtp,
+    message: { subject: 'test', text: 'hello' },
+    connectImpl: mockSmtpConnect([
+      '220 secure-mail.example.test ESMTP\r\n',
+      '250-secure-mail.example.test\r\n250 AUTH LOGIN\r\n',
+      '334 Username:\r\n',
+      '334 Password:\r\n',
+      '235 Authenticated\r\n',
+      '250 OK\r\n',
+      '250 OK\r\n',
+      '354 End data\r\n',
+      '250 OK\r\n',
+      '221 Bye\r\n'
+    ])
+  });
+  assert.equal(result.ok, true);
 });
 
 test('server emits budget warn alert through injected mock transport without blocking analyze', async () => {

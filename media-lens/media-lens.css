@@ -448,6 +448,65 @@
   border-bottom: 1px solid var(--line-dark);
 }
 
+#ml-overview-heading,
+#ml-language-heading,
+#ml-claims-heading,
+#ml-coverage-heading,
+#ml-source-context-heading {
+  scroll-margin-top: 96px;
+}
+
+.ml-overview-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ml-overview-link {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 44px;
+  padding: 14px 16px;
+  border: 1px solid var(--line-dark);
+  border-radius: var(--radius-control);
+  background: var(--ink-soft);
+  color: inherit;
+  text-decoration: none;
+}
+
+.ml-overview-link:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.ml-overview-dimension {
+  font: 700 15px/1.2 Manrope, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.ml-overview-detail {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ml-cluster-link {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ml-cluster-link:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
 .ml-empty-state {
   padding: 40px 24px;
   border: 1px dashed var(--line-dark);
@@ -617,8 +676,13 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .ml-trust-links a:hover {
+  .ml-trust-links a:hover,
+  .ml-cluster-link:hover {
     color: var(--accent);
+  }
+
+  .ml-overview-link:hover {
+    border-color: var(--accent);
   }
 }
 
@@ -641,7 +705,8 @@
   }
 
   .ml-coverage-grid,
-  .ml-sample-coverage {
+  .ml-sample-coverage,
+  .ml-overview-list {
     grid-template-columns: 1fr;
   }
 

@@ -83,11 +83,13 @@ let currentGraph = null;
 let liveUrlReady = false;
 let isSubmitting = false;
 let lastPayload = null;
+let pendingPayload = null;
 let analyzeAbort = null;
 let stageTimer = null;
 let consentCheckedAt = null;
 
 function isLocalPreviewPage() {
+  if (typeof window === 'undefined') return false;
   return window.location.protocol === 'file:' || LOCAL_HOSTNAMES.has(window.location.hostname);
 }
 
@@ -103,6 +105,7 @@ function normalizeBaseUrl(value) {
 }
 
 function resolveWorkerBaseUrl() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return '';
   const configured = document.querySelector('meta[name="media-lens-api-base"]')?.content?.trim();
   const configuredUrl = normalizeBaseUrl(configured);
   if (configuredUrl) return configuredUrl;
@@ -337,30 +340,208 @@ function renderCoverageOrigin(coverage) {
   return `<dl class="ml-coverage-grid">${rows.map(([l, v]) => statRow(l, v)).join('')}</dl>${rationale}`;
 }
 
+const COVERAGE_FRAMES_EMPTY_COPY = 'No coverage-frame comparison was available for this analysis.';
+const CONTROL_CHARS = /[\u0000-\u001F\u007F\u2028\u2029]/;
+const INSUFFICIENT_ABSTENTION_REASONS = new Set(['insufficient_text', 'low_confidence', 'no_provenance', 'no_timestamp']);
+const ABSTAIN_REASONS = new Set([
+  'engine_disabled',
+  'engine_unavailable',
+  'engine_failure',
+  'model_mismatch',
+  'paywall',
+  'unsupported_language',
+  'oversized_input',
+  'prompt_injection_suspected'
+]);
+
+function countPhrase(count, singular, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function safeHttpsUrl(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 2048 || CONTROL_CHARS.test(value) || CONTROL_CHARS.test(trimmed)) return null;
+  let url;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'https:') return null;
+  if (url.username || url.password) return null;
+  if (!url.hostname) return null;
+  if (CONTROL_CHARS.test(url.href) || CONTROL_CHARS.test(url.hostname)) return null;
+  return url;
+}
+
+function looksLikeUrl(value) {
+  return /^[a-z][a-z0-9+.-]*:/i.test(value) || value.includes('://');
+}
+
+function clusterMemberLabel(member, url) {
+  const source = typeof member?.source === 'string' ? member.source.trim() : '';
+  if (source && !looksLikeUrl(source)) return source;
+  if (url) return url.hostname;
+  if (source) return source;
+  return 'Unknown source';
+}
+
+function renderClusterMember(member) {
+  const relation = String(member?.relation || 'unknown').replace(/_/g, ' ');
+  const safe = safeHttpsUrl(member?.url);
+  const label = escapeHtml(clusterMemberLabel(member, safe));
+  const relationText = escapeHtml(relation);
+  if (!safe) {
+    return `<li class="ml-cluster-item"><strong>${label}</strong> · ${relationText}</li>`;
+  }
+  return `<li class="ml-cluster-item"><a class="ml-cluster-link" href="${escapeHtml(safe.href)}" target="_blank" rel="noopener noreferrer nofollow">${label}</a> · ${relationText}</li>`;
+}
+
 function renderClusterMembers(coverage) {
-  const members = coverage.cluster?.members;
+  const members = coverage?.cluster?.members;
   if (!Array.isArray(members) || members.length === 0) return '';
-  return members
-    .map((member) => {
-      const relation = (member.relation || 'unknown').replace(/_/g, ' ');
-      const source = member.source || member.url || 'Unknown source';
-      return `<li class="ml-cluster-item"><strong>${escapeHtml(source)}</strong> · ${escapeHtml(relation)}</li>`;
-    })
-    .join('');
+  return members.map((member) => renderClusterMember(member)).join('');
 }
 
 function renderCoverageFrames(coverage) {
-  if (!Array.isArray(coverage.frames) || coverage.frames.length === 0) {
-    return 'No coverage-frame differences were recorded for this analysis. The schema includes a frames list; fusion currently leaves it empty.';
+  const frames = coverage && Array.isArray(coverage.frames) ? coverage.frames : [];
+  if (frames.length === 0) return COVERAGE_FRAMES_EMPTY_COPY;
+  if (frames.length === 1) return '1 coverage-frame record is included in this result.';
+  return `${frames.length} coverage-frame records are included in this result.`;
+}
+
+function abstentionsFor(graph, target) {
+  const abstentions = Array.isArray(graph?.abstentions) ? graph.abstentions : [];
+  return abstentions.filter((item) => item && item.scope === 'dimension' && item.target === target);
+}
+
+function graphAbstentions(graph) {
+  const abstentions = Array.isArray(graph?.abstentions) ? graph.abstentions : [];
+  return abstentions.filter((item) => item && item.scope === 'graph');
+}
+
+function stateFromAbstentions(items) {
+  const reasons = items.map((item) => item.reason).filter((reason) => typeof reason === 'string');
+  if (reasons.some((reason) => INSUFFICIENT_ABSTENTION_REASONS.has(reason))) {
+    return { state: 'Insufficient evidence', detail: countPhrase(items.length, 'abstention') };
   }
-  return coverage.frames
-    .map((frame) => {
-      if (typeof frame === 'string') return escapeHtml(frame);
-      if (frame && typeof frame === 'object') return escapeHtml(JSON.stringify(frame));
-      return '';
-    })
-    .filter(Boolean)
-    .join(' ');
+  if (reasons.some((reason) => ABSTAIN_REASONS.has(reason)) || items.length > 0) {
+    return { state: 'Abstained', detail: items.length ? countPhrase(items.length, 'abstention') : '' };
+  }
+  return null;
+}
+
+function languageOverview(graph) {
+  const item = { label: 'Language', href: '#ml-language-heading' };
+  if (!Array.isArray(graph?.observations)) return { ...item, state: 'Not available', detail: '' };
+  const language = graph.observations.filter((obs) => obs && obs.dimension === 'language');
+  const observed = language.filter((obs) => obs.strength === 'observed').length;
+  const possible = language.filter((obs) => obs.strength === 'candidate').length;
+  if (observed > 0) {
+    const parts = [countPhrase(observed, 'observed', 'observed')];
+    if (possible > 0) parts.push(countPhrase(possible, 'possible', 'possible'));
+    return { ...item, state: 'Observed', detail: parts.join(' · ') };
+  }
+  if (possible > 0) return { ...item, state: 'Possible', detail: countPhrase(possible, 'possible', 'possible') };
+  const blockingGraph = graphAbstentions(graph).filter((entry) =>
+    ['insufficient_text', 'oversized_input', 'unsupported_language', 'paywall', 'engine_disabled', 'engine_unavailable'].includes(entry.reason)
+  );
+  const fromAbstention = stateFromAbstentions([...abstentionsFor(graph, 'language'), ...blockingGraph]);
+  if (fromAbstention) return { ...item, ...fromAbstention };
+  return { ...item, state: 'Not observed', detail: 'No language observations' };
+}
+
+function claimsOverview(graph) {
+  const item = { label: 'Claims', href: '#ml-claims-heading' };
+  if (!Array.isArray(graph?.claims)) return { ...item, state: 'Not available', detail: '' };
+  if (graph.claims.length === 0) {
+    const blockingGraph = graphAbstentions(graph).filter((entry) => entry.reason === 'insufficient_text');
+    const fromAbstention = stateFromAbstentions([...abstentionsFor(graph, 'claims'), ...blockingGraph]);
+    if (fromAbstention) return { ...item, ...fromAbstention };
+    return { ...item, state: 'Not observed', detail: 'No claims' };
+  }
+  const counts = { supported: 0, contradicted: 0, mixed: 0, unclear: 0, not_checked: 0 };
+  for (const claim of graph.claims) {
+    if (claim && Object.prototype.hasOwnProperty.call(counts, claim.support)) counts[claim.support] += 1;
+  }
+  const total = graph.claims.length;
+  if (counts.not_checked === total) {
+    return { ...item, state: 'Not available', detail: `${countPhrase(total, 'claim')} · support not checked` };
+  }
+  const parts = [];
+  if (counts.supported) parts.push(`${counts.supported} supported`);
+  if (counts.contradicted) parts.push(`${counts.contradicted} contradicted`);
+  if (counts.mixed) parts.push(`${counts.mixed} mixed`);
+  if (counts.unclear) parts.push(`${counts.unclear} unclear`);
+  if (counts.not_checked) parts.push(`${counts.not_checked} not checked`);
+  if (counts.supported > 0) return { ...item, state: 'Observed', detail: parts.join(' · ') };
+  if (counts.unclear > 0 || counts.mixed > 0) return { ...item, state: 'Insufficient evidence', detail: parts.join(' · ') };
+  if (counts.contradicted > 0) {
+    const detail = parts.length === 1 ? `${countPhrase(counts.contradicted, 'claim')} · support contradicted` : parts.join(' · ');
+    return { ...item, state: 'Not observed', detail };
+  }
+  return { ...item, state: 'Not available', detail: countPhrase(total, 'claim') };
+}
+
+function coverageOverview(graph) {
+  const item = { label: 'Coverage', href: '#ml-coverage-heading' };
+  const coverage = graph?.coverage;
+  if (!coverage || typeof coverage !== 'object') return { ...item, state: 'Not available', detail: '' };
+  if (coverage.status === 'not_requested') return { ...item, state: 'Not available', detail: '' };
+  if (coverage.status === 'insufficient') {
+    const fromAbstention = stateFromAbstentions(abstentionsFor(graph, 'coverage'));
+    return { ...item, state: 'Insufficient evidence', detail: fromAbstention?.detail || '' };
+  }
+  if (coverage.status !== 'available') return { ...item, state: 'Not available', detail: '' };
+  const parts = [];
+  const cluster = coverage.cluster;
+  if (cluster && Number.isFinite(cluster.independent_sources_estimate)) {
+    parts.push(countPhrase(cluster.independent_sources_estimate, 'independent source'));
+  }
+  if (cluster && Number.isFinite(cluster.duplicate_or_syndicated_count)) {
+    parts.push(countPhrase(cluster.duplicate_or_syndicated_count, 'duplicate or syndicated', 'duplicate or syndicated'));
+  }
+  if (coverage.freshness_gate && typeof coverage.freshness_gate.computed_status === 'string') {
+    parts.push(`freshness ${coverage.freshness_gate.computed_status.replace(/_/g, ' ')}`);
+  }
+  return { ...item, state: 'Observed', detail: parts.join(' · ') };
+}
+
+function sourceContextOverview(graph) {
+  const item = { label: 'Source context', href: '#ml-source-context-heading' };
+  const source = graph?.source_context;
+  if (!source || typeof source !== 'object') return { ...item, state: 'Not available', detail: '' };
+  const domain = [source.canonical_domain, source.publisher?.name, source.publisher?.domain].find(
+    (value) => typeof value === 'string' && value.trim()
+  );
+  if (domain) return { ...item, state: 'Observed', detail: `Metadata only · ${domain.trim()}` };
+  const flags = [];
+  if (source.metadata?.has_byline === true) flags.push('byline');
+  if (source.metadata?.has_published_time === true) flags.push('published time');
+  if (source.metadata?.has_canonical === true) flags.push('canonical link');
+  if (flags.length) return { ...item, state: 'Observed', detail: `Metadata only · ${flags.join(', ')}` };
+  return { ...item, state: 'Not observed', detail: 'No source identifiers' };
+}
+
+function buildAnalysisOverview(graph) {
+  return [languageOverview(graph), claimsOverview(graph), coverageOverview(graph), sourceContextOverview(graph)].filter(
+    (item) => item && item.state
+  );
+}
+
+function renderAnalysisOverview(graph) {
+  return buildAnalysisOverview(graph)
+    .map(
+      (item) => `<li>
+      <a class="ml-overview-link" href="${escapeHtml(item.href)}">
+        <span class="ml-overview-dimension">${escapeHtml(item.label)}</span>
+        <span class="ml-chip" data-overview-state="${escapeHtml(item.state)}">${escapeHtml(item.state)}</span>
+        ${item.detail ? `<span class="ml-overview-detail">${escapeHtml(item.detail)}</span>` : ''}
+      </a>
+    </li>`
+    )
+    .join('');
 }
 
 function renderSourceContextStats(sourceContext) {
@@ -418,6 +599,7 @@ function renderGraph(graph) {
 
   byId('result-title').textContent = artifact.title || 'Untitled public article';
   byId('result-meta').textContent = formatArtifactMeta(artifact);
+  byId('overview-list').innerHTML = renderAnalysisOverview(graph);
 
   byId('language-list').innerHTML =
     languageObservations.map((o) => renderObservation(graph, o)).join('') ||
@@ -693,11 +875,12 @@ function requestConsentThenAnalyze() {
   clearError();
   const built = buildPayload();
   if (built.error) {
+    pendingPayload = null;
     if (built.urlError) setUrlError(built.error);
     else showError(built.error);
     return;
   }
-  lastPayload = built.payload;
+  pendingPayload = built.payload;
   openConsentDialog();
 }
 
@@ -713,7 +896,7 @@ async function handleSubmit(event) {
     showError('Check the consent box before analyzing.');
     return;
   }
-  const built = lastPayload ? { payload: lastPayload } : buildPayload();
+  const built = pendingPayload ? { payload: pendingPayload } : buildPayload();
   if (built.error) {
     closeConsentDialog();
     if (built.urlError) setUrlError(built.error);
@@ -732,6 +915,9 @@ function setup() {
   byId('analyze-form').addEventListener('submit', handleSubmit);
   byId('analyze-continue').addEventListener('click', requestConsentThenAnalyze);
   byId('consent-cancel').addEventListener('click', () => closeConsentDialog());
+  byId('consent-dialog').addEventListener('close', () => {
+    pendingPayload = null;
+  });
   byId('analyze-cancel').addEventListener('click', () => {
     if (analyzeAbort) analyzeAbort.abort();
   });
@@ -760,8 +946,20 @@ function setup() {
   checkHealth();
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', setup);
-} else {
-  setup();
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setup);
+  } else {
+    setup();
+  }
 }
+
+export {
+  COVERAGE_FRAMES_EMPTY_COPY,
+  buildAnalysisOverview,
+  renderAnalysisOverview,
+  renderClusterMember,
+  renderClusterMembers,
+  renderCoverageFrames,
+  safeHttpsUrl
+};

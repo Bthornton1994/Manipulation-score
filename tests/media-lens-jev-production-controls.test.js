@@ -21,6 +21,9 @@ import {
   BLOCKED_ALERT_TRANSPORT,
   buildBudgetWarnAlert,
   createAlertTransport,
+  parseCredential,
+  parseSmtpCredentialUrl,
+  redactedSmtpEndpoint,
   resolveAlertCredentialPath,
   shouldRunAlertDeliveryTest
 } from '../media-lens/worker/alert.js';
@@ -443,6 +446,88 @@ test('alert transport mock passes in CI; real delivery stays blocked without Loa
     false
   );
   assert.equal(resolveAlertCredentialPath({ CREDENTIALS_DIRECTORY: '/run/credentials' }).endsWith('media-lens-alert'), true);
+});
+
+test('valid smtp:// and smtps:// credentials select SMTP transport without logging secrets', async () => {
+  const smtpCredential = JSON.stringify({
+    type: 'smtp',
+    url: 'smtp://relay-operator:REDACTED-PASS@mail.example.test:587'
+  });
+  const smtpCalls = [];
+  const smtpTransport = createAlertTransport({
+    credential: smtpCredential,
+    smtpSendImpl: async ({ smtp, message }) => {
+      smtpCalls.push({ smtp, subject: message.subject });
+      return { ok: true };
+    }
+  });
+  assert.equal(smtpTransport.status, 'smtp');
+  assert.notEqual(smtpTransport.status, BLOCKED_ALERT_TRANSPORT);
+
+  const parsed = parseSmtpCredentialUrl(JSON.parse(smtpCredential).url);
+  assert.deepEqual(redactedSmtpEndpoint(parsed), { host: 'mail.example.test', port: 587, secure: false });
+  assert.equal(parsed.user, 'relay-operator');
+  assert.equal(Object.hasOwn(redactedSmtpEndpoint(parsed), 'user'), false);
+  assert.equal(Object.hasOwn(redactedSmtpEndpoint(parsed), 'pass'), false);
+
+  const message = buildBudgetWarnAlert({
+    estimatedUsd: 20,
+    warnUsd: 20,
+    stopUsd: 30,
+    basis: 'ESTIMATED',
+    calculationInputs: { estimatedUsdPerCall: 0.002, recordedCalls: 1 }
+  });
+  const sendResult = await smtpTransport.send(message);
+  assert.equal(sendResult.ok, true);
+  assert.equal(smtpCalls.length, 1);
+  assert.deepEqual(smtpCalls[0].smtp, { host: 'mail.example.test', port: 587, secure: false });
+  assert.equal(JSON.stringify(smtpCalls).includes('REDACTED-PASS'), false);
+  assert.equal(JSON.stringify(smtpCalls).includes('relay-operator'), false);
+
+  const smtpsTransport = createAlertTransport({
+    credential: 'smtps://alerts%40example.test:secret@secure-mail.example.test:465',
+    smtpSendImpl: async () => ({ ok: true })
+  });
+  assert.equal(smtpsTransport.status, 'smtp');
+  assert.deepEqual(parseSmtpCredentialUrl('smtps://alerts%40example.test:secret@secure-mail.example.test:465'), {
+    host: 'secure-mail.example.test',
+    port: 465,
+    secure: true,
+    user: 'alerts@example.test',
+    pass: 'secret'
+  });
+});
+
+test('malformed or non-alert credentials remain BLOCKED_ALERT_TRANSPORT', () => {
+  for (const credential of [null, '', 'not-a-url', '{"type":"smtp"}', '{"type":"webhook","url":"smtp://x"}', 'ftp://relay.example.test']) {
+    const transport = createAlertTransport({ credential });
+    assert.equal(transport.status, BLOCKED_ALERT_TRANSPORT, `credential ${String(credential)} must block`);
+  }
+  assert.equal(parseCredential('{"type":"webhook","url":"https://hooks.example.test/alert"}')?.type, 'webhook');
+  assert.equal(parseCredential('smtp://user:pass@mail.example.test:587')?.type, 'smtp');
+});
+
+test('webhook https credential still uses webhook transport', async () => {
+  let fetchCalled = false;
+  const transport = createAlertTransport({
+    credential: JSON.stringify({ type: 'webhook', url: 'https://hooks.example.test/media-lens-alert' }),
+    fetchImpl: async () => {
+      fetchCalled = true;
+      return { ok: true, status: 200 };
+    }
+  });
+  assert.equal(transport.status, 'webhook');
+  const result = await transport.send(
+    buildBudgetWarnAlert({
+      estimatedUsd: 20,
+      warnUsd: 20,
+      stopUsd: 30,
+      basis: 'ESTIMATED',
+      calculationInputs: { estimatedUsdPerCall: 0.002, recordedCalls: 1 }
+    })
+  );
+  assert.equal(result.ok, true);
+  assert.equal(fetchCalled, true);
 });
 
 test('server emits budget warn alert through injected mock transport without blocking analyze', async () => {

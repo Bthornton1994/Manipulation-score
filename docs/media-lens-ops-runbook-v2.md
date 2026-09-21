@@ -136,7 +136,19 @@ Figures are **ESTIMATED** planning math unless the operator has verified provide
 
 Recipient: `bthornton9415@gmail.com`. Credential path: systemd `LoadCredential=media-lens-alert` → `${CREDENTIALS_DIRECTORY}/media-lens-alert`, or explicit `MEDIA_LENS_ALERT_CREDENTIAL_FILE`. Never commit credentials to git, `worker.env`, or logs.
 
-Until a credential is injected on the host, real alert delivery remains **`BLOCKED_ALERT_TRANSPORT`**. CI uses mock transport only. Optional real delivery integration test runs only when `MEDIA_LENS_ALERT_DELIVERY_TEST=true` and a credential file is readable.
+Supported credential file contents (choose one; never log the file contents):
+
+| Shape | Example (placeholders only) |
+| --- | --- |
+| Raw SMTP URL | `smtp://SMTP_USER:SMTP_PASS@mail.example.test:587` |
+| Raw SMTPS URL | `smtps://SMTP_USER:SMTP_PASS@mail.example.test:465` |
+| JSON SMTP | `{"type":"smtp","url":"smtp://SMTP_USER:SMTP_PASS@mail.example.test:587"}` |
+| JSON webhook | `{"type":"webhook","url":"https://hooks.example.test/media-lens-alert"}` |
+| Raw HTTPS webhook | `https://hooks.example.test/media-lens-alert` |
+
+SMTP delivery uses authenticated SMTP (`AUTH LOGIN`) over `smtp://` (STARTTLS when advertised) or implicit TLS on `smtps://`. Default ports: 587 for `smtp://`, 465 for `smtps://` when omitted. Webhook delivery POSTs JSON `{ to, subject, text }` to the configured HTTPS URL.
+
+Until a valid credential is injected on the host, real alert delivery remains **`BLOCKED_ALERT_TRANSPORT`**. CI uses mock transport only. Optional real delivery integration test runs only when `MEDIA_LENS_ALERT_DELIVERY_TEST=true` and a credential file is readable.
 
 ---
 

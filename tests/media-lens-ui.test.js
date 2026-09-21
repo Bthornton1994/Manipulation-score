@@ -11,6 +11,7 @@ const ALLOWED_UI_PHRASES = [
   'Quoted language not attributed as authorial',
   'Insufficient context'
 ];
+const STRENGTH_DISPLAY_LABELS = ['Observed influence signal', 'Possible influence signal'];
 
 test('index.html has a skip link and a single h1', async () => {
   const html = await readFile('media-lens/index.html', 'utf8');
@@ -88,16 +89,20 @@ test('no banned phrase appears in Media Lens UI, taxonomy explanations, or fixtu
 
 test('the only observation-header phrases used by the renderer are the allowed UI phrases', async () => {
   const js = await readFile('media-lens/media-lens.js', 'utf8');
-  // Every literal quoted phrase that looks like a UI-phrase sentence must be one of the allowed five.
+  // Stored observation phrases stay in the schema allowlist. Strength display
+  // labels are presentation copy and may differ when the stored phrase would
+  // call a candidate "Observed".
   const quoted = [...js.matchAll(/'([A-Z][^']{5,60})'/g)].map((m) => m[1]);
   const sentenceLike = quoted.filter((s) => /^[A-Z][a-z]/.test(s) && /\s/.test(s));
   for (const phrase of sentenceLike) {
-    if (ALLOWED_UI_PHRASES.includes(phrase)) continue;
+    if (ALLOWED_UI_PHRASES.includes(phrase) || STRENGTH_DISPLAY_LABELS.includes(phrase)) continue;
     // Anything else quoted must not read like a fabricated verdict phrase.
     for (const banned of BANNED_PHRASES) {
       assert.doesNotMatch(phrase.toLowerCase(), new RegExp(banned));
     }
   }
+  assert.match(js, /observed:\s*'Observed influence signal'/);
+  assert.match(js, /candidate:\s*'Possible influence signal'/);
 });
 
 test('media-lens.js never writes to localStorage, sessionStorage, or indexedDB', async () => {

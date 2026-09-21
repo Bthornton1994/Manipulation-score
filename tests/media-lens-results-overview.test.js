@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import {
   ABSTENTION_EMPTY_COPY,
   COVERAGE_FRAMES_EMPTY_COPY,
@@ -8,11 +8,13 @@ import {
   buildAnalysisOverview,
   consentDisclosure,
   liveUrlDisclosure,
+  observationDisplayLabel,
   renderAbstentionList,
   renderAnalysisOverview,
   renderClusterMember,
   renderCoverageFrames,
   renderCoverageObservationList,
+  renderObservation,
   safeHttpsUrl
 } from '../media-lens/media-lens.js';
 
@@ -170,7 +172,7 @@ test('malicious titles are escaped and non-URL labels stay plain text', () => {
   assert.doesNotMatch(overview, /<svg/);
 });
 
-test('static sample strength labels match the synthetic-01 golden graph', async () => {
+test('static sample strength labels follow synthetic-01 strength, not a misleading phrase', async () => {
   const html = await readFile('media-lens/index.html', 'utf8');
   const graph = await fixture('synthetic-01-quoted-vs-authorial');
   const sampleStart = html.indexOf('<ul class="ml-sample-findings">');
@@ -185,7 +187,15 @@ test('static sample strength labels match the synthetic-01 golden graph', async 
     const strengthChip = body.match(/<span class="ml-chip" data-strength="([^"]+)">([^<]*)<\/span>/);
     assert.ok(strengthChip, `${id} is missing a strength chip`);
     assert.equal(strengthChip[1], obs.strength, id);
-    assert.equal(strengthChip[2], obs.ui_phrase, id);
+    assert.equal(strengthChip[2], observationDisplayLabel(obs), id);
+    if (obs.strength === 'candidate') {
+      assert.equal(strengthChip[2], 'Possible influence signal', id);
+      assert.doesNotMatch(body, /Observed influence signal/, id);
+    }
+    if (obs.strength === 'observed') {
+      assert.equal(strengthChip[2], obs.ui_phrase, id);
+      assert.notEqual(strengthChip[2], 'Possible influence signal', id);
+    }
     const strengths = [...body.matchAll(/data-strength="([^"]+)"/g)].map((match) => match[1]);
     assert.deepEqual(strengths, [obs.strength], id);
     if (obs.review_status === 'needs_review') {
@@ -220,6 +230,69 @@ test('static sample strength labels match the synthetic-01 golden graph', async 
   );
   assert.match(html, new RegExp(`<dt>Freshness</dt>\\s*<dd>${graph.coverage.freshness_gate.computed_status}</dd>`));
   assert.match(html, new RegExp(graph.coverage.freshness_gate.rationale.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('candidate observations display Possible influence signal and stay candidates', async () => {
+  const files = (await readdir('media-lens/fixtures/expected')).filter((name) => name.endsWith('.graph.json'));
+  assert.ok(files.length >= 6);
+  let candidateCount = 0;
+  for (const file of files) {
+    const graph = JSON.parse(await readFile(`media-lens/fixtures/expected/${file}`, 'utf8'));
+    for (const obs of graph.observations) {
+      const label = observationDisplayLabel(obs);
+      const rendered = renderObservation(graph, obs);
+      const chip = rendered.match(/<span class="ml-chip" data-strength="([^"]+)">([^<]*)<\/span>/);
+      assert.ok(chip, `${file} ${obs.id}`);
+      assert.equal(chip[1], obs.strength, `${file} ${obs.id}`);
+      assert.equal(chip[2], label, `${file} ${obs.id}`);
+      if (obs.strength === 'candidate') {
+        candidateCount += 1;
+        assert.notEqual(label, 'Observed influence signal', `${file} ${obs.id}`);
+        assert.doesNotMatch(rendered, /Observed influence signal/, `${file} ${obs.id}`);
+        if (obs.ui_phrase === 'Observed influence signal') {
+          assert.equal(label, 'Possible influence signal', `${file} ${obs.id}`);
+          assert.equal(obs.ui_phrase, 'Observed influence signal', `${file} ${obs.id}`);
+        }
+      }
+      if (obs.strength === 'observed') {
+        assert.equal(label, obs.ui_phrase, `${file} ${obs.id}`);
+        assert.notEqual(label, 'Possible influence signal', `${file} ${obs.id}`);
+      }
+      if (obs.review_status === 'needs_review') {
+        assert.match(rendered, /data-review="needs_review">Needs review</, `${file} ${obs.id}`);
+      }
+    }
+  }
+  assert.ok(candidateCount >= 4);
+
+  const graph = await fixture('synthetic-01-quoted-vs-authorial');
+  const jev2 = graph.observations.find((obs) => obs.id === 'obs-jev-2');
+  const jev3 = graph.observations.find((obs) => obs.id === 'obs-jev-3');
+  const jev1 = graph.observations.find((obs) => obs.id === 'obs-jev-1');
+  assert.equal(jev2.strength, 'candidate');
+  assert.equal(jev3.strength, 'candidate');
+  assert.equal(jev2.ui_phrase, 'Observed influence signal');
+  assert.equal(jev3.ui_phrase, 'Observed influence signal');
+  assert.equal(observationDisplayLabel(jev2), 'Possible influence signal');
+  assert.equal(observationDisplayLabel(jev3), 'Possible influence signal');
+  assert.equal(jev3.review_status, 'needs_review');
+  assert.match(renderObservation(graph, jev3), /data-review="needs_review">Needs review</);
+  assert.equal(jev1.strength, 'observed');
+  assert.equal(observationDisplayLabel(jev1), 'Quoted language not attributed as authorial');
+  assert.equal(
+    observationDisplayLabel({ strength: 'observed', ui_phrase: 'Observed influence signal' }),
+    'Observed influence signal'
+  );
+  assert.equal(
+    observationDisplayLabel({ strength: 'candidate', ui_phrase: 'Possible selective-context candidate' }),
+    'Possible selective-context candidate'
+  );
+  assert.equal(
+    observationDisplayLabel({ strength: 'candidate', ui_phrase: 'This source is unsafe' }),
+    'Insufficient context'
+  );
+  assert.doesNotMatch(renderObservation(graph, jev2), /Observed influence signal/);
+  assert.match(renderObservation(graph, jev2), /data-strength="candidate">Possible influence signal</);
 });
 
 test('missing coverage observations and abstentions use neutral accessible copy', async () => {

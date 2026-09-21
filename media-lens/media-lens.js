@@ -26,6 +26,15 @@ const ALLOWED_UI_PHRASES = new Set([
   'Insufficient context'
 ]);
 
+// The stored ui_phrase "Observed influence signal" does not encode strength.
+// Golden graphs still use that phrase for candidate rows. The public chip is
+// chosen from strength so a candidate is never labeled as observed. More
+// specific allowed phrases stay as written.
+const STRENGTH_DISPLAY_LABELS = Object.freeze({
+  observed: 'Observed influence signal',
+  candidate: 'Possible influence signal'
+});
+
 // Labels copied from schema/taxonomy.js. That module is not a browser-served
 // file on the live host, so the renderer keeps a local map of the same ids.
 const TAXONOMY = Object.freeze({
@@ -287,8 +296,16 @@ function formatSignal(signal) {
   };
 }
 
+function observationDisplayLabel(obs) {
+  const stored = typeof obs?.ui_phrase === 'string' && ALLOWED_UI_PHRASES.has(obs.ui_phrase) ? obs.ui_phrase : null;
+  if (stored === STRENGTH_DISPLAY_LABELS.observed) {
+    return STRENGTH_DISPLAY_LABELS[obs?.strength] || stored;
+  }
+  return stored || 'Insufficient context';
+}
+
 function renderObservation(graph, obs) {
-  const uiPhrase = ALLOWED_UI_PHRASES.has(obs.ui_phrase) ? obs.ui_phrase : 'Insufficient context';
+  const uiPhrase = observationDisplayLabel(obs);
   const spanText = obs.localization === 'span' ? findSpanText(graph, obs.span_ids) : null;
   const taxonomy = formatSignal(obs.signal);
   const attribution = obs.authorial_attribution ? obs.authorial_attribution.replace(/_/g, ' ') : '';
@@ -1075,11 +1092,13 @@ export {
   buildAnalysisOverview,
   consentDisclosure,
   liveUrlDisclosure,
+  observationDisplayLabel,
   renderAbstentionList,
   renderAnalysisOverview,
   renderClusterMember,
   renderClusterMembers,
   renderCoverageFrames,
   renderCoverageObservationList,
+  renderObservation,
   safeHttpsUrl
 };

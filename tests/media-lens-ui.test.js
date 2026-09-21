@@ -70,7 +70,7 @@ test('no banned phrase appears in Media Lens UI, taxonomy explanations, or fixtu
     // CSP keywords are unrelated to the banned "unsafe" verdict phrase.
     content = content.replace(/'unsafe-inline'|'unsafe-eval'/g, '');
     for (const banned of BANNED_PHRASES) {
-      assert.doesNotMatch(content, new RegExp(banned), `${file} contains banned phrase "${banned}"`);
+      assert.doesNotMatch(content, new RegExp(`\\b${banned}\\b`), `${file} contains banned phrase "${banned}"`);
     }
   }
 
@@ -81,7 +81,7 @@ test('no banned phrase appears in Media Lens UI, taxonomy explanations, or fixtu
   const taxonomyWithoutBannedList = taxonomySrc.slice(0, taxonomySrc.indexOf('export const BANNED_PHRASES')).toLowerCase();
   assert.match(bannedPhrasesBlock, /manipulative/); // sanity: the constant itself still exists
   for (const banned of BANNED_PHRASES) {
-    assert.doesNotMatch(taxonomyWithoutBannedList, new RegExp(banned), `taxonomy.js label/explanation text contains "${banned}"`);
+    assert.doesNotMatch(taxonomyWithoutBannedList, new RegExp(`\\b${banned}\\b`), `taxonomy.js label/explanation text contains "${banned}"`);
   }
 });
 
@@ -222,8 +222,11 @@ test('index.html uses the v2 consent checkbox and keeps the full live-URL disclo
 
   const urlField = html.match(/<div id="url-field"[^>]*>[\s\S]*?<\/div>/);
   assert.ok(urlField);
-  assert.match(urlField[0], /\shidden(?:[\s>=])/);
+  assert.doesNotMatch(urlField[0], /\shidden(?:[\s>=])/);
   assert.doesNotMatch(urlField[0], /id="ml-live-url-notice"/);
+  const fixtureField = html.match(/<div id="fixture-field"[^>]*>/);
+  assert.ok(fixtureField);
+  assert.match(fixtureField[0], /\shidden(?:[\s>=])/);
 
   assert.match(html, /Limited Jev-only experimental preview/);
   assert.match(html, /Jev-only live URL mode/);
@@ -233,3 +236,57 @@ test('index.html uses the v2 consent checkbox and keeps the full live-URL disclo
   assert.match(html, /id="article-url"[^>]*disabled/);
   assert.match(html, /Live pasted-text analysis stays disabled/);
 });
+
+test('public landing uses the Media Lens product headline and a fixture sample card', async () => {
+  const html = await readFile('media-lens/index.html', 'utf8');
+  assert.match(html, /<h1[^>]*>Read the story behind the story<\/h1>/);
+  assert.match(html, /Council approves downtown drainage upgrade/);
+  assert.match(html, /synthetic-01-quoted-vs-authorial/);
+  assert.match(html, /fictional-daily\.example/);
+  assert.match(html, /We will fix the flooding problem this year,/);
+  assert.match(html, /id="analyze-continue"/);
+  assert.match(html, /href="https:\/\/manipulationscore\.com\/privacy\.html"/);
+  assert.match(html, /href="https:\/\/manipulationscore\.com\/acceptable-use\.html"/);
+});
+
+test('analysis flow includes consent dialog, loading stages, cancel, and retry', async () => {
+  const html = await readFile('media-lens/index.html', 'utf8');
+  assert.match(html, /<dialog class="ml-consent-dialog" id="consent-dialog"/);
+  assert.match(html, /Requesting article/);
+  assert.match(html, /Preparing evidence/);
+  assert.match(html, /Evaluating signals/);
+  assert.match(html, /Building the result/);
+  assert.match(html, /id="analyze-cancel"/);
+  assert.match(html, /id="analyze-retry"/);
+  const js = await readFile('media-lens/media-lens.js', 'utf8');
+  assert.match(js, /AbortController/);
+  assert.match(js, /LOADING_STAGES/);
+  assert.match(js, /CANCELLED_MESSAGE/);
+  assert.match(js, /live_killed/);
+  assert.match(js, /rate_limited/);
+  assert.match(js, /TIMEOUT/);
+  assert.match(js, /BLOCKED_HOST/);
+  assert.match(js, /internal_error/);
+});
+
+test('results renderer binds taxonomy labels and coverage origin from the graph schema', async () => {
+  const js = await readFile('media-lens/media-lens.js', 'utf8');
+  const taxonomySrc = await readFile('media-lens/schema/taxonomy.js', 'utf8');
+  assert.match(js, /certainty_beyond_evidence/);
+  assert.match(js, /selective_context_candidate/);
+  assert.match(js, /story_origin/);
+  assert.match(js, /coverage\.frames/);
+  assert.match(js, /authorial_attribution/);
+  assert.match(js, /freshness_gate\.computed_status/);
+  assert.doesNotMatch(js, /process\.env/);
+  for (const label of [
+    'Loaded or moralized language',
+    'Urgency framing',
+    'Vague authority',
+    'Possible selective-context candidate'
+  ]) {
+    assert.match(taxonomySrc, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.match(js, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+});
+

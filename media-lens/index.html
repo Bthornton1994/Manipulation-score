@@ -18,7 +18,7 @@
     <link rel="stylesheet" href="../styles.css" />
     <link rel="stylesheet" href="./media-lens.css" />
   </head>
-  <body class="media-lens-page legal-page">
+  <body class="media-lens-page">
     <a class="skip-link" href="#main">Skip to content</a>
 
     <header class="site-header site-header-static">
@@ -26,112 +26,201 @@
         <span class="brand-mark" aria-hidden="true"><i></i><i></i></span>
         <span class="brand-text">
           <span class="brand-name">Media Lens</span>
-          <span class="brand-sub">limited preview, by Manipulation Score</span>
+          <span class="brand-sub">by Manipulation Score</span>
         </span>
       </a>
       <nav class="legal-mini-nav" aria-label="Section">
         <a href="https://manipulationscore.com/">Home</a>
-        <a href="https://manipulationscore.com/analyze.html">Clarity (private messages)</a>
+        <a href="https://manipulationscore.com/analyze.html">Clarity</a>
+        <a href="https://manipulationscore.com/methodology.html">Method</a>
+        <a href="https://manipulationscore.com/privacy.html">Privacy</a>
       </nav>
     </header>
 
     <main id="main" class="ml-main" tabindex="-1">
-      <p class="eyebrow"><span></span> Limited Jev-only experimental preview</p>
-      <h1>Media Lens</h1>
-      <p class="ml-lede">
-        Media Lens looks at public articles, advertisements, speeches, and campaign material for evidence-linked language, claim,
-        coverage, and source-context signals. It never scores a person or outlet, and it never produces a single 0-100 score for an
-        article.
-      </p>
+      <div id="landing-view">
+        <section class="ml-hero" aria-labelledby="ml-hero-heading">
+          <div class="ml-hero-copy">
+            <p class="eyebrow"><span></span> Limited Jev-only experimental preview</p>
+            <h1 id="ml-hero-heading">Read the story behind the story</h1>
+            <p class="ml-lede">
+              Media Lens inspects framing, claims, coverage differences, and source context in a public article.
+              It never scores a person or outlet, and it never produces a single score for an article.
+            </p>
 
-      <section class="ml-disclosure" aria-labelledby="ml-disclosure-heading">
-        <h2 id="ml-disclosure-heading">Before you analyze anything</h2>
-        <p>
-          Media Lens is for <strong>public material you are allowed to analyze</strong>, such as a published article, ad, speech, or
-          campaign page. It is not the place for private messages or conversations; use
-          <a href="https://manipulationscore.com/analyze.html">Clarity</a> for those instead. Clarity never sends your text anywhere.
-        </p>
-        <p>
-          Media Lens can run in <strong>fixture mode</strong> for local development, where pre-recorded example answers make no network
-          calls. On the approved operator host, it can run a limited <strong>Jev-only live URL mode</strong> for public hosts on an
-          operator allowlist. Live pasted-text analysis and the secondary classifier are disabled. Newsjack provenance data, when used, comes
-          from files an operator already has; the worker never calls a Newsjack service.
-        </p>
-        <p>
-          Full article text is not stored by default. Nothing here is downloaded, uploaded, or exported unless you choose the export
-          action after results appear.
-        </p>
-        <p>
-          Live URL access is limited, can be turned off by the operator, and is not production-ready for general use, a fact-checking
-          service, or an accuracy claim. The disclosure below applies before you submit:
-        </p>
-        <p id="ml-live-url-notice">
-          Before you analyze: the local worker will request the public page at the URL you enter. The destination site (and its CDN) will see this computer’s network address. Prepared public span text from that page may be sent to TypeSafe’s Jev classifier under TypeSafe’s own policy. TypeSafe does not fetch the URL. Full article text is not kept by Media Lens by default. Do not submit private messages, passwords, medical or financial records, information about children, paywalled content you are not authorized to fetch, or non-public/internal addresses. Live pasted-text analysis stays disabled — use Clarity for private messages.
-        </p>
+            <form class="ml-form" id="analyze-form">
+              <fieldset class="ml-input-mode-wrap">
+                <legend>Analyze an approved public URL</legend>
+                <div class="ml-input-mode-row" role="radiogroup" aria-label="Input mode">
+                  <label>
+                    <input type="radio" name="input-mode" value="fixture" />
+                    <span>Try an example</span>
+                  </label>
+                  <label data-local-only="pasted-text">
+                    <input type="radio" name="input-mode" value="pasted_text" />
+                    <span>Paste public text locally</span>
+                  </label>
+                  <label>
+                    <input type="radio" name="input-mode" value="url" checked />
+                    <span>Public article URL</span>
+                  </label>
+                </div>
+              </fieldset>
+
+              <div id="fixture-field" hidden>
+                <label class="ml-field-label" for="fixture-select">Example article</label>
+                <select id="fixture-select" name="fixture_id">
+                  <option value="synthetic-01-quoted-vs-authorial">Quoted vs. authorial language</option>
+                  <option value="synthetic-02-syndicated-cluster">Syndicated coverage cluster</option>
+                  <option value="synthetic-03-no-timestamp">Missing publish timestamp</option>
+                  <option value="synthetic-04-injection">Embedded instruction-like text</option>
+                  <option value="synthetic-05-paywall">Paywalled excerpt</option>
+                  <option value="synthetic-06-short-excerpt">Very short excerpt</option>
+                </select>
+              </div>
+
+              <div id="pasted-text-field" hidden>
+                <label class="ml-field-label" for="pasted-text">Public text to analyze</label>
+                <textarea id="pasted-text" name="text" maxlength="60000" placeholder="Paste public article text..."></textarea>
+              </div>
+
+              <div class="ml-analyze-bar">
+                <div id="url-field">
+                  <label class="ml-field-label" for="article-url">Article URL</label>
+                  <input
+                    type="url"
+                    id="article-url"
+                    name="url"
+                    placeholder="https://en.wikipedia.org/wiki/Yes"
+                    aria-describedby="article-url-help"
+                    autocomplete="url"
+                    disabled
+                  />
+                </div>
+                <div class="ml-form-actions ml-primary-actions">
+                  <button class="button" type="button" id="analyze-continue">Analyze</button>
+                </div>
+              </div>
+              <p class="ml-form-note" id="article-url-help">
+                Use a public <code>https://</code> URL from the operator allowlist. Long pages may abstain before Jev runs. Private,
+                paywalled, internal, and unauthorized material is not allowed.
+              </p>
+              <p class="ml-form-note" id="analyze-continue-note">
+                Analyze asks for consent next. Nothing is sent until you confirm.
+              </p>
+
+              <dialog class="ml-consent-dialog" id="consent-dialog" aria-labelledby="consent-dialog-title">
+                <h2 id="consent-dialog-title">Confirm public-material consent</h2>
+                <p>
+                  This run may fetch the URL you entered and send prepared public spans to TypeSafe’s Jev service. It will not score a
+                  person or outlet.
+                </p>
+                <div class="ml-consent-row">
+                  <input type="checkbox" id="consent-checkbox" required />
+                  <label for="consent-checkbox">I confirm this is public material I am allowed to analyze, and I understand that live URL mode may send prepared public spans to TypeSafe AI’s Jev service.</label>
+                </div>
+                <div class="ml-form-actions">
+                  <button class="button" type="submit" id="analyze-submit" disabled>Run analysis</button>
+                  <button class="button button-secondary" type="button" id="consent-cancel">Cancel</button>
+                </div>
+              </dialog>
+            </form>
+
+            <p class="ml-status" id="worker-status" data-state="checking" role="status">
+              <span class="ml-status-dot" aria-hidden="true"></span>
+              <span id="worker-status-text">Checking the Media Lens service...</span>
+            </p>
+          </div>
+
+          <aside class="ml-sample-card" aria-labelledby="ml-sample-heading">
+            <p class="ml-sample-kicker">Sample analysis</p>
+            <h2 id="ml-sample-heading">Council approves downtown drainage upgrade</h2>
+            <p class="ml-sample-meta">
+              Jordan Reyes · fictional-daily.example · fixture
+              <code>synthetic-01-quoted-vs-authorial</code>
+            </p>
+            <p class="ml-sample-note">
+              Static excerpt of the in-repo golden graph. Not a live fetch and not an accuracy claim.
+            </p>
+            <ul class="ml-sample-findings">
+              <li>
+                <span class="ml-chip">Quoted language not attributed as authorial</span>
+                <q>We will fix the flooding problem this year,</q>
+                <span class="ml-sample-signal">Urgency framing, quoted as the mayor</span>
+              </li>
+              <li>
+                <span class="ml-chip" data-strength="observed">Observed influence signal</span>
+                <q>The council said it would fix the flooding problem this year, directing staff to begin engineering work within 30 days.</q>
+                <span class="ml-sample-signal">Certainty beyond evidence</span>
+              </li>
+              <li>
+                <span class="ml-chip" data-review="needs_review">Needs review</span>
+                <q>Sources close to the situation report growing frustration among residents who have filed dozens of complaints this year.</q>
+                <span class="ml-sample-signal">Vague authority</span>
+              </li>
+            </ul>
+            <dl class="ml-sample-coverage">
+              <div>
+                <dt>Independent sources</dt>
+                <dd>1</dd>
+              </div>
+              <div>
+                <dt>Duplicate or syndicated</dt>
+                <dd>0</dd>
+              </div>
+              <div>
+                <dt>Freshness</dt>
+                <dd>stale</dd>
+              </div>
+            </dl>
+            <p class="ml-sample-rationale">Synthetic fixture published outside the freshness window.</p>
+            <button class="button button-secondary button-small" type="button" id="sample-analyze" hidden>
+              Analyze this example locally
+            </button>
+          </aside>
+        </section>
+
+        <section class="ml-disclosure" aria-labelledby="ml-disclosure-heading">
+          <h2 id="ml-disclosure-heading">Before you analyze</h2>
+          <p>
+            Media Lens is for <strong>public material you are allowed to analyze</strong>, such as a published article, ad, speech, or
+            campaign page. It is not the place for private messages or conversations; use
+            <a href="https://manipulationscore.com/analyze.html">Clarity</a> for those instead. Clarity never sends your text anywhere.
+            On the approved operator host, it can run a limited <strong>Jev-only live URL mode</strong> for public hosts on an
+            operator allowlist. Live pasted-text analysis and the secondary classifier are disabled. Live URL access is limited, can
+            be turned off by the operator, and is not production-ready for general use.
+          </p>
+          <p id="ml-live-url-notice">
+            Before you analyze: the local worker will request the public page at the URL you enter. The destination site (and its CDN) will see this computer’s network address. Prepared public span text from that page may be sent to TypeSafe’s Jev classifier under TypeSafe’s own policy. TypeSafe does not fetch the URL. Full article text is not kept by Media Lens by default. Do not submit private messages, passwords, medical or financial records, information about children, paywalled content you are not authorized to fetch, or non-public/internal addresses. Live pasted-text analysis stays disabled — use Clarity for private messages.
+          </p>
+        </section>
+
+        <nav class="ml-trust-links" aria-label="Trust and companion pages">
+          <a href="https://manipulationscore.com/methodology.html">Methodology</a>
+          <a href="https://manipulationscore.com/limitations.html">Limitations</a>
+          <a href="https://manipulationscore.com/acceptable-use.html">Acceptable Use</a>
+          <a href="https://manipulationscore.com/privacy.html">Privacy</a>
+          <a href="https://manipulationscore.com/analyze.html">Clarity</a>
+        </nav>
+      </div>
+
+      <section class="ml-loading" id="loading-panel" hidden aria-labelledby="ml-loading-heading">
+        <h2 id="ml-loading-heading">Analyzing the article</h2>
+        <p class="ml-dimension-note" id="loading-stage-text">Requesting article</p>
+        <ol class="ml-loading-stages" id="loading-stages">
+          <li data-stage="0">Requesting article</li>
+          <li data-stage="1">Preparing evidence</li>
+          <li data-stage="2">Evaluating signals</li>
+          <li data-stage="3">Building the result</li>
+        </ol>
+        <button class="button button-secondary" type="button" id="analyze-cancel">Cancel analysis</button>
       </section>
 
-      <p class="ml-status" id="worker-status" data-state="checking" role="status">
-        <span class="ml-status-dot" aria-hidden="true"></span>
-        <span id="worker-status-text">Checking the Media Lens service...</span>
-      </p>
-
-      <form class="ml-form" id="analyze-form">
-        <fieldset>
-          <legend>What do you want to analyze?</legend>
-          <div class="ml-input-mode-row" role="radiogroup" aria-label="Input mode">
-            <label>
-              <input type="radio" name="input-mode" value="fixture" checked />
-              <span>Try an example</span>
-            </label>
-            <label data-local-only="pasted-text">
-              <input type="radio" name="input-mode" value="pasted_text" />
-              <span>Paste public text locally</span>
-            </label>
-            <label>
-              <input type="radio" name="input-mode" value="url" />
-              <span>Analyze an approved public URL</span>
-            </label>
-          </div>
-        </fieldset>
-
-        <div id="fixture-field">
-          <label class="ml-field-label" for="fixture-select">Example article</label>
-          <select id="fixture-select" name="fixture_id">
-            <option value="synthetic-01-quoted-vs-authorial">Quoted vs. authorial language</option>
-            <option value="synthetic-02-syndicated-cluster">Syndicated coverage cluster</option>
-            <option value="synthetic-03-no-timestamp">Missing publish timestamp</option>
-            <option value="synthetic-04-injection">Embedded instruction-like text</option>
-            <option value="synthetic-05-paywall">Paywalled excerpt</option>
-            <option value="synthetic-06-short-excerpt">Very short excerpt</option>
-          </select>
-        </div>
-
-        <div id="pasted-text-field" hidden>
-          <label class="ml-field-label" for="pasted-text">Public text to analyze</label>
-          <textarea id="pasted-text" name="text" maxlength="60000" placeholder="Paste public article text..."></textarea>
-        </div>
-
-        <div id="url-field" hidden>
-          <label class="ml-field-label" for="article-url">Article URL</label>
-          <input type="url" id="article-url" name="url" placeholder="https://en.wikipedia.org/wiki/Yes" aria-describedby="article-url-help" disabled />
-          <p class="ml-form-note" id="article-url-help">
-            Use a public <code>https://</code> URL from the operator allowlist. Long pages may abstain before Jev runs. Private,
-            paywalled, internal, and unauthorized material is not allowed.
-          </p>
-        </div>
-
-        <div class="ml-consent-row">
-          <input type="checkbox" id="consent-checkbox" required />
-          <label for="consent-checkbox">I confirm this is public material I am allowed to analyze, and I understand that live URL mode may send prepared public spans to TypeSafe AI’s Jev service.</label>
-        </div>
-
-        <div class="ml-form-actions">
-          <button class="button" type="submit" id="analyze-submit" disabled>Analyze</button>
-          <span class="ml-form-note">Nothing is sent until you check the box above and select Analyze.</span>
-        </div>
-      </form>
-
-      <p class="ml-status" id="analyze-error" data-state="error" role="alert" hidden></p>
+      <p class="ml-status ml-error-banner" id="analyze-error" data-state="error" role="alert" tabindex="-1" hidden></p>
+      <div class="ml-error-actions" id="error-actions" hidden>
+        <button class="button" type="button" id="analyze-retry">Retry</button>
+        <button class="button button-secondary" type="button" id="analyze-reset">Start over</button>
+      </div>
 
       <!-- Info fix: a small, dedicated live region announces a brief
            summary on each update, instead of aria-live on the whole
@@ -140,6 +229,15 @@
       <p class="ml-visually-hidden" id="analyze-status-live" role="status" aria-live="polite"></p>
 
       <div class="ml-results" id="results" hidden>
+        <header class="ml-result-masthead">
+          <p class="ml-sample-kicker" id="result-kicker">Article analysis</p>
+          <p class="ml-result-title" id="result-title"></p>
+          <p class="ml-result-meta" id="result-meta"></p>
+          <p class="ml-dimension-note" id="result-limits">
+            Experimental Jev-only preview. Evidence is inspectable. This is not a truth detector and not a person or outlet score.
+          </p>
+        </header>
+
         <section aria-labelledby="ml-language-heading" class="ml-dimension">
           <h2 id="ml-language-heading">Language</h2>
           <p class="ml-dimension-note">Span-tied observations of influence language, with evidence you can inspect.</p>
@@ -157,6 +255,9 @@
           <p class="ml-dimension-note">Origin, independent reporting, and duplication, when provenance data is available.</p>
           <dl class="ml-coverage-grid" id="coverage-stats"></dl>
           <p class="ml-dimension-note" id="coverage-freshness-rationale"></p>
+          <div id="coverage-origin"></div>
+          <ul class="ml-cluster-list" id="coverage-cluster"></ul>
+          <p class="ml-dimension-note" id="coverage-frames"></p>
           <ul class="ml-observation-list" id="coverage-list"></ul>
         </section>
 
@@ -164,12 +265,19 @@
           <h2 id="ml-source-context-heading">Source context</h2>
           <p class="ml-dimension-note">Source context is metadata, not a manipulation judgment.</p>
           <dl class="ml-coverage-grid" id="source-context-stats"></dl>
+          <p class="ml-dimension-note" id="source-context-note"></p>
         </section>
 
         <ul class="ml-abstention-list" id="abstention-list" aria-label="Abstentions and limits"></ul>
 
+        <details class="ml-engine-details">
+          <summary>Engine and privacy record</summary>
+          <dl class="ml-coverage-grid" id="engine-stats"></dl>
+        </details>
+
         <div class="ml-export-row">
           <button class="button button-secondary" type="button" id="export-json-btn">Export evidence-only JSON</button>
+          <button class="button" type="button" id="analyze-another">Analyze another article</button>
           <span class="ml-form-note">Export omits the text of any span not tied to a shown observation or claim.</span>
         </div>
       </div>

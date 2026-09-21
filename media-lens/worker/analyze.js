@@ -174,12 +174,18 @@ export async function analyze({
   // after the caller has already been served an abstention graph.
   const pipelineAbortController = new AbortController();
 
+  function pipelineTimedOut() {
+    return pipelineAbortController.signal.aborted;
+  }
+
   async function runPipeline() {
+    const { signal } = pipelineAbortController;
     const jevResult = await jevAdapter.analyzeSpans(
       spansForJev,
       { kind: prepared.artifact.kind, title: prepared.artifact.title },
-      { signal: pipelineAbortController.signal }
+      { signal }
     );
+    if (pipelineTimedOut()) return TIMED_OUT;
 
     if (jevAdapter.mode === 'live' && (jevResult.capReached || jevResult.calls > maxJevCalls)) {
       return buildAbstentionOnlyGraph({
@@ -192,12 +198,15 @@ export async function analyze({
       });
     }
 
+    if (pipelineTimedOut()) return TIMED_OUT;
+
     const newsjackResult = await newsjackAdapter.getStoryContext({
       url: prepared.artifact.url,
       canonical_url: prepared.artifact.canonicalUrl,
       title: prepared.artifact.title,
       published_at: prepared.artifact.publishedAt
     });
+    if (pipelineTimedOut()) return TIMED_OUT;
 
     const fusionResult = fuse({
       spans: prepared.spans,
@@ -215,7 +224,9 @@ export async function analyze({
     const cascadeStarted = Date.now();
     const classifierDevOn = Boolean(classifierDevAdapter?.enabled);
     if (classifierDevOn) {
+      if (pipelineTimedOut()) return TIMED_OUT;
       const taxonomy = await loadClassifierDevTaxonomy();
+      if (pipelineTimedOut()) return TIMED_OUT;
       cascadeResult = await runSelectiveCascade({
         spans: spansForJev,
         jevResult,
@@ -223,9 +234,10 @@ export async function analyze({
         taxonomyVersion: taxonomy.versionId,
         minConfidence: config.classifierDev?.minConfidenceForEscalation,
         injectedSpanIds: fusionResult.injectedSpanIds,
-        signal: pipelineAbortController.signal,
+        signal,
         tier: config.classifierDev?.tier
       });
+      if (pipelineTimedOut()) return TIMED_OUT;
       applyCascadeDispositions(fusionResult, cascadeResult);
     }
     const cascadeElapsedMs = Date.now() - cascadeStarted;

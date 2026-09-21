@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import { mkdtemp, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createServer } from '../media-lens/worker/server.js';
 import {
   DEFAULT_LIMITS,
@@ -16,6 +19,10 @@ import { createJevAdapter } from '../media-lens/worker/adapters/jev.js';
 import { createNewsjackAdapter } from '../media-lens/worker/adapters/newsjack.js';
 import { createClassifierDevAdapter } from '../media-lens/worker/adapters/classifier-dev.js';
 import { createTypesafeBudget } from '../media-lens/worker/typesafe-budget.js';
+import {
+  DEFAULT_TYPESAFE_BUDGET_STORE_FILE,
+  sanitizeBudgetStoreRecord
+} from '../media-lens/worker/typesafe-budget-store.js';
 import {
   ALERT_RECIPIENT,
   BLOCKED_ALERT_TRANSPORT,
@@ -201,6 +208,116 @@ test('perAnalysisTimeoutMs aborts in-flight Jev via shared AbortController', asy
   assert.equal(abortSeen, true);
   assert.ok(Date.now() - startedAt < 2000);
   assert.ok(graph.abstentions.some((a) => a.reason === 'engine_unavailable'));
+});
+
+test('R1: per-analysis timeout return prevents newsjack and downstream adapter work after abort', async () => {
+  const config = loadConfig({ MEDIA_LENS_MODE: 'fixture' });
+  config.limits = { ...config.limits, perAnalysisTimeoutMs: 50, maxJevCallsPerAnalysis: 160 };
+
+  const prepared = prepareFromPastedText({ text: 'A '.repeat(150) + 'long enough body for timeout guard test.' });
+  let newsjackCalls = 0;
+  let cascadeCalls = 0;
+
+  const jevAdapter = {
+    mode: 'live',
+    analyzeSpans: (_spans, _artifact, { signal } = {}) =>
+      new Promise((resolve) => {
+        signal?.addEventListener(
+          'abort',
+          () => {
+            setTimeout(() => {
+              resolve({
+                answersBySpanId: new Map(),
+                failedSpanIds: new Set(['span-1']),
+                reviewSpanIds: new Set(),
+                unavailableSpanIds: new Set(['span-1']),
+                dispositionsBySpanId: new Map(),
+                calls: 1,
+                failures: 1,
+                elapsedMs: 0,
+                modelReported: null,
+                modelMatch: null,
+                capReached: false
+              });
+            }, 120);
+          },
+          { once: true }
+        );
+      })
+  };
+
+  const newsjackAdapter = {
+    mode: 'artifacts',
+    getStoryContext: async () => {
+      newsjackCalls += 1;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      return { story_origin: null, freshness_gate: null, cluster: null, provenance: 'newsjack_artifacts' };
+    }
+  };
+
+  const classifierDevAdapter = {
+    enabled: true,
+    classify: async () => {
+      cascadeCalls += 1;
+      throw new Error('classifier.dev must not run after timeout');
+    }
+  };
+
+  const startedAt = Date.now();
+  const graph = await analyze({
+    prepared,
+    config,
+    jevAdapter,
+    newsjackAdapter,
+    classifierDevAdapter,
+    userAssertedPublic: true,
+    consentAt: '2026-09-21T00:00:00.000Z'
+  });
+
+  assert.ok(Date.now() - startedAt < 2000);
+  assert.ok(graph.abstentions.some((a) => a.reason === 'engine_unavailable'));
+  assert.equal(newsjackCalls, 0);
+  assert.equal(cascadeCalls, 0);
+
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  assert.equal(newsjackCalls, 0);
+  assert.equal(cascadeCalls, 0);
+});
+
+test('R2: ESTIMATED budget store persists across process restart within the same UTC month', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'media-lens-budget-store-'));
+  const storePath = join(dir, 'typesafe-budget.json');
+  const fixedNow = () => Date.UTC(2026, 8, 21, 12, 0, 0);
+
+  const first = createTypesafeBudget({
+    estimatedUsdPerCall: 1,
+    warnUsd: 20,
+    stopUsd: 30,
+    storePath,
+    now: fixedNow
+  });
+  first.recordCalls(5);
+  assert.equal(first.getSnapshot().calls, 5);
+
+  const reloaded = createTypesafeBudget({
+    estimatedUsdPerCall: 1,
+    warnUsd: 20,
+    stopUsd: 30,
+    storePath,
+    now: fixedNow
+  });
+  assert.equal(reloaded.getSnapshot().calls, 5);
+  assert.equal(reloaded.wouldExceed(26), true);
+  reloaded.recordCalls(25);
+  assert.equal(reloaded.isStopped(), true);
+
+  const raw = JSON.parse(await readFile(storePath, 'utf8'));
+  assert.equal(raw.month, '2026-09');
+  assert.equal(raw.calls, 30);
+  assert.equal(Object.hasOwn(raw, 'article'), false);
+  assert.equal(Object.hasOwn(raw, 'text'), false);
+  assert.equal(sanitizeBudgetStoreRecord({ ...raw, text: 'article body' }), null);
+  assert.equal(DEFAULT_TYPESAFE_BUDGET_STORE_FILE, '/var/lib/media-lens/typesafe-budget.json');
 });
 
 test('default rate limits fail-closed at 5 analyses/min, 5 live URL/min, 2/host/min, concurrency 1', async () => {

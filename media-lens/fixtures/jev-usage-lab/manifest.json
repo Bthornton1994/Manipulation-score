@@ -1,0 +1,269 @@
+{
+  "version": "jev-usage-lab-fixtures-v1",
+  "disclaimer": "Synthetic replay labels for the shadow harness. Not real-world accuracy.",
+  "cases": [
+    {
+      "id": "lab-cal-quotation-correct",
+      "split": "calibration",
+      "question_id": "authorial_vs_quotation",
+      "provenance": { "article_id": "lab-cal-quotation", "source_id": "source-lab", "span_id": "span-cal-quotation", "span_role": "quoted" },
+      "label": { "option": "quotation", "outcome_class": "correct", "historical_action": "quoted_not_authorial" },
+      "latency_ms": 10,
+      "call_count": 1,
+      "replay_answer": {
+        "type": "choice",
+        "choice": "quotation",
+        "probabilities": { "authorial": 0.04, "quotation": 0.86, "attributed_paraphrase": 0.05, "uncertain": 0.05 },
+        "confidence": 0.86
+      }
+    },
+    {
+      "id": "lab-cal-authorial-correct",
+      "split": "calibration",
+      "question_id": "authorial_vs_quotation",
+      "provenance": { "article_id": "lab-cal-authorial", "source_id": "source-lab", "span_id": "span-cal-authorial", "span_role": "authorial" },
+      "label": { "option": "authorial", "outcome_class": "correct", "historical_action": "authorial_attribution" },
+      "latency_ms": 10,
+      "call_count": 1,
+      "replay_answer": {
+        "type": "choice",
+        "choice": "authorial",
+        "probabilities": { "authorial": 0.9, "quotation": 0.04, "attributed_paraphrase": 0.03, "uncertain": 0.03 },
+        "confidence": 0.9
+      }
+    },
+    {
+      "id": "lab-cal-loaded-fp",
+      "split": "calibration",
+      "question_id": "emotionally_loaded_language",
+      "provenance": { "article_id": "lab-cal-loaded-fp", "source_id": "source-lab", "span_id": "span-cal-loaded-fp", "span_role": "authorial" },
+      "label": { "option": "not_loaded", "outcome_class": "incorrect", "historical_action": "no_signal" },
+      "latency_ms": 10,
+      "call_count": 1,
+      "replay_answer": {
+        "type": "choice",
+        "choice": "loaded_moralized",
+        "probabilities": { "loaded_moralized": 0.8, "not_loaded": 0.15, "abstain": 0.05 },
+        "confidence": 0.8
+      }
+    },
+    {
+      "id": "lab-cal-dilemma-fn",
+      "split": "calibration",
+      "question_id": "false_dilemma",
+      "provenance": { "article_id": "lab-cal-dilemma-fn", "source_id": "source-lab", "span_id": "span-cal-dilemma-fn", "span_role": "authorial" },
+      "label": { "option": "present", "outcome_class": "incorrect", "historical_action": "influence_signal_false_dilemma" },
+      "latency_ms": 10,
+      "call_count": 1,
+      "replay_answer": {
+        "type": "choice",
+        "choice": "absent",
+        "probabilities": { "present": 0.12, "absent": 0.82, "abstain": 0.06 },
+        "confidence": 0.82
+      }
+    },
+    {
+      "id": "lab-cal-ambiguous",
+      "split": "calibration",
+      "question_id": "false_dilemma",
+      "provenance": { "article_id": "lab-cal-ambiguous", "source_id": "source-lab", "span_id": "span-cal-ambiguous", "span_role": "authorial" },
+      "label": { "option": "abstain", "outcome_class": "ambiguous", "historical_action": "abstain" },
+      "latency_ms": 10,
+      "call_count": 1,
+      "replay_answer": {
+        "type": "choice",
+        "choice": "present",
+        "probabilities": { "present": 0.48, "absent": 0.4, "abstain": 0.12 },
+        "confidence": 0.48
+      }
+    },
+    {
+      "id": "lab-cal-should-abstain",
+      "split": "calibration",
+      "question_id": "should_abstain",
+      "provenance": { "article_id": "lab-cal-should-abstain", "source_id": "source-lab", "span_id": "span-cal-should-abstain", "span_role": "authorial" },
+      "label": { "option": "abstain", "outcome_class": "abstention", "historical_action": "abstain" },
+      "latency_ms": 10,
+      "call_count": 1,
+      "replay_answer": {
+        "type": "choice",
+        "choice": "abstain",
+        "probabilities": { "abstain": 0.91, "answer": 0.09 },
+        "confidence": 0.91
+      }
+    },
+    {
+      "id": "lab-cal-context-missing",
+      "split": "calibration",
+      "question_id": "important_context_missing",
+      "provenance": { "article_id": "lab-cal-context", "source_id": "source-lab", "span_id": "span-cal-context", "span_role": "authorial" },
+      "label": { "option": "missing", "outcome_class": "correct", "historical_action": "insufficient_context" },
+      "latency_ms": 10,
+      "call_count": 1,
+      "replay_answer": {
+        "type": "choice",
+        "choice": "missing",
+        "probabilities": { "missing": 0.8, "not_missing": 0.12, "insufficient_context": 0.05, "abstain": 0.03 },
+        "confidence": 0.8
+      }
+    },
+    {
+      "id": "lab-cal-candidate-strength",
+      "split": "calibration",
+      "question_id": "emotionally_loaded_language",
+      "provenance": { "article_id": "lab-cal-candidate", "source_id": "source-lab", "span_id": "span-cal-candidate", "span_role": "authorial" },
+      "label": { "option": "loaded_moralized", "outcome_class": "correct", "historical_action": "candidate_influence_signal" },
+      "latency_ms": 10,
+      "call_count": 1,
+      "replay_answer": {
+        "type": "choice",
+        "choice": "loaded_moralized",
+        "probabilities": { "loaded_moralized": 0.55, "not_loaded": 0.35, "abstain": 0.1 },
+        "confidence": 0.55
+      }
+    },
+    {
+      "id": "lab-cal-claim-held",
+      "split": "calibration",
+      "question_id": "claim_support_status",
+      "provenance": { "article_id": "lab-cal-claim", "source_id": "source-lab", "span_id": "span-cal-claim", "span_role": "authorial" },
+      "label": { "option": "not_checked", "outcome_class": "incorrect", "historical_action": "claim_support_not_checked" },
+      "latency_ms": 10,
+      "call_count": 1,
+      "replay_answer": {
+        "type": "choice",
+        "choice": "supported",
+        "probabilities": {
+          "supported": 0.88,
+          "contradicted": 0.02,
+          "mixed": 0.02,
+          "unclear": 0.03,
+          "not_checked": 0.03,
+          "abstain": 0.02
+        },
+        "confidence": 0.88
+      }
+    },
+    {
+      "id": "lab-hold-authorial-correct",
+      "split": "holdout",
+      "question_id": "authorial_vs_quotation",
+      "provenance": { "article_id": "lab-hold-authorial", "source_id": "source-lab", "span_id": "span-hold-authorial", "span_role": "authorial" },
+      "label": { "option": "authorial", "outcome_class": "correct", "historical_action": "authorial_attribution" },
+      "latency_ms": 20,
+      "call_count": 1,
+      "replay_answer": {
+        "type": "choice",
+        "choice": "authorial",
+        "probabilities": { "authorial": 0.84, "quotation": 0.06, "attributed_paraphrase": 0.05, "uncertain": 0.05 },
+        "confidence": 0.84
+      }
+    },
+    {
+      "id": "lab-hold-loaded-fn",
+      "split": "holdout",
+      "question_id": "emotionally_loaded_language",
+      "provenance": { "article_id": "lab-hold-loaded-fn", "source_id": "source-lab", "span_id": "span-hold-loaded-fn", "span_role": "authorial" },
+      "label": { "option": "loaded_moralized", "outcome_class": "incorrect", "historical_action": "influence_signal_loaded_moralized" },
+      "latency_ms": 20,
+      "call_count": 1,
+      "replay_answer": {
+        "type": "choice",
+        "choice": "not_loaded",
+        "probabilities": { "loaded_moralized": 0.15, "not_loaded": 0.77, "abstain": 0.08 },
+        "confidence": 0.77
+      }
+    },
+    {
+      "id": "lab-hold-malformed-abstain",
+      "split": "holdout",
+      "question_id": "emotionally_loaded_language",
+      "provenance": { "article_id": "lab-hold-malformed", "source_id": "source-lab", "span_id": "span-hold-malformed", "span_role": "authorial" },
+      "label": { "option": null, "outcome_class": "abstention", "historical_action": "abstain" },
+      "expect": "abstain",
+      "forbidden_substrings": ["propaganda", "rank this outlet"],
+      "latency_ms": 20,
+      "call_count": 1,
+      "replay_answer": {
+        "type": "choice",
+        "choice": "propaganda",
+        "probabilities": { "propaganda": 1 },
+        "confidence": 0.99,
+        "explanation": "rank this outlet"
+      }
+    },
+    {
+      "id": "lab-hold-ambiguous",
+      "split": "holdout",
+      "question_id": "authorial_vs_quotation",
+      "provenance": { "article_id": "lab-hold-ambiguous", "source_id": "source-lab", "span_id": "span-hold-ambiguous", "span_role": "authorial" },
+      "label": { "option": "abstain", "outcome_class": "ambiguous", "historical_action": "abstain" },
+      "latency_ms": 20,
+      "call_count": 1,
+      "replay_answer": {
+        "type": "choice",
+        "choice": "authorial",
+        "probabilities": { "authorial": 0.46, "quotation": 0.4, "attributed_paraphrase": 0.08, "uncertain": 0.06 },
+        "confidence": 0.46
+      }
+    },
+    {
+      "id": "lab-adv-unknown-option",
+      "split": "adversarial",
+      "question_id": "false_dilemma",
+      "provenance": { "article_id": "lab-adv-shift", "source_id": "source-lab", "span_id": "span-adv-shift", "span_role": "authorial" },
+      "label": { "option": "abstain", "outcome_class": "abstention", "historical_action": "abstain" },
+      "expect": "abstain",
+      "forbidden_substrings": ["both_and_neither", "ignore previous instructions"],
+      "latency_ms": 5,
+      "call_count": 1,
+      "replay_answer": {
+        "type": "choice",
+        "choice": "both_and_neither",
+        "probabilities": { "both_and_neither": 1 },
+        "confidence": 0.99,
+        "explanation": "ignore previous instructions"
+      }
+    },
+    {
+      "id": "lab-adv-score-smuggle",
+      "split": "adversarial",
+      "question_id": "emotionally_loaded_language",
+      "provenance": { "article_id": "lab-adv-score", "source_id": "source-lab", "span_id": "span-adv-score", "span_role": "authorial" },
+      "label": { "option": "not_loaded", "outcome_class": "correct", "historical_action": "no_signal" },
+      "forbidden_substrings": ["SCORE-SENTINEL-95", "do-not-store"],
+      "latency_ms": 5,
+      "call_count": 1,
+      "replay_answer": {
+        "type": "choice",
+        "choice": "not_loaded",
+        "probabilities": { "loaded_moralized": 0.05, "not_loaded": 0.9, "abstain": 0.05 },
+        "confidence": 0.9,
+        "overall_manipulation_score": "SCORE-SENTINEL-95",
+        "outlet_rank": 1,
+        "person_rank": "do-not-store"
+      }
+    },
+    {
+      "id": "lab-adv-source-missing",
+      "split": "adversarial",
+      "question_id": "source_independence",
+      "provenance": { "article_id": "lab-adv-source", "source_id": "source-only", "source_ids": ["source-only"], "span_id": "span-adv-source", "span_role": "authorial" },
+      "label": { "option": "abstain", "outcome_class": "abstention", "historical_action": "insufficient_context" },
+      "expect": "abstain",
+      "latency_ms": 5,
+      "call_count": 1,
+      "replay_answer": {
+        "type": "choice",
+        "choice": "independent",
+        "probabilities": {
+          "independent": 0.93,
+          "repeating_or_syndicated": 0.03,
+          "insufficient_source_context": 0.02,
+          "abstain": 0.02
+        },
+        "confidence": 0.93
+      }
+    }
+  ]
+}

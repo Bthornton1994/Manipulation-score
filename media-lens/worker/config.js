@@ -46,19 +46,25 @@ export const DEFAULT_LIMITS = Object.freeze({
   urlFetchParseTimeoutMs: 2000
 });
 
-// Owner approval 2026-09-22 PT. These are the operating points for when an
-// operator sets the four narrow-shadow limit variables. loadConfig does not
-// read this object and does not copy it into the environment.
-// estimatedUsdPerCall is null on purpose: an unset per-call estimate keeps
-// real narrow calls at zero. A one-shot live shadow needs a separate
-// owner authorization before that variable is set.
+// Owner approval 2026-09-22 PT for the four numeric limits, and a same-day
+// owner authorization for a planning-only per-call estimate.
+// ESTIMATED planning value only. loadConfig must not inject it and must not
+// copy this object into the environment. Runtime still needs
+// MEDIA_LENS_JEV_SHADOW_NARROW_ESTIMATED_USD_PER_CALL set explicitly. An unset
+// env keeps the parsed per-call estimate null, so real narrow calls stay at zero.
+// Basis for 0.002: universal serialized request bound 9467 characters; planning
+// token bound 3156 = ceil(9467 / 3); public TypeSafe reference $0.042 / MTok
+// input (planning-only; account invoice unverified); 20% buffer makes the raw
+// buffered figure about $0.000159 / call. 0.002 is a conservative planning
+// estimate above that figure, not account-verified billing and not a
+// production-ready claim. Five calls at 0.002 are $0.010.
 export const NARROW_SHADOW_APPROVED_OPERATING_POINTS = Object.freeze({
   approvedOn: '2026-09-22',
   maxCallsPerAnalysis: 5,
   timeoutMs: 10000,
   rateLimitPerMinute: 6,
   monthlyCostCeilingUsd: 5,
-  estimatedUsdPerCall: null
+  estimatedUsdPerCall: 0.002
 });
 
 function readMode(env) {
@@ -207,9 +213,8 @@ export function loadConfig(env = process.env) {
     // classifier.dev, or pin verify. extraJevCallsEnabled stays false:
     // MEDIA_LENS_JEV_SHADOW only captures production answers. Narrow-question
     // calls use jevShadowNarrow. The parsers below stay null when unset.
-    // They do not fall back to the approved operating points above.
-    // The approved operating posture leaves the per-call estimate unset,
-    // so real narrow calls stay at zero.
+    // They do not fall back to any planning value recorded above this function.
+    // An unset per-call estimate env stays null, so real narrow calls stay at zero.
     jevShadow: {
       enabled: readExactTrue(env, 'MEDIA_LENS_JEV_SHADOW'),
       extraJevCallsEnabled: false

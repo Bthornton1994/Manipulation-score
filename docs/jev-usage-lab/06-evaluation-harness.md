@@ -73,7 +73,7 @@ Tests in `tests/media-lens-jev-usage-lab.test.js` lock:
 - cross-span batches split
 - `analyze()` on `synthetic-01-quoted-vs-authorial` still reports 6 fixture-mode logical calls
 - `worker/config.js` reads `MEDIA_LENS_JEV_SHADOW` as an exact `true` and leaves it off otherwise. `analyze()` still does not import the lab
-- the CLI does not ask `media-lens-narrow.v1` on the network. That path is `MEDIA_LENS_JEV_SHADOW_NARROW`, default off, in `docs/jev-usage-lab/10-narrow-shadow-execution.md`. The 2026-09-22 PT approval leaves the per-call estimate unset, so that network stays off
+- the CLI does not ask `media-lens-narrow.v1` on the network. That path is `MEDIA_LENS_JEV_SHADOW_NARROW`, default off, in `docs/jev-usage-lab/10-narrow-shadow-execution.md`. The 2026-09-22 PT record stores 0.002 as an ESTIMATED planning constant only. The runtime env stays unset, so that network stays off
 - the committed report matches a fresh render
 
 ## How to run

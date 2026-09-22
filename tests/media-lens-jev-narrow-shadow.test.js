@@ -779,7 +779,8 @@ test('approved operating points parse, and an unset estimate refuses the network
   assert.equal(approved.timeoutMs, 10000);
   assert.equal(approved.rateLimitPerMinute, 6);
   assert.equal(approved.monthlyCostCeilingUsd, 5);
-  assert.equal(approved.estimatedUsdPerCall, null);
+  assert.equal(approved.estimatedUsdPerCall, 0.002);
+  assert.equal(process.env.MEDIA_LENS_JEV_SHADOW_NARROW_ESTIMATED_USD_PER_CALL, undefined);
   assert.equal(NARROW_SHADOW_MAX_SPAN_CHARS, 1200);
   assert.equal(NARROW_SHADOW_MAX_CONTEXT_CHARS, 400);
   assert.equal(SHADOW_RETENTION, 'stderr_process_log_only_no_disk_store');
@@ -787,6 +788,7 @@ test('approved operating points parse, and an unset estimate refuses the network
   const configSource = await readFile('media-lens/worker/config.js', 'utf8');
   const loadBody = configSource.slice(configSource.indexOf('export function loadConfig'));
   assert.equal(loadBody.includes('NARROW_SHADOW_APPROVED_OPERATING_POINTS'), false);
+  assert.equal(loadBody.includes('0.002'), false);
   assert.equal(configSource.includes('jev-usage-lab'), false);
   const shadowSource = await readFile('media-lens/worker/jev-usage-lab/analyze-shadow.js', 'utf8');
   assert.match(shadowSource, /export const SHADOW_RETENTION = 'stderr_process_log_only_no_disk_store'/);
@@ -814,6 +816,7 @@ test('approved operating points parse, and an unset estimate refuses the network
   assert.equal(four.jevShadowNarrow.rateLimitPerMinute, approved.rateLimitPerMinute);
   assert.equal(four.jevShadowNarrow.monthlyCostCeilingUsd, approved.monthlyCostCeilingUsd);
   assert.equal(four.jevShadowNarrow.estimatedUsdPerCall, null);
+  assert.notEqual(four.jevShadowNarrow.estimatedUsdPerCall, approved.estimatedUsdPerCall);
   assert.equal(narrowLimitsPresent(four.jevShadowNarrow), false);
   assert.equal(narrowNetworkBlockReason(four), 'owner_limits_unset');
   assert.equal(narrowShadowLiveNetworkPermitted(four), false);
@@ -971,7 +974,7 @@ test('mock provider still runs when a test-only estimate accompanies the approve
 
 test('worst-case narrow body truncates the title and stays inside the cap fence', async () => {
   assert.equal(NARROW_SHADOW_MAX_TITLE_CHARS, 2000);
-  assert.equal(NARROW_SHADOW_APPROVED_OPERATING_POINTS.estimatedUsdPerCall, null);
+  assert.equal(NARROW_SHADOW_APPROVED_OPERATING_POINTS.estimatedUsdPerCall, 0.002);
   assert.equal(process.env.MEDIA_LENS_JEV_SHADOW_NARROW_ESTIMATED_USD_PER_CALL, undefined);
   assert.equal(process.env.MEDIA_LENS_TYPESAFE_API_KEY, undefined);
   assert.equal(process.env.MEDIA_LENS_JEV_SHADOW_NARROW, undefined);
@@ -1078,7 +1081,11 @@ test('worst-case narrow body truncates the title and stays inside the cap fence'
     const charBound = structuralChars + boundedTextChars;
     const tokenCeiling = Math.ceil(charBound / 3);
     const packet = JSON.parse(await readFile('docs/jev-usage-lab/narrow-shadow-request-bound.v1.json', 'utf8'));
-    assert.equal(packet.estimatedUsdPerCall, null);
+    assert.equal(packet.planningEstimatedUsdPerCall, 0.002);
+    assert.equal(packet.runtimeEstimatedUsdPerCall, null);
+    assert.equal(packet.runtimeUnsetMeansNoCall, true);
+    assert.equal(packet.loadConfigInjectsPlanningEstimate, false);
+    assert.equal(packet.accountVerified, false);
     assert.equal(packet.testShape.notAUniversalCeiling, true);
     assert.equal(packet.testShape.label, 'short_identifiers_in_title_cap_regression');
     assert.equal(charBound, packet.testShape.charBound);
@@ -1140,7 +1147,7 @@ test('worst-case narrow body truncates the title and stays inside the cap fence'
 
 test('universal narrow body uses maximum safe ids and matches the planning packet', async () => {
   assert.equal(NARROW_SHADOW_MAX_SAFE_ID_CHARS, 128);
-  assert.equal(NARROW_SHADOW_APPROVED_OPERATING_POINTS.estimatedUsdPerCall, null);
+  assert.equal(NARROW_SHADOW_APPROVED_OPERATING_POINTS.estimatedUsdPerCall, 0.002);
   assert.equal(process.env.MEDIA_LENS_JEV_SHADOW_NARROW_ESTIMATED_USD_PER_CALL, undefined);
   assert.equal(process.env.MEDIA_LENS_TYPESAFE_API_KEY, undefined);
   assert.equal(process.env.MEDIA_LENS_ENABLE_LIVE, undefined);
@@ -1242,6 +1249,26 @@ test('universal narrow body uses maximum safe ids and matches the planning packe
     assert.equal(packet.universal.planningTMax, Math.ceil(packet.universal.charBound / 3));
     assert.equal(packet.universal.charBound, 9467);
     assert.equal(packet.universal.planningTMax, 3156);
+    assert.equal(packet.planningEstimatedUsdPerCall, NARROW_SHADOW_APPROVED_OPERATING_POINTS.estimatedUsdPerCall);
+    assert.equal(packet.planningEstimatedUsdPerCall, 0.002);
+    assert.equal(packet.runtimeEstimatedUsdPerCall, null);
+    assert.equal(packet.runtimeUnsetMeansNoCall, true);
+    assert.equal(packet.loadConfigInjectsPlanningEstimate, false);
+    assert.equal(packet.accountVerified, false);
+    assert.equal(packet.providerMeasured, false);
+    assert.equal(packet.publicListPriceUsdPerMillionInputTokens, 0.042);
+    assert.equal(packet.planningBufferFraction, 0.2);
+    assert.equal(packet.rawBufferedUsdPerCallApprox, '0.000159');
+    assert.equal(packet.maxFiveCallAnalysisEstimateUsd, 0.01);
+    const rawUsd = (packet.universal.planningTMax * packet.publicListPriceUsdPerMillionInputTokens) / 1_000_000;
+    const bufferedUsd = rawUsd * (1 + packet.planningBufferFraction);
+    assert.ok(Math.abs(bufferedUsd - 0.0001590624) < 1e-12);
+    assert.ok(bufferedUsd < packet.planningEstimatedUsdPerCall);
+    assert.equal(packet.planningEstimatedUsdPerCall * 5, packet.maxFiveCallAnalysisEstimateUsd);
+    const executionDoc = await readFile('docs/jev-usage-lab/10-narrow-shadow-execution.md', 'utf8');
+    assert.match(executionDoc, /A shared ledger is required before multi-worker or restart-safe standing enablement/);
+    assert.match(executionDoc, /loadConfig` does not apply 0\.002/);
+    assert.match(executionDoc, /does not inject it/);
     assert.ok(packet.universal.charBound > packet.testShape.charBound);
     assert.notEqual(3004, packet.universal.charBound);
     assert.notEqual(3004, packet.universal.planningTMax);

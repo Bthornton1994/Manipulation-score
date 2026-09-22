@@ -167,6 +167,45 @@ test('createServer fixture mode remains unchanged without live opt-in or API key
   }
 });
 
+test('live fixture mode is rejected before any external Jev request', async () => {
+  let jevHits = 0;
+  const mockJev = http.createServer((req, res) => {
+    jevHits += 1;
+    req.resume();
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        model: 'jev-1.13.0',
+        answers: { influence_signal: { choice: 'none' }, is_quoted_or_attributed: { noul: 0.1 } }
+      })
+    );
+  });
+  await new Promise((resolve) => mockJev.listen(0, '127.0.0.1', resolve));
+
+  const mockAddress = mockJev.address();
+  const config = loadConfig({
+    MEDIA_LENS_MODE: 'live',
+    MEDIA_LENS_ENABLE_LIVE: 'true',
+    MEDIA_LENS_TYPESAFE_API_KEY: 'test-key',
+    MEDIA_LENS_TYPESAFE_BASE_URL: `http://127.0.0.1:${mockAddress.port}`
+  });
+  const server = await listen(createServer(config));
+  try {
+    const res = await requestJson(server, {
+      method: 'POST',
+      path: '/analyze',
+      body: { user_asserted_public: true, mode: 'fixture', fixture_id: 'synthetic-01-quoted-vs-authorial' }
+    });
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error, 'live_fixture_disabled');
+    assert.match(res.body.message, /Fixture examples are disabled in live mode/i);
+    assert.equal(jevHits, 0, 'live fixture mode must not call the Jev endpoint');
+  } finally {
+    server.close();
+    mockJev.close();
+  }
+});
+
 test('live pasted text is rejected before any external request', async () => {
   let jevHits = 0;
   const mockJev = http.createServer((req, res) => {

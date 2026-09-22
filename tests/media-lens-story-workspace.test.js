@@ -3,16 +3,21 @@ import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
 import {
   ALTERNATIVE_READINGS_EMPTY,
+  FIXTURE_LANES,
   FIXTURE_STORIES,
   OMISSION_EMPTY_COPY,
   filterFixtureStories,
   fixtureGraphUrl,
+  membersForCompare,
+  renderCoverageCountIndicator,
   renderCoverageDistribution,
+  renderCoverageGap,
   renderInfluenceProfile,
-  renderOmissionCandidates
+  renderOmissionCandidates,
+  storiesForLane
 } from '../media-lens/media-lens.js';
 
-const BIAS_METER = /bias meter|left-leaning|right-leaning|factuality rating|Ground News|leaderboard/i;
+const BIAS_METER = /bias meter|left-leaning|right-leaning|center-leaning|factuality rating|ownership rating|Ground News|blindspot|leaderboard/i;
 const EXTERNAL_DISCOVERY = /classifier\.dev|ml-jev|medialyst|news-search|api\.typesafe\.ai|\/v1\/cluster/i;
 
 async function golden(id) {
@@ -42,6 +47,15 @@ test('home is a media-intelligence workspace with separate story search and URL 
   assert.match(html, /Structured summary of observable evidence/);
   assert.match(html, /id="alternative-readings"/);
   assert.match(html, /id="story-search-form"/);
+  assert.match(html, /id="fixture-lanes"/);
+  assert.match(html, /a lane does not follow live coverage/);
+  assert.match(html, /aria-label="Compare recorded sources"/);
+  assert.match(html, /id="question-reading"/);
+  assert.match(html, /does not send feedback/);
+  assert.match(html, /id="result-updated"/);
+  const limitations = html.slice(html.indexOf('id="analysis-limitations"'), html.indexOf('id="engine-stats"'));
+  assert.match(limitations, /id="question-reading-destination"/);
+  assert.match(limitations, /does not send feedback/);
   assert.doesNotMatch(html, BIAS_METER);
   const storyForm = html.slice(html.indexOf('id="story-search-form"'), html.indexOf('id="analyze-form"'));
   assert.doesNotMatch(storyForm, /name="url"/);
@@ -60,7 +74,66 @@ test('fixture catalog matches golden titles and domains and does not invent extr
     assert.equal(story.byline || null, graph.artifact.byline, story.id);
     assert.match(story.fixtureNote, /^Fixture example\./);
     assert.equal(fixtureGraphUrl(story.id), `./fixtures/expected/${story.id}.graph.json`);
+    const cluster = graph.coverage?.cluster;
+    const hasMembers = Array.isArray(cluster?.members) && cluster.members.length > 0;
+    if (!hasMembers) {
+      assert.equal(story.coverageCount, null, story.id);
+      assert.equal(story.lane, 'coverage-gap', story.id);
+    } else {
+      assert.deepEqual(
+        story.coverageCount,
+        {
+          members: cluster.member_count,
+          independent: cluster.independent_sources_estimate,
+          syndicated: cluster.duplicate_or_syndicated_count,
+          frames: graph.coverage.frames.length
+        },
+        story.id
+      );
+    }
   }
+});
+
+test('fixture lanes and coverage-count cards stay local and unlabeled by politics', () => {
+  assert.deepEqual(
+    FIXTURE_LANES.map((lane) => lane.id),
+    ['all', 'quoted-language', 'syndicated-cluster', 'coverage-gap']
+  );
+  assert.deepEqual(
+    storiesForLane('syndicated-cluster').map((story) => story.id),
+    ['synthetic-02-syndicated-cluster']
+  );
+  assert.equal(storiesForLane('coverage-gap').length, 4);
+  assert.equal(storiesForLane('all').length, FIXTURE_STORIES.length);
+  const counted = renderCoverageCountIndicator(FIXTURE_STORIES[1].coverageCount);
+  assert.match(counted, /Recorded coverage count: 5 cluster members/);
+  assert.match(counted, /Independent reporting 2/);
+  assert.match(counted, /Syndicated or duplicate 3/);
+  assert.match(counted, /Fixture count only/);
+  assert.match(counted, /No represented frames recorded/);
+  const gap = renderCoverageCountIndicator(null);
+  assert.match(gap, /Coverage gap in this fixture/);
+  assert.match(gap, /not proof a fact was left out/);
+  assert.doesNotMatch(`${counted} ${gap}`, BIAS_METER);
+});
+
+test('source comparison filters recorded relations and coverage gaps stay non-claims', async () => {
+  const cluster = await golden('synthetic-02-syndicated-cluster');
+  assert.equal(membersForCompare(cluster.coverage, 'syndicated').length, 2);
+  assert.equal(membersForCompare(cluster.coverage, 'same_story').length, 2);
+  assert.equal(membersForCompare(cluster.coverage, 'independent').length, 3);
+  assert.equal(membersForCompare(cluster.coverage, 'frames').length, 0);
+  assert.equal(membersForCompare(cluster.coverage, 'all').length, 5);
+  assert.equal(renderCoverageGap(cluster.coverage), '');
+  const missing = await golden('synthetic-03-no-timestamp');
+  const gap = renderCoverageGap(missing.coverage);
+  assert.match(gap, /Coverage gap/);
+  assert.match(gap, /insufficient/);
+  assert.match(gap, /not proof a fact was left out/);
+  assert.doesNotMatch(gap, /proven omission|blindspot|left-leaning|right-leaning/i);
+  const distribution = renderCoverageDistribution(cluster.coverage);
+  assert.match(distribution, /Independent-source concentration: 2 independent reporting, 3 syndicated or duplicate/);
+  assert.match(distribution, /Represented frames recorded: 0/);
 });
 
 test('topic search filters fixture stories locally and rejects paths outside the catalog', () => {

@@ -97,6 +97,8 @@ const FIXTURE_STORIES = Object.freeze([
     domain: 'fictional-daily.example',
     byline: 'Jordan Reyes',
     topics: ['drainage', 'council', 'quoted', 'authorial', 'flooding'],
+    lane: 'quoted-language',
+    coverageCount: Object.freeze({ members: 1, independent: 1, syndicated: 0, frames: 0 }),
     fixtureNote: 'Fixture example. Quoted urgency stays separate from the writer wording.'
   }),
   Object.freeze({
@@ -105,6 +107,8 @@ const FIXTURE_STORIES = Object.freeze([
     domain: 'fictional-daily.example',
     byline: 'Priya Nandan',
     topics: ['transit', 'fare', 'syndicated', 'cluster'],
+    lane: 'syndicated-cluster',
+    coverageCount: Object.freeze({ members: 5, independent: 2, syndicated: 3, frames: 0 }),
     fixtureNote: 'Fixture example. A same-story cluster with syndicated repetition counted apart from independent reports.'
   }),
   Object.freeze({
@@ -113,6 +117,8 @@ const FIXTURE_STORIES = Object.freeze([
     domain: 'fictional-daily.example',
     byline: 'Sam Okafor',
     topics: ['cleanup', 'neighborhood', 'timestamp'],
+    lane: 'coverage-gap',
+    coverageCount: null,
     fixtureNote: 'Fixture example. No publish timestamp and no provenance record.'
   }),
   Object.freeze({
@@ -121,6 +127,8 @@ const FIXTURE_STORIES = Object.freeze([
     domain: 'fictional-daily.example',
     byline: 'Dana Whitfield',
     topics: ['housing', 'permits', 'instruction'],
+    lane: 'coverage-gap',
+    coverageCount: null,
     fixtureNote: 'Fixture example. Instruction-like text in the article is not treated as a command.'
   }),
   Object.freeze({
@@ -129,6 +137,8 @@ const FIXTURE_STORIES = Object.freeze([
     domain: 'fictional-daily.example',
     byline: 'Elena Voss',
     topics: ['paywall', 'budget', 'port'],
+    lane: 'coverage-gap',
+    coverageCount: null,
     fixtureNote: 'Fixture example. A paywalled excerpt abstains instead of fetching the rest.'
   }),
   Object.freeze({
@@ -137,8 +147,17 @@ const FIXTURE_STORIES = Object.freeze([
     domain: 'fictional-daily.example',
     byline: '',
     topics: ['road', 'closure', 'short'],
+    lane: 'coverage-gap',
+    coverageCount: null,
     fixtureNote: 'Fixture example. The excerpt is too short for a language or claim record.'
   })
+]);
+
+const FIXTURE_LANES = Object.freeze([
+  Object.freeze({ id: 'all', label: 'All fixtures' }),
+  Object.freeze({ id: 'quoted-language', label: 'Quoted language' }),
+  Object.freeze({ id: 'syndicated-cluster', label: 'Syndicated cluster' }),
+  Object.freeze({ id: 'coverage-gap', label: 'Coverage gap' })
 ]);
 
 const FIXTURE_GRAPH_ID = /^synthetic-\d{2}-[a-z0-9-]+$/;
@@ -155,6 +174,8 @@ const RELATION_LABELS = Object.freeze({
 });
 
 let currentGraph = null;
+let activeLane = 'all';
+let compareMode = 'all';
 let liveUrlReady = false;
 let isSubmitting = false;
 let lastPayload = null;
@@ -816,6 +837,29 @@ function filterFixtureStories(query, stories = FIXTURE_STORIES) {
   return list.filter((story) => storySearchText(story).includes(q));
 }
 
+function storiesForLane(laneId, stories = FIXTURE_STORIES) {
+  const list = Array.isArray(stories) ? stories : [];
+  if (!laneId || laneId === 'all') return list.slice();
+  return list.filter((story) => story && story.lane === laneId);
+}
+
+function renderCoverageCountIndicator(summary) {
+  if (!summary || !Number.isFinite(summary.members)) {
+    return '<p class="ml-gap-note">Coverage gap in this fixture: no recorded coverage count. That is not proof a fact was left out.</p>';
+  }
+  const independent = Number(summary.independent) || 0;
+  const syndicated = Number(summary.syndicated) || 0;
+  const frames = Number(summary.frames) || 0;
+  const frameLine = frames > 0 ? `${frames} represented frame records` : 'No represented frames recorded';
+  const parts = [];
+  if (independent > 0) parts.push(`<span class="ml-count-independent" style="flex-grow:${independent}"></span>`);
+  if (syndicated > 0) parts.push(`<span class="ml-count-syndicated" style="flex-grow:${syndicated}"></span>`);
+  const meter = parts.length ? `<div class="ml-count-meter" aria-hidden="true">${parts.join('')}</div>` : '';
+  return `<p class="ml-coverage-count">Recorded coverage count: ${summary.members} cluster ${
+    summary.members === 1 ? 'member' : 'members'
+  }. Independent reporting ${independent}. Syndicated or duplicate ${syndicated}. ${frameLine}.</p>${meter}<p class="ml-form-note">Fixture count only. Not a live census.</p>`;
+}
+
 function fixtureGraphUrl(id) {
   if (typeof id !== 'string' || !FIXTURE_GRAPH_ID.test(id)) return null;
   if (!FIXTURE_STORIES.some((story) => story.id === id)) return null;
@@ -829,23 +873,37 @@ function storyIdFromHash() {
 }
 
 function renderStoryCard(story) {
-  return `<li class="ml-story-card">
-    <p class="ml-sample-kicker">Fixture story</p>
+  const gap = !story.coverageCount;
+  return `<li class="ml-story-card${gap ? ' ml-gap-card' : ''}">
+    <p class="ml-sample-kicker">${gap ? 'Coverage gap' : 'Fixture story'}</p>
     <h3>${escapeHtml(story.title)}</h3>
     <p>${escapeHtml(story.domain)} · <code>${escapeHtml(story.id)}</code></p>
     <p>${escapeHtml(story.fixtureNote)}</p>
+    ${renderCoverageCountIndicator(story.coverageCount)}
     <button class="button button-secondary" type="button" data-fixture-id="${escapeHtml(story.id)}">Open fixture workspace</button>
   </li>`;
 }
 
+function renderFixtureLanes() {
+  const host = byId('fixture-lanes');
+  if (!host) return;
+  host.innerHTML = FIXTURE_LANES.map(
+    (lane) =>
+      `<button class="ml-lane" type="button" data-lane="${escapeHtml(lane.id)}" aria-pressed="${
+        lane.id === activeLane ? 'true' : 'false'
+      }">${escapeHtml(lane.label)}</button>`
+  ).join('');
+}
+
 function renderStoryCatalog(query) {
-  const stories = filterFixtureStories(query);
+  const stories = filterFixtureStories(query, storiesForLane(activeLane));
   const list = byId('story-results');
   const status = byId('story-search-status');
   if (!list) return;
+  const laneLabel = FIXTURE_LANES.find((lane) => lane.id === activeLane)?.label || 'All fixtures';
   if (stories.length === 0) {
     list.innerHTML = '';
-    if (status) status.textContent = 'No fixture story matches that search.';
+    if (status) status.textContent = `No fixture story matches that search in ${laneLabel}.`;
     return;
   }
   list.innerHTML = stories.map((story) => renderStoryCard(story)).join('');
@@ -853,8 +911,8 @@ function renderStoryCatalog(query) {
     const q = String(query || '').trim();
     const noun = stories.length === 1 ? 'fixture story' : 'fixture stories';
     status.textContent = q
-      ? `${stories.length} ${noun} match. These are examples, not live coverage.`
-      : `${stories.length} fixture stories. These are examples, not live coverage.`;
+      ? `${stories.length} ${noun} match in ${laneLabel}. These are examples, not live coverage.`
+      : `${stories.length} ${noun} in ${laneLabel}. These are examples, not live coverage.`;
   }
 }
 
@@ -913,9 +971,75 @@ function renderCoverageDistribution(coverage) {
       ? 'Fixture distribution of recorded cluster relations. Not a live census and not a political bias chart.'
       : 'Relation mix in the recorded cluster. Not a political bias chart.';
   const total = members.length;
+  const frames = Array.isArray(coverage?.frames) ? coverage.frames.length : 0;
+  const independent = coverage?.cluster?.independent_sources_estimate;
+  const syndicated = coverage?.cluster?.duplicate_or_syndicated_count;
+  const concentration =
+    Number.isFinite(independent) && Number.isFinite(syndicated)
+      ? `<p class="ml-dimension-note">Independent-source concentration: ${independent} independent reporting, ${syndicated} syndicated or duplicate. Represented frames recorded: ${frames}.</p>`
+      : '';
   return `<p class="ml-dimension-note">${escapeHtml(note)}</p><dl class="ml-coverage-grid">${rows}</dl><div class="ml-distribution" aria-hidden="true">${bar}</div><p class="ml-dimension-note">${total} recorded cluster ${
     total === 1 ? 'member' : 'members'
-  }.</p>`;
+  }.</p>${concentration}`;
+}
+
+function renderCoverageGap(coverage) {
+  const members = coverage?.cluster?.members;
+  const hasMembers = Array.isArray(members) && members.length > 0;
+  if (hasMembers && coverage?.status === 'available') return '';
+  let reason = 'No related-source cluster was recorded.';
+  if (coverage?.status === 'not_requested') reason = 'Coverage was not requested for this record.';
+  else if (coverage?.status === 'insufficient') reason = 'Coverage evidence in this record is insufficient.';
+  return `<article class="ml-gap-card"><h3>Coverage gap</h3><p>${escapeHtml(reason)} This describes an absence in the record. It is not proof a fact was left out.</p></article>`;
+}
+
+function membersForCompare(coverage, mode) {
+  const members = Array.isArray(coverage?.cluster?.members) ? coverage.cluster.members : [];
+  if (mode === 'frames') return [];
+  if (mode === 'syndicated') return members.filter((member) => member?.relation === 'syndicated');
+  if (mode === 'same_story') return members.filter((member) => member?.relation === 'same_story');
+  if (mode === 'independent') {
+    return members.filter((member) => member?.relation === 'surfaced' || member?.relation === 'same_story');
+  }
+  return members.slice();
+}
+
+function graphTimestampCopy(graph) {
+  const stamp = formatTimestamp(graph?.generated_at, 'time');
+  if (!stamp) return 'Graph timestamp: Not recorded.';
+  if (isFixtureResult(graph)) return `Fixture graph timestamp: ${stamp}. Not a live update.`;
+  return `Graph timestamp: ${stamp}.`;
+}
+
+function applyCompare(graph) {
+  const coverage = graph?.coverage;
+  document.querySelectorAll('[data-compare]').forEach((button) => {
+    button.setAttribute('aria-pressed', button.getAttribute('data-compare') === compareMode ? 'true' : 'false');
+  });
+  const status = byId('compare-status');
+  const list = byId('coverage-cluster');
+  if (!list) return;
+  if (compareMode === 'frames') {
+    const frames = renderFrameList(coverage);
+    list.innerHTML = frames || '<li class="ml-empty-state">No represented frames were recorded for this result.</li>';
+    if (status) {
+      status.textContent = frames
+        ? 'Showing represented frames recorded with this result.'
+        : 'No represented frames were recorded, so this comparison list is empty.';
+    }
+    return;
+  }
+  const members = membersForCompare(coverage, compareMode);
+  const total = Array.isArray(coverage?.cluster?.members) ? coverage.cluster.members.length : 0;
+  const html = members.map((member) => renderClusterMember(member)).join('');
+  list.innerHTML = html || '<li class="ml-empty-state">No recorded sources match this comparison.</li>';
+  if (status) {
+    const wireNote =
+      compareMode === 'independent'
+        ? ' Surfaced and same-story relations are listed. The independent estimate can still be lower when a same-story member is wire copy.'
+        : '';
+    status.textContent = `Showing ${members.length} of ${total} recorded cluster members.${wireNote} Fixture comparison only.`;
+  }
 }
 
 function renderFrameList(coverage) {
@@ -971,6 +1095,12 @@ function renderGraph(graph, source = 'analysis') {
   byId('result-title').textContent = artifact.title || 'Untitled public article';
   byId('result-overview').textContent = storyOverviewCopy(graph);
   byId('result-meta').textContent = formatArtifactMeta(artifact);
+  const updated = byId('result-updated');
+  if (updated) updated.textContent = graphTimestampCopy(graph);
+  const questionNote = byId('question-reading-note');
+  if (questionNote) questionNote.hidden = true;
+  const questionDestination = byId('question-reading-destination');
+  if (questionDestination) questionDestination.hidden = true;
   byId('result-limits').textContent = fixture
     ? 'Fixture example. Evidence is inspectable. This is not live coverage, not a truth detector, and not a person or outlet score.'
     : 'Experimental Jev-only preview. Evidence is inspectable. This is not a truth detector and not a person or outlet score.';
@@ -987,13 +1117,14 @@ function renderGraph(graph, source = 'analysis') {
   byId('coverage-stats').innerHTML = renderCoverageStats(graph.coverage);
   byId('coverage-freshness-rationale').textContent = graph.coverage.freshness_gate?.rationale || '';
   byId('coverage-origin').innerHTML = renderCoverageOrigin(graph.coverage);
-  const clusterHtml = renderClusterMembers(graph.coverage);
-  byId('coverage-cluster').innerHTML =
-    clusterHtml || '<li class="ml-empty-state">No related-source cluster was recorded for this result.</li>';
+  compareMode = 'all';
+  applyCompare(graph);
   byId('reporting-split').innerHTML = renderReportingSplit(graph.coverage);
   byId('coverage-distribution').innerHTML = renderCoverageDistribution(graph.coverage);
   byId('coverage-frames').textContent = renderCoverageFrames(graph.coverage);
   byId('coverage-frame-list').innerHTML = renderFrameList(graph.coverage);
+  const gapHost = byId('coverage-gap');
+  if (gapHost) gapHost.innerHTML = renderCoverageGap(graph.coverage);
   byId('omission-list').innerHTML = renderOmissionCandidates(graph);
   byId('coverage-list').innerHTML = renderCoverageObservationList(graph);
 
@@ -1246,11 +1377,42 @@ function setupStoryExplorer() {
   }
   if (query) query.addEventListener('input', () => renderStoryCatalog(query.value));
   document.addEventListener('click', (event) => {
-    const target = event.target instanceof Element ? event.target.closest('[data-fixture-id]') : null;
+    const el = event.target instanceof Element ? event.target : null;
+    if (!el) return;
+    const lane = el.closest('[data-lane]');
+    if (lane && byId('fixture-lanes')?.contains(lane)) {
+      activeLane = lane.getAttribute('data-lane') || 'all';
+      renderFixtureLanes();
+      renderStoryCatalog(query ? query.value : '');
+      return;
+    }
+    const compare = el.closest('[data-compare]');
+    if (compare && currentGraph) {
+      compareMode = compare.getAttribute('data-compare') || 'all';
+      applyCompare(currentGraph);
+      return;
+    }
+    const target = el.closest('[data-fixture-id]');
     if (!target) return;
     const id = target.getAttribute('data-fixture-id');
     if (id) loadFixtureGraph(id);
   });
+  const question = byId('question-reading');
+  if (question) {
+    question.addEventListener('click', () => {
+      const note = byId('question-reading-note');
+      if (note) note.hidden = false;
+      const destination = byId('question-reading-destination');
+      if (destination) destination.hidden = false;
+      const limitations = byId('analysis-limitations');
+      if (limitations) {
+        limitations.tabIndex = -1;
+        limitations.focus({ preventScroll: true });
+        limitations.scrollIntoView({ block: 'start' });
+      }
+    });
+  }
+  renderFixtureLanes();
   renderStoryCatalog('');
   const initial = storyIdFromHash();
   if (initial) loadFixtureGraph(initial);
@@ -1409,6 +1571,7 @@ export {
   COVERAGE_FRAMES_EMPTY_COPY,
   COVERAGE_OBSERVATIONS_EMPTY_COPY,
   ABSTENTION_EMPTY_COPY,
+  FIXTURE_LANES,
   FIXTURE_STORIES,
   OMISSION_EMPTY_COPY,
   buildAnalysisOverview,
@@ -1416,17 +1579,21 @@ export {
   filterFixtureStories,
   fixtureGraphUrl,
   liveUrlDisclosure,
+  membersForCompare,
   observationDisplayLabel,
   omissionCandidates,
   renderAbstentionList,
   renderAnalysisOverview,
   renderClusterMember,
   renderClusterMembers,
+  renderCoverageCountIndicator,
   renderCoverageDistribution,
   renderCoverageFrames,
+  renderCoverageGap,
   renderCoverageObservationList,
   renderInfluenceProfile,
   renderObservation,
   renderOmissionCandidates,
-  safeHttpsUrl
+  safeHttpsUrl,
+  storiesForLane
 };

@@ -76,6 +76,10 @@
               Story and topic search is a separate entry from article URL analysis. It matches labeled fixture stories shipped with
               this page. It does not discover live coverage.
             </p>
+            <div id="fixture-lanes" role="group" aria-label="Fixture interest lanes"></div>
+            <p class="ml-form-note" id="fixture-lanes-note">
+              Fixture lanes filter examples on this page. Nothing is saved, and a lane does not follow live coverage.
+            </p>
             <form id="story-search-form" role="search">
               <label class="ml-field-label" for="story-query">Story or topic</label>
               <input
@@ -284,6 +288,13 @@
           <h2 class="ml-result-title" id="result-title"></h2>
           <p class="ml-result-overview" id="result-overview"></p>
           <p class="ml-result-meta" id="result-meta"></p>
+          <p class="ml-result-meta" id="result-updated"></p>
+          <div class="ml-feedback">
+            <button class="button button-secondary" type="button" id="question-reading">Question this reading</button>
+            <p class="ml-form-note" id="question-reading-note" hidden>
+              This preview does not send feedback and does not store a correction. The limitations section lists what this record abstained from.
+            </p>
+          </div>
           <p class="ml-dimension-note" id="result-limits">
             Experimental Jev-only preview. Evidence is inspectable. This is not a truth detector and not a person or outlet score.
           </p>
@@ -323,7 +334,15 @@
           <div id="coverage-origin"></div>
 
           <h3 id="ml-cluster-heading">Related sources</h3>
-          <p class="ml-dimension-note">Same-story cluster members recorded with this result.</p>
+          <p class="ml-dimension-note">Same-story cluster members recorded with this result. Summary and metadata stay above this list.</p>
+          <div class="ml-compare-controls" role="group" aria-label="Compare recorded sources">
+            <button type="button" data-compare="all" aria-pressed="true">All recorded</button>
+            <button type="button" data-compare="independent" aria-pressed="false">Independent reporting</button>
+            <button type="button" data-compare="syndicated" aria-pressed="false">Syndicated repetition</button>
+            <button type="button" data-compare="same_story" aria-pressed="false">Same story</button>
+            <button type="button" data-compare="frames" aria-pressed="false">Represented frames</button>
+          </div>
+          <p class="ml-dimension-note" id="compare-status"></p>
           <ul class="ml-cluster-list" id="coverage-cluster"></ul>
 
           <h3 id="ml-reporting-split-heading">Independent reporting and syndicated repetition</h3>
@@ -338,6 +357,7 @@
           <p class="ml-dimension-note">
             An omission candidate is a possible gap. It does not establish that a fact was concealed.
           </p>
+          <div id="coverage-gap"></div>
           <ul class="ml-observation-list" id="omission-list"></ul>
 
           <dl class="ml-coverage-grid" id="coverage-stats"></dl>
@@ -374,6 +394,9 @@
 
         <section class="ml-dimension" id="analysis-limitations" aria-labelledby="ml-abstention-heading">
           <h2 id="ml-abstention-heading">Analysis limitations</h2>
+          <p class="ml-form-note" id="question-reading-destination" hidden>
+            This preview does not send feedback and does not store a correction. The limitations section lists what this record abstained from.
+          </p>
           <ul class="ml-abstention-list" id="abstention-list"></ul>
           <h3 id="ml-alternative-readings-heading">Alternative readings</h3>
           <p class="ml-dimension-note" id="alternative-readings"></p>

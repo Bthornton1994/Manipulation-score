@@ -12,7 +12,21 @@ A company blueprint file named `ManipulationScore_Build_Blueprint.md` was named 
 
 ## Ground News is a category reference only
 
-Useful information architecture, translated into Media Lens language:
+Useful information architecture, translated into Media Lens language. A 2026-09-22 pass looked at the public category patterns on ground.news and one unsigned story page. Those pages are not a source of branding, copy, logos, chart chrome, or ratings.
+
+| Category pattern | Media Lens translation |
+| --- | --- |
+| Topic lanes and interests | Fixture lanes on this page: All fixtures, Quoted language, Syndicated cluster, Coverage gap. A lane filters examples. It is not saved and does not follow live coverage. |
+| Story card with a coverage count and a compact distribution mark | Fixture card shows the recorded cluster count, independent and syndicated counts, and frame count when the golden graph has them. The mark is a two-part count meter. Stories with no cluster say the count is absent. |
+| Summary and metadata separate from the source list | Recorded opening and retrieval metadata stay above the related-source list. |
+| Comparison control | All recorded, Independent reporting, Syndicated repetition, Same story, Represented frames. The control filters the loaded fixture cluster. |
+| Distribution with counts | Relation mix plus independent-source concentration and a represented-frame count. Empty frames stay empty. |
+| A card for absence of coverage | Coverage gap copy on the card and in the workspace. An omission candidate stays a candidate. Absence is not proof a fact was left out. |
+| Update time and a feedback affordance | The workspace shows the fixture graph timestamp and says it is not a live update. "Question this reading" reveals that this preview does not send feedback or store a correction, repeats that sentence in the limitations section, then moves focus there. |
+
+Not used: Left/Center/Right labels, outlet bias or factuality rankings, ownership ratings, Ground News wording, and copied chart or card chrome.
+
+Earlier mapping that still holds:
 
 | Category pattern | Media Lens region |
 | --- | --- |
@@ -22,8 +36,6 @@ Useful information architecture, translated into Media Lens language:
 | How it is told | Language observations tied to spans; represented frames when a frame record exists |
 | Whether a statement holds | Claim ledger with support status |
 | Who published it | Source context, kept separate from influence language |
-
-This interface does not copy Ground News branding, exact copy, visual components, political-bias meters, left-right outlet ratings, or publisher rankings.
 
 ## Fixture versus live
 

@@ -49,7 +49,7 @@ Verified by fetching the live docs, not by a production key in this environment.
 
 Pinned `jev-1.13.0` limits from `https://docs.typesafe.ai/models.md`:
 
-- Price: $42 / billion input tokens ($0.042 / million). Output tokens free.
+- Price: $42 / billion input tokens ($0.042 / million). Output tokens free. This is a public list price. It is not an account invoice. The narrow-shadow planning constant is 0.002, from the universal bound in `docs/jev-usage-lab/narrow-shadow-request-bound.v1.json` (`T_max = ceil(charBound / 3)` = 3156), this public rate, and a 20% buffer, then raised to that conservative planning figure. That 0.002 is not account-verified billing. `loadConfig` does not inject it. `MEDIA_LENS_JEV_SHADOW_NARROW_ESTIMATED_USD_PER_CALL` stays unset until an operator sets it, which keeps narrow calls off. It is not the production budget default, even though that default is also 0.002.
 - Rate: 250,000 tokens/second and 1,200 requests/minute (docs say these can change without notice).
 - Context: 64k tokens per request; 32k for `state` plus the longest question.
 - Input: text only.

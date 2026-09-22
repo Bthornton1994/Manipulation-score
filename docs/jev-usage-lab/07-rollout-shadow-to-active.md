@@ -4,7 +4,7 @@ This document is a gate list. It does not flip a flag, merge, deploy, or close I
 
 ## Current step
 
-Shadow replay and `/analyze` observation, both default off, zero extra TypeSafe calls. The narrow question set is not sent on `/analyze`.
+Shadow replay and `/analyze` observation stay default off. Observation does not send `media-lens-narrow.v1` and does not add a TypeSafe call. A separate flag, `MEDIA_LENS_JEV_SHADOW_NARROW`, can ask that set after the response as a non-authoritative comparison. It is default off. The 2026-09-22 PT record stores four operating points and a planning-only per-call estimate of 0.002. `loadConfig` does not apply that estimate. The runtime env stays unset, so live narrow calls stay off. Fixture mode and CI do not make those calls. This document does not turn the flag on. See `docs/jev-usage-lab/10-narrow-shadow-execution.md`.
 
 Production live Jev remains behind `MEDIA_LENS_MODE=live` and `MEDIA_LENS_ENABLE_LIVE=true`, which this change does not set. Live URL and live pasted text stay off.
 
@@ -34,7 +34,7 @@ Active means a human-approved path where a typed answer can change an evidence-l
 
 ## Rollback
 
-Shadow rollback is unsetting `MEDIA_LENS_JEV_SHADOW`. `analyze()` does not read the flag. `server.js` schedules shadow only when `config.jevShadow.enabled` is true, and only after the production JSON is sent.
+Observation rollback is unsetting `MEDIA_LENS_JEV_SHADOW`. Narrow-execution rollback is unsetting `MEDIA_LENS_JEV_SHADOW_NARROW` and its limit variables. `analyze()` does not read either flag. `server.js` schedules observation only when `config.jevShadow.enabled` is true, and narrow execution only when `config.jevShadowNarrow.enabled` is true. Both run only after the production JSON is sent.
 
 Rollback is to stop that schedule, not to edit fusion thresholds in place. Partial Jev results must still abstain the way `analyze.js` already does on cap and timeout.
 

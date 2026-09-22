@@ -1,6 +1,6 @@
 # 05 — Shadow mode plan
 
-Status: implemented as a local replay. Default off. It does not change `analyze()`, `adapters/jev.js`, or live flags.
+Status: fixture replay stays default off. `/analyze` can schedule the same contract after the response is sent, also default off. `analyze()`, `adapters/jev.js`, and live flags are unchanged.
 
 Vision check: **Aligns with constraints**. Recommendations are recorded. The active graph is unchanged. Private Clarity text is not on this path.
 
@@ -15,7 +15,7 @@ When `scripts/jev-usage-lab.js` sees `MEDIA_LENS_JEV_SHADOW=true` (exact string)
 
 It does not call `createJevAdapter`, does not read the TypeSafe key, and rejects `--live` / `--network` with exit code 2.
 
-`MEDIA_LENS_JEV_SHADOW` is not read in `worker/config.js`. Worker modules still do not read `process.env`. The CLI in `scripts/` is the env boundary, same pattern as pin verify.
+`worker/config.js` reads `MEDIA_LENS_JEV_SHADOW` for the `/analyze` schedule. It is still the only worker module that reads `process.env`. The CLI in `scripts/` remains the env boundary for fixture replay, same pattern as pin verify.
 
 ## What is stored
 
@@ -72,7 +72,19 @@ Production call count is unchanged. The planner’s `http_calls` is 0.
 
 | Control | Default | Effect |
 | --- | --- | --- |
-| `MEDIA_LENS_JEV_SHADOW` | unset / not `true` | CLI prints `shadow_enabled: false` and exits 0 |
-| exact `true` | off in CI | Local fixture replay only |
+| `MEDIA_LENS_JEV_SHADOW` | unset / not `true` | CLI prints `shadow_enabled: false` and exits 0. `/analyze` does not schedule shadow |
+| exact `true` | off in CI | CLI replays local fixtures. `/analyze` schedules shadow after `sendJson` |
 
 Turning the flag on does not set `MEDIA_LENS_ENABLE_LIVE`, `MEDIA_LENS_ENABLE_LIVE_URL`, or `MEDIA_LENS_JEV_VERIFY`.
+
+## Analyze path
+
+`server.js` reads `config.jevShadow.enabled`. When that boolean is false, the Jev adapter passed into `analyze()` is the production adapter and no shadow function runs.
+
+When it is true, `/analyze` still finishes the production graph, validates it, and sends that JSON. A timer then builds shadow records from the answers the production adapter already returned. The timer does not call TypeSafe. `extra_jev_calls_enabled` is false, so `media-lens-narrow.v1` is not asked. Shadow records use `influence-questions.v1`, which is the set those answers belong to.
+
+The shadow log is one JSON object on stderr, or a test sink. It is not a field on the graph. It is not written to the budget file. Span text, titles, URLs, and secrets are not fields on the record. A shadow throw does not change the HTTP status or the body.
+
+`in_process` latency is the local schedule. `call_count` on each shadow record is 0. `production_jev_calls` copies `engine.jev.calls`. Fixture runs are labeled `fixture_replay`. `not_model_accuracy` is true. Holdout, calibration, and adversarial splits are not loaded on this path.
+
+Rollback is unsetting `MEDIA_LENS_JEV_SHADOW`. `analyze()` does not import the lab.

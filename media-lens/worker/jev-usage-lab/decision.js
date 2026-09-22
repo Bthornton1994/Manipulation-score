@@ -148,6 +148,19 @@ function blankMeasurement(measurement) {
   const calls = measurement?.call_count;
   const latencyOk = typeof latency === 'number' && Number.isFinite(latency) && latency >= 0;
   const callsOk = Number.isInteger(calls) && calls >= 0;
+  // Fixture replay omits basis and keeps the historical label. The /analyze
+  // shadow schedule passes basis "in_process" for a local timer. That timer
+  // is not an HTTP measurement and not a fixture declaration.
+  if (measurement?.basis === 'not_measured') {
+    return { latency_ms: null, call_count: null, basis: 'not_measured' };
+  }
+  if (measurement?.basis === 'in_process' || measurement?.basis === 'fixture_declared') {
+    return {
+      latency_ms: latencyOk ? latency : null,
+      call_count: callsOk ? calls : null,
+      basis: measurement.basis
+    };
+  }
   return {
     latency_ms: latencyOk ? latency : null,
     call_count: callsOk ? calls : null,

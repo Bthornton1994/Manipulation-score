@@ -130,7 +130,7 @@
       "properties": {
         "latency_ms": { "type": ["number", "null"], "minimum": 0 },
         "call_count": { "type": ["integer", "null"], "minimum": 0 },
-        "basis": { "enum": ["fixture_declared", "not_measured"] }
+        "basis": { "enum": ["fixture_declared", "not_measured", "in_process"] }
       }
     },
     "cost": {

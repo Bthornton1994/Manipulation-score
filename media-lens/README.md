@@ -58,10 +58,10 @@ Worker environment variables (read only by `worker/config.js`, never logged, nev
 | `MEDIA_LENS_TYPESAFE_BASE_URL` | Jev API base URL override (used by tests to point at a mock server) |
 | `MEDIA_LENS_NEWSJACK_ARTIFACTS_DIR` | directory of operator-produced Newsjack run artifacts for `live` mode coverage |
 | `MEDIA_LENS_JEV_VERIFY` | exact value `true` required before `scripts/jev-pin-verify.js` may call TypeSafe; does not enable live URL or live pasted-text (default: unset/false) |
-| `MEDIA_LENS_JEV_SHADOW` | exact value `true` required before `scripts/jev-usage-lab.js` replays fixture decisions; default unset/false; shadow only; no TypeSafe call; does not enable live URL, live pasted-text, or live Jev; not read by `worker/config.js` |
+| `MEDIA_LENS_JEV_SHADOW` | exact value `true` enables fixture replay in `scripts/jev-usage-lab.js` and shadow observation on `/analyze`; default unset/false; the `/analyze` response is unchanged; shadow errors are not part of that response; no extra TypeSafe call; does not enable live URL, live pasted-text, or live Jev |
 | `MEDIA_LENS_CLASSIFIER_DEV_LIVE_PROBE` | exact value `true` required before the optional classifier.dev live contract probe test may call `POST /v1/classify` with synthetic labels; never default CI |
 
-Worker environment variables are read only by `worker/config.js`. Isolated pin verify is a separate CLI (`scripts/jev-pin-verify.js`) that reads `MEDIA_LENS_JEV_VERIFY` and the TypeSafe key from the environment. The Usage Lab CLI (`scripts/jev-usage-lab.js`) reads `MEDIA_LENS_JEV_SHADOW` and replays local fixtures only; it does not call TypeSafe and does not change the analyze path. `.env` is git-ignored; no key value is ever committed or shipped in a browser-served file.
+Worker environment variables are read only by `worker/config.js`. Isolated pin verify is a separate CLI (`scripts/jev-pin-verify.js`) that reads `MEDIA_LENS_JEV_VERIFY` and the TypeSafe key from the environment. The Usage Lab CLI (`scripts/jev-usage-lab.js`) reads `MEDIA_LENS_JEV_SHADOW` and replays local fixtures only. The same flag, when it is exactly `true`, makes `/analyze` schedule a shadow record after the response is sent. That record is not model accuracy. Any other value, including unset, does not schedule it and does not add a TypeSafe call. `.env` is git-ignored; no key value is ever committed or shipped in a browser-served file.
 
 ## Limits (enforced in `worker/config.js`, `worker/server.js`, `worker/prepare.js`)
 

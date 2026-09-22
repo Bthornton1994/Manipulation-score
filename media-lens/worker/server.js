@@ -18,6 +18,7 @@ import {
 } from './config.js';
 import { prepareFromHtml, prepareFromPastedText, emptyPreparedArtifactStub } from './prepare.js';
 import { createJevAdapter } from './adapters/jev.js';
+import { armAnalyzeShadow, createJevAnswerCapture } from './jev-usage-lab/analyze-shadow.js';
 import { createNewsjackAdapter } from './adapters/newsjack.js';
 import { createClassifierDevAdapter } from './adapters/classifier-dev.js';
 import { analyze, buildAbstentionOnlyGraph } from './analyze.js';
@@ -563,10 +564,14 @@ export function createServer(config = loadConfig(), options = {}) {
             classifierDevFetch
           });
 
+          const shadowEnabled = config.jevShadow?.enabled === true;
+          const shadowCapture = shadowEnabled ? createJevAnswerCapture() : null;
+          const jevForAnalyze = shadowCapture ? shadowCapture.wrap(jevAdapter) : jevAdapter;
+
           const rawGraph = await analyze({
             prepared,
             config,
-            jevAdapter,
+            jevAdapter: jevForAnalyze,
             newsjackAdapter,
             classifierDevAdapter,
             typesafeBudget,
@@ -625,6 +630,23 @@ export function createServer(config = loadConfig(), options = {}) {
           }
 
           sendJson(res, 200, graph);
+          if (shadowEnabled) {
+            try {
+              armAnalyzeShadow({
+                enabled: true,
+                graph,
+                capture: shadowCapture,
+                articleHint: {
+                  mode: payload.mode,
+                  fixtureId: typeof payload.fixture_id === 'string' ? payload.fixture_id : null
+                },
+                jevMode: jevAdapter.mode,
+                sink: options.shadowSink
+              });
+            } catch {
+              // Shadow scheduling must not change the response already sent.
+            }
+          }
           return;
         } finally {
           if (heldLiveUrlSlot) liveUrlConcurrency.exit();

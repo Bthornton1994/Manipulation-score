@@ -4,7 +4,7 @@ This document is a gate list. It does not flip a flag, merge, deploy, or close I
 
 ## Current step
 
-Shadow replay only, default off, local fixtures, zero TypeSafe calls from the lab.
+Shadow replay and `/analyze` observation, both default off, zero extra TypeSafe calls. The narrow question set is not sent on `/analyze`.
 
 Production live Jev remains behind `MEDIA_LENS_MODE=live` and `MEDIA_LENS_ENABLE_LIVE=true`, which this change does not set. Live URL and live pasted text stay off.
 
@@ -34,9 +34,9 @@ Active means a human-approved path where a typed answer can change an evidence-l
 
 ## Rollback
 
-Shadow rollback is unsetting `MEDIA_LENS_JEV_SHADOW`. The analyze path does not read it.
+Shadow rollback is unsetting `MEDIA_LENS_JEV_SHADOW`. `analyze()` does not read the flag. `server.js` schedules shadow only when `config.jevShadow.enabled` is true, and only after the production JSON is sent.
 
-If a later change wires shadow into the worker, rollback is to stop calling the lab, not to edit fusion thresholds in place. Partial Jev results must still abstain the way `analyze.js` already does on cap and timeout.
+Rollback is to stop that schedule, not to edit fusion thresholds in place. Partial Jev results must still abstain the way `analyze.js` already does on cap and timeout.
 
 ## Not in this rollout
 

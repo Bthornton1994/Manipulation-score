@@ -72,7 +72,7 @@ Tests in `tests/media-lens-jev-usage-lab.test.js` lock:
 - a shared article id and span id cannot sit in both calibration and holdout
 - cross-span batches split
 - `analyze()` on `synthetic-01-quoted-vs-authorial` still reports 6 fixture-mode logical calls
-- `worker/config.js` does not read `MEDIA_LENS_JEV_SHADOW`
+- `worker/config.js` reads `MEDIA_LENS_JEV_SHADOW` as an exact `true` and leaves it off otherwise. `analyze()` still does not import the lab
 - the committed report matches a fresh render
 
 ## How to run

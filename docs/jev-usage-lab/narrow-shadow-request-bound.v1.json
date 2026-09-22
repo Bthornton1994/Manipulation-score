@@ -1,0 +1,38 @@
+{
+  "id": "narrow-shadow-request-bound.v1",
+  "status": "planning_fence_only",
+  "estimatedUsdPerCall": null,
+  "estimateStatus": "unset_pending_separate_owner_authorization",
+  "providerMeasured": false,
+  "publicListPriceUsdPerMillionInputTokens": 0.042,
+  "publicListPriceNote": "Public planning reference only. Account invoice unverified. Not ESTIMATED_USD_PER_CALL. Not the production planning rate 0.002.",
+  "universal": {
+    "label": "max_safe_identifiers_and_text_caps",
+    "charBound": 9467,
+    "planningTMax": 3156,
+    "formula": "planningTMax = ceil(charBound / 3)",
+    "model": "jev-1.13.0",
+    "titleChars": 2000,
+    "spanChars": 1200,
+    "contextBeforeChars": 400,
+    "contextAfterChars": 400,
+    "maxSafeIdChars": 128,
+    "articleIdChars": 128,
+    "sourceIdChars": 128,
+    "spanIdChars": 128,
+    "kind": "other_public",
+    "spanRole": "attributed_paraphrase",
+    "sendableQuestions": 7,
+    "questionSet": "media-lens-narrow.v1",
+    "serializer": "narrowLiveRequestBody",
+    "note": "Exact JSON length of one request when every safe identifier is 128 characters, title/span/context are at their caps, and those characters need no extra JSON escaping. Planning T_max is ceil(charBound / 3). It is not a provider-measured token count and not a dollar estimate."
+  },
+  "testShape": {
+    "label": "short_identifiers_in_title_cap_regression",
+    "charBound": 8896,
+    "planningTMax": 2966,
+    "notAUniversalCeiling": true,
+    "note": "Short identifiers in the title-cap regression. Not a universal hard ceiling. 3004 is not this size and is not a universal ceiling."
+  },
+  "notAUniversalHardCeiling": [3004]
+}

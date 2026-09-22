@@ -44,15 +44,30 @@ These points apply only when the matching environment variable is set. They are 
 | Monthly cost ceiling | 5.00 USD | `MEDIA_LENS_JEV_SHADOW_NARROW_MONTHLY_COST_CEILING_USD` | no call |
 | Estimated USD per call | unset (required) | `MEDIA_LENS_JEV_SHADOW_NARROW_ESTIMATED_USD_PER_CALL` | no call |
 
-The $5.00 ceiling is process-local memory. It resets when the process restarts. It is not shared across workers. It does not enforce, replace, or coordinate the production TypeSafe stop (default $30) across workers or restarts. It does not write the production budget file. The log says `placeholder: true`, `available: false`, `not_a_production_budget: true`, and `production_budget_written: false`.
+The $5.00 ceiling is process-local memory. It resets when the process restarts. It is not shared across workers. A shared ledger is required before this path runs on more than one worker. This document does not add that ledger. The ceiling does not enforce, replace, or coordinate the production TypeSafe stop (default $30) across workers or restarts. It does not write the production budget file. The log says `placeholder: true`, `available: false`, `not_a_production_budget: true`, and `production_budget_written: false`.
 
 The parser still rejects blanks, zero, and non-numeric text. Whole-number fields must be integers. The ceiling and the estimate must be greater than 0. Values outside the parser window are treated as unset. Those windows are validation bounds, not the approved operating points: calls `1..10000`, timeout `1..120000` ms, rate `1..100000` per minute, ceiling `> 0..1000000`, estimate `> 0..10000`.
 
-Before any real narrow call, a separate owner authorization must set `MEDIA_LENS_JEV_SHADOW_NARROW_ESTIMATED_USD_PER_CALL` to a conservative per-call estimate. Compute it from the verified current TypeSafe input price multiplied by the maximum token count of one bounded request (span text at most 1200 characters, context at most 400 characters before and after, the public title at most 2000 characters, and the question instructions), then round up. This repository does not record that price or that token count as a dollar amount. Do not invent one.
+Before any real narrow call, a separate owner authorization must set `MEDIA_LENS_JEV_SHADOW_NARROW_ESTIMATED_USD_PER_CALL` to a conservative per-call estimate. Compute it from the verified current TypeSafe input price multiplied by the planning token count below, then round up. This repository does not record that price as a dollar amount. Do not invent one. The production planning rate 0.002 is not this estimate.
 
-A public list price of $0.042 per million tokens is a planning reference only. The account invoice is unverified. That rate is not `ESTIMATED_USD_PER_CALL`. The estimate stays unset until after this title-cap remediation and QA, and a later owner authorization is still required before any real call. This change does not set the estimate.
+A public list price of $0.042 per million tokens is a planning reference only. The account invoice is unverified. That rate is not `ESTIMATED_USD_PER_CALL`. The estimate stays unset pending a separate owner authorization. This change does not set it.
 
-The regression fence for one request body `{ model, state, questions }` is the JSON length of that body with title, span text, and both context strings empty, plus 2000 + 1200 + 400 + 400. A chars/3 rounding of that length, rounded up, is a size fence only. It is not a price.
+### Request-size packet
+
+Packet: `docs/jev-usage-lab/narrow-shadow-request-bound.v1.json`.
+
+The universal bound is the exact `JSON.stringify` length of one `{ model, state, questions }` body from `narrowLiveRequestBody`, with:
+
+- title at 2000 characters, span text at 1200, context at 400 before and 400 after
+- all 7 sendable questions from `media-lens-narrow.v1`
+- article id, source id, and span id each at the safe-id maximum of 128 characters (`NARROW_SHADOW_MAX_SAFE_ID_CHARS`). Identifiers longer than that are rejected. They are not truncated.
+- the longest permitted artifact kind (`other_public`) and span role (`attributed_paraphrase`). Any other kind or role is left null.
+
+That length is **9467** characters. Planning `T_max` is `ceil(9467 / 3)` = **3156**. `T_max` is a conservative planning estimate from character length. It is not a provider-measured token count and not a dollar estimate.
+
+The title-cap regression uses shorter identifiers. Its serialized length is **8896** characters, and its planning figure is **2966**. That is a test-shape fence only. It is not a universal hard ceiling. **3004** is not that test-shape size and is not a universal hard ceiling.
+
+`ESTIMATED_USD_PER_CALL` stays unset. `NARROW_SHADOW_APPROVED_OPERATING_POINTS.estimatedUsdPerCall` stays null.
 
 ## Two flags
 

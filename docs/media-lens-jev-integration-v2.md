@@ -49,7 +49,7 @@ Verified by fetching the live docs, not by a production key in this environment.
 
 Pinned `jev-1.13.0` limits from `https://docs.typesafe.ai/models.md`:
 
-- Price: $42 / billion input tokens ($0.042 / million). Output tokens free.
+- Price: $42 / billion input tokens ($0.042 / million). Output tokens free. This is a public list price. It is not an account invoice, and it is not `MEDIA_LENS_JEV_SHADOW_NARROW_ESTIMATED_USD_PER_CALL`. The narrow-shadow planning token fence is the universal bound in `docs/jev-usage-lab/narrow-shadow-request-bound.v1.json` (`T_max = ceil(charBound / 3)`). That fence is not provider-measured and not a dollar estimate. The narrow estimate stays unset.
 - Rate: 250,000 tokens/second and 1,200 requests/minute (docs say these can change without notice).
 - Context: 64k tokens per request; 32k for `state` plus the longest question.
 - Input: text only.

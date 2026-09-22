@@ -59,8 +59,20 @@ const RUNTIME_SPLIT = 'runtime_shadow';
 export const NARROW_SHADOW_MAX_SPAN_CHARS = 1200;
 export const NARROW_SHADOW_MAX_CONTEXT_CHARS = 400;
 export const NARROW_SHADOW_MAX_TITLE_CHARS = 2000;
+// ID_RE maximum. Identifiers longer than this are rejected, not truncated.
+export const NARROW_SHADOW_MAX_SAFE_ID_CHARS = 128;
+export const NARROW_SHADOW_ARTIFACT_KINDS = Object.freeze([
+  'article',
+  'headline',
+  'excerpt',
+  'speech',
+  'ad',
+  'campaign',
+  'other_public'
+]);
 const EXCLUDED_ROLES = new Set(['boilerplate', 'byline_meta']);
-const ID_RE = /^[A-Za-z0-9._:-]{1,128}$/;
+const ARTIFACT_KINDS = new Set(NARROW_SHADOW_ARTIFACT_KINDS);
+const ID_RE = new RegExp(`^[A-Za-z0-9._:-]{1,${NARROW_SHADOW_MAX_SAFE_ID_CHARS}}$`);
 const TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
 const SAFE_NAME_RE = /^[A-Za-z0-9._:-]{1,64}$/;
 const DISAGREEMENT_CLASSES = new Set([
@@ -667,7 +679,7 @@ export async function buildNarrowShadowReport(input = {}) {
       );
     }
 
-    const kind = typeof graph?.artifact?.kind === 'string' ? graph.artifact.kind : null;
+    const kind = ARTIFACT_KINDS.has(graph?.artifact?.kind) ? graph.artifact.kind : null;
     const title = truncate(
       typeof graph?.artifact?.title === 'string' ? graph.artifact.title : null,
       NARROW_SHADOW_MAX_TITLE_CHARS
@@ -730,7 +742,7 @@ export async function buildNarrowShadowReport(input = {}) {
           artifact: { kind, title },
           span: {
             id: spanId,
-            role: roles.get(spanId) || span?.role || null,
+            role: request.provenance?.span_role || null,
             text: truncate(span?.text || '', NARROW_SHADOW_MAX_SPAN_CHARS)
           },
           context: { before: truncate(before, NARROW_SHADOW_MAX_CONTEXT_CHARS), after: truncate(after, NARROW_SHADOW_MAX_CONTEXT_CHARS) },

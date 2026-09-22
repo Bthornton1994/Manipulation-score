@@ -39,7 +39,7 @@ const MARKER_GATED_CHOICES = new Set(['certainty_beyond_evidence', 'vague_author
 const CLAIM_HOLD_OPTIONS = new Set(['supported', 'contradicted', 'mixed']);
 const ANSWER_KEYS = new Set(['type', 'choice', 'probabilities', 'confidence', 'noul']);
 const ID_RE = /^[A-Za-z0-9._:-]{1,128}$/;
-const SPAN_ROLES = new Set([
+export const SPAN_ROLES = new Set([
   'headline',
   'subhead',
   'authorial',

@@ -521,18 +521,19 @@ test('production question options stay aligned and analyze() call count is uncha
   assert.equal(graph.claims.every((claim) => claim.support === 'not_checked'), true);
 });
 
-test('production worker path does not import the usage lab or the shadow flag', async () => {
-  for (const file of [
-    'media-lens/worker/analyze.js',
-    'media-lens/worker/server.js',
-    'media-lens/worker/config.js',
-    'media-lens/worker/adapters/jev.js',
-    'media-lens/worker/fusion.js'
-  ]) {
+test('production fusion and analyze() do not import the usage lab', async () => {
+  for (const file of ['media-lens/worker/analyze.js', 'media-lens/worker/adapters/jev.js', 'media-lens/worker/fusion.js']) {
     const source = await readFile(file, 'utf8');
     assert.equal(source.includes('jev-usage-lab'), false, file);
     assert.equal(source.includes('MEDIA_LENS_JEV_SHADOW'), false, file);
   }
+  const configSource = await readFile('media-lens/worker/config.js', 'utf8');
+  assert.equal(configSource.includes('MEDIA_LENS_JEV_SHADOW'), true);
+  assert.equal(configSource.includes('jev-usage-lab'), false);
+  const serverSource = await readFile('media-lens/worker/server.js', 'utf8');
+  assert.equal(serverSource.includes('jev-usage-lab/analyze-shadow.js'), true);
+  assert.equal(serverSource.includes('MEDIA_LENS_JEV_SHADOW'), false);
+  assert.equal(serverSource.includes('final_action'), false);
   async function walk(dir) {
     const entries = await readdir(dir, { withFileTypes: true });
     const files = [];

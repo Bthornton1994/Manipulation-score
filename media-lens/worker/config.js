@@ -161,6 +161,13 @@ export function loadConfig(env = process.env) {
       modelRequested: 'jev-1.13.0',
       hasApiKey: Boolean(typesafeApiKey)
     },
+    // Exact string only. Does not enable live Jev, live URL, pasted text,
+    // classifier.dev, or pin verify. extraJevCallsEnabled is not read from
+    // the environment; this wiring has no second call.
+    jevShadow: {
+      enabled: readExactTrue(env, 'MEDIA_LENS_JEV_SHADOW'),
+      extraJevCallsEnabled: false
+    },
     newsjack: {
       artifactsDir: env.MEDIA_LENS_NEWSJACK_ARTIFACTS_DIR || null
     },
@@ -253,7 +260,8 @@ export function jevAdapterMode(config) {
 
 /**
  * A version of the config that is safe to serialize (e.g. for /health).
- * Never includes secret values, only presence booleans.
+ * Never includes secret values, only presence booleans. jevShadow is
+ * omitted so /health stays the same whether the shadow flag is set or not.
  */
 export function publicConfig(config) {
   const flags = effectiveLiveFlags(config);

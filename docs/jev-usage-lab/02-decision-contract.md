@@ -101,7 +101,7 @@ Source-independence answers that pass the two-source gate are forced to strength
 
 `audit` stores `model_requested`, `model_reported` (null in fixture replay), `deployment_sha`, `question_set_sha256`, `recorded_at`, and `contract_version`.
 
-`measurement.latency_ms` and `measurement.call_count` are copied only when the fixture declares them. Basis is `fixture_declared` or `not_measured`. They are not HTTP measurements.
+`measurement.latency_ms` and `measurement.call_count` are copied only when the caller declares them. Basis is `fixture_declared` when the fixture replay supplies the numbers, `not_measured` when it does not, or `in_process` for the `/analyze` shadow schedule. `in_process` is a local timer around the shadow record. It is not an HTTP measurement and it is not model accuracy.
 
 `cost.available` is false. Pricing and rate limits from outside this repo are not copied into the record.
 

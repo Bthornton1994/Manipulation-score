@@ -339,6 +339,123 @@ test('Fix 1: in-flight newsjack observes shared AbortSignal when per-analysis ti
   assert.ok(graph.abstentions.some((a) => a.reason === 'engine_unavailable'));
   assert.equal(newsjackStarted, true);
   assert.equal(newsjackAborted, true);
+  // Jev already billed one call before newsjack hung; timeout abstention must
+  // keep that count so server-side ESTIMATED budget accounting can record it.
+  assert.equal(graph.engine.jev.calls, 1);
+  assert.equal(graph.engine.jev.mode, 'live');
+});
+
+test('timeout after live Jev still exposes calls for ESTIMATED budget accounting', async () => {
+  const config = loadConfig({ MEDIA_LENS_MODE: 'live', MEDIA_LENS_ENABLE_LIVE: 'true', MEDIA_LENS_TYPESAFE_API_KEY: 'k' });
+  config.limits = { ...config.limits, perAnalysisTimeoutMs: 40, maxJevCallsPerAnalysis: 160 };
+
+  const prepared = prepareFromPastedText({
+    text: 'A '.repeat(150) + 'long enough body for timeout budget undercount regression.'
+  });
+  const billedCalls = 4;
+  const budget = createTypesafeBudget({
+    estimatedUsdPerCall: 1,
+    warnUsd: 100,
+    stopUsd: 200
+  });
+
+  const jevAdapter = {
+    mode: 'live',
+    analyzeSpans: async () => ({
+      answersBySpanId: new Map(),
+      failedSpanIds: new Set(['span-1']),
+      reviewSpanIds: new Set(),
+      unavailableSpanIds: new Set(['span-1']),
+      dispositionsBySpanId: new Map(),
+      calls: billedCalls,
+      failures: 1,
+      elapsedMs: 5,
+      modelReported: 'jev-1.13.0',
+      modelMatch: true,
+      capReached: false
+    })
+  };
+
+  const newsjackAdapter = {
+    mode: 'artifacts',
+    getStoryContext: async ({ signal } = {}) => {
+      await abortableDelay(5000, signal);
+      return { story_origin: null, freshness_gate: null, cluster: null, provenance: 'newsjack_artifacts' };
+    }
+  };
+
+  const graph = await analyze({
+    prepared,
+    config,
+    jevAdapter,
+    newsjackAdapter,
+    typesafeBudget: budget,
+    userAssertedPublic: true,
+    consentAt: '2026-09-21T00:00:00.000Z'
+  });
+
+  assert.ok(graph.abstentions.some((a) => a.reason === 'engine_unavailable'));
+  assert.equal(graph.engine.jev.calls, billedCalls);
+  assert.equal(validate(graph).valid, true);
+
+  // Mirror server.js: record whatever live calls the graph reports.
+  if (jevAdapter.mode === 'live' && (graph.engine?.jev?.calls || 0) > 0) {
+    budget.recordCalls(graph.engine.jev.calls);
+  }
+  assert.equal(budget.getSnapshot().calls, billedCalls);
+});
+
+test('timeout while live Jev is in-flight still records calls once the adapter settles', async () => {
+  const config = loadConfig({ MEDIA_LENS_MODE: 'live', MEDIA_LENS_ENABLE_LIVE: 'true', MEDIA_LENS_TYPESAFE_API_KEY: 'k' });
+  config.limits = { ...config.limits, perAnalysisTimeoutMs: 30, maxJevCallsPerAnalysis: 160 };
+
+  const prepared = prepareFromPastedText({
+    text: 'A '.repeat(150) + 'long enough body for in-flight Jev timeout budget test.'
+  });
+  const budget = createTypesafeBudget({ estimatedUsdPerCall: 1, warnUsd: 100, stopUsd: 200 });
+
+  const jevAdapter = {
+    mode: 'live',
+    analyzeSpans: (_spans, _artifact, { signal } = {}) =>
+      new Promise((resolve) => {
+        signal?.addEventListener(
+          'abort',
+          () => {
+            setTimeout(() => {
+              resolve({
+                answersBySpanId: new Map(),
+                failedSpanIds: new Set(['span-1']),
+                reviewSpanIds: new Set(),
+                unavailableSpanIds: new Set(['span-1']),
+                dispositionsBySpanId: new Map(),
+                calls: 3,
+                failures: 1,
+                elapsedMs: 0,
+                modelReported: 'jev-1.13.0',
+                modelMatch: true,
+                capReached: false
+              });
+            }, 20);
+          },
+          { once: true }
+        );
+      })
+  };
+
+  const graph = await analyze({
+    prepared,
+    config,
+    jevAdapter,
+    newsjackAdapter: createNewsjackAdapter({ mode: 'disabled' }),
+    typesafeBudget: budget,
+    userAssertedPublic: true,
+    consentAt: '2026-09-21T00:00:00.000Z'
+  });
+
+  assert.ok(graph.abstentions.some((a) => a.reason === 'engine_unavailable'));
+  assert.equal(graph.engine.jev.calls, 3);
+  if (graph.engine.jev.calls > 0) budget.recordCalls(graph.engine.jev.calls);
+  assert.equal(budget.getSnapshot().calls, 3);
 });
 
 test('R2: ESTIMATED budget store persists across process restart within the same UTC month', async () => {

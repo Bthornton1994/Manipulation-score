@@ -857,7 +857,7 @@ function renderCoverageCountIndicator(summary) {
   const meter = parts.length ? `<div class="ml-count-meter" aria-hidden="true">${parts.join('')}</div>` : '';
   return `<p class="ml-coverage-count">Recorded coverage count: ${summary.members} cluster ${
     summary.members === 1 ? 'member' : 'members'
-  }. Independent reporting ${independent}. Syndicated or duplicate ${syndicated}. ${frameLine}.</p>${meter}<p class="ml-form-note">Fixture count only. Not a live census.</p>`;
+  }. Independent-source estimate: ${independent}. Syndicated or duplicate estimate: ${syndicated}. ${frameLine}.</p>${meter}<p class="ml-form-note">Fixture count only. Not a live census. The estimate is not a list of outlets.</p>`;
 }
 
 function fixtureGraphUrl(id) {
@@ -886,13 +886,34 @@ function renderStoryCard(story) {
 
 function renderFixtureLanes() {
   const host = byId('fixture-lanes');
-  if (!host) return;
-  host.innerHTML = FIXTURE_LANES.map(
-    (lane) =>
-      `<button class="ml-lane" type="button" data-lane="${escapeHtml(lane.id)}" aria-pressed="${
-        lane.id === activeLane ? 'true' : 'false'
-      }">${escapeHtml(lane.label)}</button>`
-  ).join('');
+  if (!host || typeof document === 'undefined' || typeof document.createElement !== 'function') return;
+  const previous = document.activeElement;
+  const restoreLane =
+    previous && typeof host.contains === 'function' && host.contains(previous) && typeof previous.getAttribute === 'function'
+      ? previous.getAttribute('data-lane')
+      : null;
+  if (typeof host.replaceChildren === 'function') host.replaceChildren();
+  else host.innerHTML = '';
+  for (const lane of FIXTURE_LANES) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'ml-lane';
+    button.setAttribute('data-lane', lane.id);
+    button.setAttribute('aria-pressed', lane.id === activeLane ? 'true' : 'false');
+    button.textContent = lane.label;
+    host.appendChild(button);
+  }
+  if (!restoreLane || typeof host.querySelectorAll !== 'function') return;
+  const next = [...host.querySelectorAll('[data-lane]')].find((button) => button.getAttribute('data-lane') === restoreLane);
+  if (next && typeof next.focus === 'function') next.focus();
+}
+
+function activateFixtureLane(laneId) {
+  const known = FIXTURE_LANES.some((lane) => lane.id === laneId);
+  activeLane = known ? laneId : 'all';
+  renderFixtureLanes();
+  const query = byId('story-query');
+  renderStoryCatalog(query && typeof query.value === 'string' ? query.value : '');
 }
 
 function renderStoryCatalog(query) {
@@ -944,10 +965,10 @@ function renderReportingSplit(coverage) {
   if (!cluster || !Number.isFinite(cluster.independent_sources_estimate) || !Number.isFinite(cluster.duplicate_or_syndicated_count)) {
     return '<p class="ml-empty-state">Independent and syndicated counts were not recorded for this result.</p>';
   }
-  return `<dl class="ml-coverage-grid">${statRow('Independent reporting', String(cluster.independent_sources_estimate))}${statRow(
+  return `<dl class="ml-coverage-grid">${statRow('Independent-source estimate', String(cluster.independent_sources_estimate))}${statRow(
     'Syndicated or duplicate repetition',
     String(cluster.duplicate_or_syndicated_count)
-  )}</dl><p class="ml-dimension-note">These estimates come from the recorded cluster. The distribution below counts each member relation as stored. A same-story member can still sit in the duplicate estimate when the record marks it as wire copy. Syndicated repetition is not an independent report.</p>`;
+  )}</dl><p class="ml-dimension-note">These numbers are recorded estimates, not a member list. The Independent reporting comparison lists only members named in story-origin evidence whose recorded relation and URL are not syndicated, wire, or press-release copy. A same-story relation alone does not put a member on that list.</p>`;
 }
 
 function renderCoverageDistribution(coverage) {
@@ -976,7 +997,7 @@ function renderCoverageDistribution(coverage) {
   const syndicated = coverage?.cluster?.duplicate_or_syndicated_count;
   const concentration =
     Number.isFinite(independent) && Number.isFinite(syndicated)
-      ? `<p class="ml-dimension-note">Independent-source concentration: ${independent} independent reporting, ${syndicated} syndicated or duplicate. Represented frames recorded: ${frames}.</p>`
+      ? `<p class="ml-dimension-note">Independent-source estimate: ${independent}. Syndicated or duplicate estimate: ${syndicated}. Represented frames recorded: ${frames}.</p>`
       : '';
   return `<p class="ml-dimension-note">${escapeHtml(note)}</p><dl class="ml-coverage-grid">${rows}</dl><div class="ml-distribution" aria-hidden="true">${bar}</div><p class="ml-dimension-note">${total} recorded cluster ${
     total === 1 ? 'member' : 'members'
@@ -993,14 +1014,83 @@ function renderCoverageGap(coverage) {
   return `<article class="ml-gap-card"><h3>Coverage gap</h3><p>${escapeHtml(reason)} This describes an absence in the record. It is not proof a fact was left out.</p></article>`;
 }
 
+// URL markers already used to compute independent_sources_estimate. They only
+// exclude a recorded URL. They never add a source or a provenance field.
+const WIRE_OR_PRESS_URL_MARKERS = Object.freeze([
+  '/press_release',
+  '/press-release',
+  '/applauds',
+  '/statement',
+  'advocacy.',
+  'prnewswire',
+  'globenewswire',
+  'businesswire',
+  'accesswire',
+  'einpresswire',
+  'markets.businessinsider',
+  'stocktitan'
+]);
+
+const PARTNER_REPUBLICATION_HOSTS = Object.freeze(['aol.com', 'yahoo.com', 'msn.com', 'apple.news']);
+
+function addEvidenceKey(keys, value) {
+  if (typeof value === 'string' && value.trim()) keys.add(value.trim());
+}
+
+function recordedIndependentEvidenceKeys(coverage) {
+  const origin = coverage?.story_origin && typeof coverage.story_origin === 'object' ? coverage.story_origin : {};
+  const keys = new Set();
+  if (Array.isArray(origin.evidence_urls)) origin.evidence_urls.forEach((url) => addEvidenceKey(keys, url));
+  if (Array.isArray(origin.timestamp_evidence)) {
+    origin.timestamp_evidence.forEach((item) => addEvidenceKey(keys, item?.url_key));
+  }
+  if (origin.canonical_coverage_basis === 'first_independent_report') addEvidenceKey(keys, origin.canonical_coverage_url);
+  return keys;
+}
+
+function recordedUrlIdentifiesWireOrPressRelease(member) {
+  const haystack = `${member?.url || ''}\n${member?.url_key || ''}`.toLowerCase();
+  if (!haystack.trim()) return false;
+  return WIRE_OR_PRESS_URL_MARKERS.some((marker) => haystack.includes(marker));
+}
+
+function recordedUrlIdentifiesPartnerRepublication(member) {
+  const raw = typeof member?.url === 'string' && member.url ? member.url : member?.url_key;
+  if (typeof raw !== 'string' || !raw) return false;
+  try {
+    const host = new URL(raw).hostname.toLowerCase();
+    return PARTNER_REPUBLICATION_HOSTS.some((partner) => host === partner || host.endsWith(`.${partner}`));
+  } catch {
+    return false;
+  }
+}
+
+function memberNamedInIndependentEvidence(member, keys) {
+  const url = typeof member?.url === 'string' ? member.url.trim() : '';
+  const key = typeof member?.url_key === 'string' ? member.url_key.trim() : '';
+  return Boolean((url && keys.has(url)) || (key && keys.has(key)));
+}
+
+function recordedIndependentMembers(coverage) {
+  const members = Array.isArray(coverage?.cluster?.members) ? coverage.cluster.members : [];
+  const keys = recordedIndependentEvidenceKeys(coverage);
+  if (keys.size === 0) return [];
+  const clusterHasStoryMember = members.some((member) => member?.relation === 'surfaced' || member?.relation === 'same_story');
+  return members.filter((member) => {
+    if (!member || typeof member !== 'object') return false;
+    if (member.relation === 'syndicated') return false;
+    if (recordedUrlIdentifiesWireOrPressRelease(member)) return false;
+    if (clusterHasStoryMember && recordedUrlIdentifiesPartnerRepublication(member)) return false;
+    return memberNamedInIndependentEvidence(member, keys);
+  });
+}
+
 function membersForCompare(coverage, mode) {
   const members = Array.isArray(coverage?.cluster?.members) ? coverage.cluster.members : [];
   if (mode === 'frames') return [];
   if (mode === 'syndicated') return members.filter((member) => member?.relation === 'syndicated');
   if (mode === 'same_story') return members.filter((member) => member?.relation === 'same_story');
-  if (mode === 'independent') {
-    return members.filter((member) => member?.relation === 'surfaced' || member?.relation === 'same_story');
-  }
+  if (mode === 'independent') return recordedIndependentMembers(coverage);
   return members.slice();
 }
 
@@ -1033,13 +1123,19 @@ function applyCompare(graph) {
   const total = Array.isArray(coverage?.cluster?.members) ? coverage.cluster.members.length : 0;
   const html = members.map((member) => renderClusterMember(member)).join('');
   list.innerHTML = html || '<li class="ml-empty-state">No recorded sources match this comparison.</li>';
-  if (status) {
-    const wireNote =
-      compareMode === 'independent'
-        ? ' Surfaced and same-story relations are listed. The independent estimate can still be lower when a same-story member is wire copy.'
-        : '';
-    status.textContent = `Showing ${members.length} of ${total} recorded cluster members.${wireNote} Fixture comparison only.`;
+  if (status) status.textContent = compareStatusCopy(coverage, compareMode, members.length, total);
+}
+
+function compareStatusCopy(coverage, mode, shown, total) {
+  if (mode !== 'independent') {
+    return `Showing ${shown} of ${total} recorded cluster members. Fixture comparison only.`;
   }
+  const estimate = coverage?.cluster?.independent_sources_estimate;
+  const estimateText = Number.isFinite(estimate) ? ` Independent-source estimate recorded separately: ${estimate}.` : '';
+  if (shown === 0) {
+    return `No recorded story-origin evidence identifies an independent-reporting member.${estimateText} This list is not inferred from the estimate or from a same-story relation. Fixture comparison only.`;
+  }
+  return `Showing ${shown} of ${total} recorded cluster members named in story-origin evidence and not identified as syndicated, wire, or press-release copy.${estimateText} A same-story relation alone is not independent reporting. Fixture comparison only.`;
 }
 
 function renderFrameList(coverage) {
@@ -1381,9 +1477,7 @@ function setupStoryExplorer() {
     if (!el) return;
     const lane = el.closest('[data-lane]');
     if (lane && byId('fixture-lanes')?.contains(lane)) {
-      activeLane = lane.getAttribute('data-lane') || 'all';
-      renderFixtureLanes();
-      renderStoryCatalog(query ? query.value : '');
+      activateFixtureLane(lane.getAttribute('data-lane') || 'all');
       return;
     }
     const compare = el.closest('[data-compare]');
@@ -1576,6 +1670,8 @@ export {
   OMISSION_EMPTY_COPY,
   buildAnalysisOverview,
   consentDisclosure,
+  activateFixtureLane,
+  compareStatusCopy,
   filterFixtureStories,
   fixtureGraphUrl,
   liveUrlDisclosure,

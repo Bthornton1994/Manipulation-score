@@ -8,7 +8,7 @@ Date: 2026-09-21 UTC. Draft product note for the fixture-first Media Lens worksp
 - `VISION.md` for the company safety boundary: analyze communication, not identity; evidence before a score; visible uncertainty; privacy by default; misuse resistance.
 - The owner direction for a public media-intelligence workspace, with Clarity kept as the separate private message product.
 
-A company blueprint file named `ManipulationScore_Build_Blueprint.md` was named in the task and was not present in this checkout. Non-claims below are taken from `VISION.md` and the in-repo Media Lens brief. No overall 0–100 manipulation score. No outlet or person ranking. No rhetoric-to-factuality claim.
+A company blueprint file named `ManipulationScore_Build_Blueprint.md` was not in the git checkout. The 2026-09-22 remediation reviewed the uploaded copy `ManipulationScore_Build_Blueprint_211d.md` (Version 1.0, July 24, 2026). Conformity against that file is reported below and in the PR #143 body. It is not a claim that this draft implements the blueprint's M-Score product. Non-claims that still bind this page come from `VISION.md` and the in-repo Media Lens brief: no overall 0–100 manipulation score, no outlet or person ranking, and no rhetoric-to-factuality claim.
 
 ## Ground News is a category reference only
 
@@ -17,10 +17,10 @@ Useful information architecture, translated into Media Lens language. A 2026-09-
 | Category pattern | Media Lens translation |
 | --- | --- |
 | Topic lanes and interests | Fixture lanes on this page: All fixtures, Quoted language, Syndicated cluster, Coverage gap. A lane filters examples. It is not saved and does not follow live coverage. |
-| Story card with a coverage count and a compact distribution mark | Fixture card shows the recorded cluster count, independent and syndicated counts, and frame count when the golden graph has them. The mark is a two-part count meter. Stories with no cluster say the count is absent. |
+| Story card with a coverage count and a compact distribution mark | Fixture card shows the recorded cluster count, the independent-source estimate, the syndicated-or-duplicate estimate, and the frame count when the golden graph has them. The mark is a two-part count meter. The estimate is labeled as an estimate, not a list of outlets. Stories with no cluster say the count is absent. |
 | Summary and metadata separate from the source list | Recorded opening and retrieval metadata stay above the related-source list. |
-| Comparison control | All recorded, Independent reporting, Syndicated repetition, Same story, Represented frames. The control filters the loaded fixture cluster. |
-| Distribution with counts | Relation mix plus independent-source concentration and a represented-frame count. Empty frames stay empty. |
+| Comparison control | All recorded, Independent reporting, Syndicated repetition, Same story, Represented frames. Independent reporting lists only members named in recorded story-origin evidence (`evidence_urls`, `timestamp_evidence` URL keys, and a canonical URL whose basis is `first_independent_report`) after excluding syndicated relations and recorded wire, press-release, or partner-republication URLs. A `same_story` relation is not treated as independent reporting. The numeric `independent_sources_estimate` stays a separate estimate. |
+| Distribution with counts | Relation mix plus the independent-source estimate, the syndicated-or-duplicate estimate, and a represented-frame count. Empty frames stay empty. |
 | A card for absence of coverage | Coverage gap copy on the card and in the workspace. An omission candidate stays a candidate. Absence is not proof a fact was left out. |
 | Update time and a feedback affordance | The workspace shows the fixture graph timestamp and says it is not a live update. "Question this reading" reveals that this preview does not send feedback or store a correction, repeats that sentence in the limitations section, then moves focus there. |
 
@@ -36,6 +36,46 @@ Earlier mapping that still holds:
 | How it is told | Language observations tied to spans; represented frames when a frame record exists |
 | Whether a statement holds | Claim ledger with support status |
 | Who published it | Source context, kept separate from influence language |
+
+## Independent reporting versus the estimate
+
+The Independent reporting control does not rewrite the graph. It does not treat `same_story` as proof of independent reporting, and it does not turn `independent_sources_estimate` into a list of outlets.
+
+A member is listed only when its recorded `url` or `url_key` is already named by story-origin evidence, and the recorded relation is not `syndicated`, and the recorded URL is not identified as wire, press-release, or partner republication. Those URL markers are the same exclusion list `media-lens/worker/fusion.js` already uses when it computes the estimate. The page uses them only to drop a recorded URL. It does not add a provenance field.
+
+On `synthetic-02-syndicated-cluster`, that list is Fictional Daily and Second Outlet. PR Newswire stays off the list even if its URL is copied into `evidence_urls`, because the recorded URL identifies a wire release. If story-origin evidence names nobody, the list stays empty even when the estimate is greater than zero.
+
+Lane buttons are rebuilt in the DOM when a lane is activated. If focus was on the activated button, focus returns to the replacement button with the same `data-lane`. Focus outside the lane group is left alone.
+
+## Blueprint conformity
+
+Reviewed file: uploaded `ManipulationScore_Build_Blueprint_211d.md`, not a committed repo path. This note does not claim the blueprint and `VISION.md` are the same document.
+
+Satisfied by this draft, with the evidence in the Media Lens page and tests:
+
+- Section 3.4 non-claims that overlap the Media Lens boundary: the page does not diagnose a person, rank an outlet, or treat claim support as checked. Candidate language stays "Possible influence signal".
+- Section 10.4 political neutrality, as applied to this page: fixture rules do not vary by speaker, party, or ideology, and the UI has no Left/Center/Right taxonomy.
+- Section 11.3 items that this page can meet without a new engine: coverage members are not invented; empty frames and missing evidence stay empty; the independent list requires recorded story-origin evidence.
+- Section 14.4 avoided wording: the page does not use "proved", person-diagnosis labels, or a lie probability. Coverage-gap copy says an absence is not proof a fact was left out.
+- Section 19.1 artifact-not-character rule, for this UI: the Influence Profile restates section states and is not a person or outlet score.
+- Section 13.6 keyboard operation, for the fixture lanes only: activating a lane keeps focus on that lane button. Counts are written in text, not color alone. A full WCAG 2.2 AA audit was not run.
+
+Mismatches, stated rather than implemented:
+
+- Sections 1, 2.2, 2.3, and 8 require an M-Score from 0 to 100, risk bands, and a Manipulation Fingerprint. This draft does not add them. `VISION.md` and `docs/media-lens-build-brief.md` forbid an overall manipulation score.
+- Section 7.4's report order includes dimension scores, a verification block, and an autonomy-preserving rewrite. This workspace has a summary, evidence-linked observations, limitations, and an Influence Profile. It does not have those scorecard sections.
+- Section 7.5's public artifact registry and entity profiles are not built.
+- Section 11.4's `AnalysisReport` contract is not `influence-graph.v1`, which is what this page renders.
+- Section 14.2's starter palette is not the palette this page uses.
+- Section 10.4's tactic list (polarization, scapegoating, narrative laundering, and the rest) is not a rendered taxonomy here.
+- Sections 19.1 and 19.6 describe a correction and appeal process. "Question this reading" only says this preview does not send feedback or store a correction.
+
+Not verifiable from this repo state:
+
+- WCAG 2.2 AA contrast, a full accessibility audit, and Core Web Vitals.
+- Legal review, funding disclosures, a published nonpartisanship policy, or reviewer conflicts.
+- The validation study, human review, and appeals process in section 18.
+- Whether the uploaded blueprint matches any later owner revision. It is not committed in this checkout.
 
 ## Fixture versus live
 

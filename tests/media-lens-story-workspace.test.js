@@ -6,6 +6,8 @@ import {
   FIXTURE_LANES,
   FIXTURE_STORIES,
   OMISSION_EMPTY_COPY,
+  activateFixtureLane,
+  compareStatusCopy,
   filterFixtureStories,
   fixtureGraphUrl,
   membersForCompare,
@@ -107,8 +109,9 @@ test('fixture lanes and coverage-count cards stay local and unlabeled by politic
   assert.equal(storiesForLane('all').length, FIXTURE_STORIES.length);
   const counted = renderCoverageCountIndicator(FIXTURE_STORIES[1].coverageCount);
   assert.match(counted, /Recorded coverage count: 5 cluster members/);
-  assert.match(counted, /Independent reporting 2/);
-  assert.match(counted, /Syndicated or duplicate 3/);
+  assert.match(counted, /Independent-source estimate: 2/);
+  assert.match(counted, /Syndicated or duplicate estimate: 3/);
+  assert.match(counted, /not a list of outlets/i);
   assert.match(counted, /Fixture count only/);
   assert.match(counted, /No represented frames recorded/);
   const gap = renderCoverageCountIndicator(null);
@@ -121,9 +124,20 @@ test('source comparison filters recorded relations and coverage gaps stay non-cl
   const cluster = await golden('synthetic-02-syndicated-cluster');
   assert.equal(membersForCompare(cluster.coverage, 'syndicated').length, 2);
   assert.equal(membersForCompare(cluster.coverage, 'same_story').length, 2);
-  assert.equal(membersForCompare(cluster.coverage, 'independent').length, 3);
+  assert.deepEqual(
+    membersForCompare(cluster.coverage, 'independent').map((member) => member.source),
+    ['Fictional Daily', 'Second Outlet']
+  );
+  assert.equal(
+    membersForCompare(cluster.coverage, 'independent').some((member) => member.source === 'PR Newswire'),
+    false
+  );
   assert.equal(membersForCompare(cluster.coverage, 'frames').length, 0);
   assert.equal(membersForCompare(cluster.coverage, 'all').length, 5);
+  const independentStatus = compareStatusCopy(cluster.coverage, 'independent', 2, 5);
+  assert.match(independentStatus, /Independent-source estimate recorded separately: 2/);
+  assert.match(independentStatus, /same-story relation alone is not independent reporting/);
+  assert.doesNotMatch(independentStatus, /Surfaced and same-story/);
   assert.equal(renderCoverageGap(cluster.coverage), '');
   const missing = await golden('synthetic-03-no-timestamp');
   const gap = renderCoverageGap(missing.coverage);
@@ -132,7 +146,8 @@ test('source comparison filters recorded relations and coverage gaps stay non-cl
   assert.match(gap, /not proof a fact was left out/);
   assert.doesNotMatch(gap, /proven omission|blindspot|left-leaning|right-leaning/i);
   const distribution = renderCoverageDistribution(cluster.coverage);
-  assert.match(distribution, /Independent-source concentration: 2 independent reporting, 3 syndicated or duplicate/);
+  assert.match(distribution, /Independent-source estimate: 2/);
+  assert.match(distribution, /Syndicated or duplicate estimate: 3/);
   assert.match(distribution, /Represented frames recorded: 0/);
 });
 
@@ -208,4 +223,158 @@ test('candidate omission observations stay possible and are not called observed 
   assert.match(html, /data-strength="candidate">Possible selective-context candidate</);
   assert.match(html, /Needs review/);
   assert.doesNotMatch(html, /Observed influence signal|proven omission|they hid/i);
+});
+
+test('independent reporting lists recorded evidence and excludes wire copy', async () => {
+  const cluster = await golden('synthetic-02-syndicated-cluster');
+  assert.deepEqual(
+    membersForCompare(cluster.coverage, 'independent').map((member) => member.source),
+    ['Fictional Daily', 'Second Outlet']
+  );
+  const single = await golden('synthetic-01-quoted-vs-authorial');
+  assert.deepEqual(
+    membersForCompare(single.coverage, 'independent').map((member) => member.source),
+    ['Fictional Daily']
+  );
+
+  const wireInEvidence = structuredClone(cluster.coverage);
+  const wire = wireInEvidence.cluster.members.find((member) => member.source === 'PR Newswire');
+  wireInEvidence.story_origin.evidence_urls.push(wire.url);
+  wireInEvidence.story_origin.timestamp_evidence.push({ url_key: wire.url_key, published_at: wire.published_at });
+  assert.deepEqual(
+    membersForCompare(wireInEvidence, 'independent').map((member) => member.source),
+    ['Fictional Daily', 'Second Outlet']
+  );
+
+  const sameStoryOnly = structuredClone(cluster.coverage);
+  sameStoryOnly.cluster.members.push({
+    url: 'https://fourth-outlet.example/news/transit-fare-increase',
+    url_key: 'https://fourth-outlet.example/news/transit-fare-increase',
+    source: 'Fourth Outlet',
+    published_at: '2026-09-16T09:30:00.000Z',
+    relation: 'same_story'
+  });
+  sameStoryOnly.cluster.independent_sources_estimate = sameStoryOnly.cluster.members.length;
+  assert.deepEqual(
+    membersForCompare(sameStoryOnly, 'independent').map((member) => member.source),
+    ['Fictional Daily', 'Second Outlet']
+  );
+
+  const partner = structuredClone(cluster.coverage);
+  const yahoo = 'https://www.yahoo.com/news/transit-fare-increase';
+  partner.story_origin.evidence_urls.push(yahoo);
+  partner.cluster.members.push({
+    url: yahoo,
+    url_key: yahoo,
+    source: 'Yahoo News',
+    published_at: '2026-09-16T09:16:00.000Z',
+    relation: 'same_story'
+  });
+  assert.equal(
+    membersForCompare(partner, 'independent').some((member) => member.source === 'Yahoo News'),
+    false
+  );
+
+  const unnamed = structuredClone(cluster.coverage);
+  unnamed.story_origin.evidence_urls = [];
+  unnamed.story_origin.timestamp_evidence = [];
+  unnamed.story_origin.canonical_coverage_url = null;
+  unnamed.story_origin.canonical_coverage_basis = null;
+  unnamed.cluster.independent_sources_estimate = 5;
+  assert.deepEqual(membersForCompare(unnamed, 'independent'), []);
+  assert.match(compareStatusCopy(unnamed, 'independent', 0, 5), /not inferred from the estimate/);
+});
+
+test('keyboard activation of a fixture lane restores focus to that lane button', () => {
+  const nodes = new Map();
+  function create(tag) {
+    return {
+      tagName: String(tag).toUpperCase(),
+      attrs: {},
+      children: [],
+      parentNode: null,
+      className: '',
+      textContent: '',
+      type: '',
+      id: '',
+      value: '',
+      setAttribute(name, value) {
+        this.attrs[name] = String(value);
+      },
+      getAttribute(name) {
+        return Object.prototype.hasOwnProperty.call(this.attrs, name) ? this.attrs[name] : null;
+      },
+      appendChild(child) {
+        child.parentNode = this;
+        this.children.push(child);
+        return child;
+      },
+      replaceChildren() {
+        for (const child of this.children) child.parentNode = null;
+        this.children = [];
+      },
+      contains(other) {
+        let current = other;
+        while (current) {
+          if (current === this) return true;
+          current = current.parentNode;
+        }
+        return false;
+      },
+      querySelectorAll() {
+        return this.children.filter((child) => child.getAttribute('data-lane'));
+      },
+      focus() {
+        document.activeElement = this;
+      }
+    };
+  }
+  const body = create('body');
+  const host = create('div');
+  host.id = 'fixture-lanes';
+  nodes.set('fixture-lanes', host);
+  body.appendChild(host);
+  const query = create('input');
+  query.id = 'story-query';
+  nodes.set('story-query', query);
+  const previous = globalThis.document;
+  globalThis.document = {
+    body,
+    activeElement: body,
+    createElement: create,
+    getElementById(id) {
+      return nodes.get(id) || null;
+    },
+    readyState: 'complete',
+    addEventListener() {},
+    querySelector() {
+      return null;
+    },
+    querySelectorAll() {
+      return [];
+    }
+  };
+  try {
+    activateFixtureLane('all');
+    const syndicated = host.children.find((button) => button.getAttribute('data-lane') === 'syndicated-cluster');
+    syndicated.focus();
+    assert.equal(document.activeElement, syndicated);
+    // Enter on a focused button activates it. Re-rendering must not drop focus to body.
+    activateFixtureLane(syndicated.getAttribute('data-lane'));
+    assert.notEqual(document.activeElement, body);
+    assert.notEqual(document.activeElement, syndicated);
+    assert.equal(document.activeElement.getAttribute('data-lane'), 'syndicated-cluster');
+    assert.equal(document.activeElement.getAttribute('aria-pressed'), 'true');
+    assert.equal(syndicated.parentNode, null);
+    const nextQuoted = host.children.find((button) => button.getAttribute('data-lane') === 'quoted-language');
+    assert.equal(nextQuoted.getAttribute('aria-pressed'), 'false');
+
+    query.focus();
+    activateFixtureLane('coverage-gap');
+    assert.equal(document.activeElement, query);
+    activateFixtureLane('all');
+  } finally {
+    if (previous === undefined) delete globalThis.document;
+    else globalThis.document = previous;
+  }
 });

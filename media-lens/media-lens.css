@@ -215,6 +215,12 @@
   color: var(--text);
 }
 
+.ml-lane:focus-visible,
+.ml-compare-controls button:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
 .ml-coverage-count,
 .ml-gap-note {
   margin: 0 0 8px;

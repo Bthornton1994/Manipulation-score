@@ -15,6 +15,8 @@ import {
   NARROW_SHADOW_LIMIT_ENV,
   NARROW_SHADOW_MAX_CONTEXT_CHARS,
   NARROW_SHADOW_MAX_SPAN_CHARS,
+  NARROW_SHADOW_MAX_TITLE_CHARS,
+  narrowLiveRequestBody,
   armNarrowShadow,
   buildNarrowShadowReport,
   compareNarrowDecisionToProduction,
@@ -962,4 +964,163 @@ test('mock provider still runs when a test-only estimate accompanies the approve
   assert.equal(middleRequest.state.span.text.length < middle.length, true);
   assert.doesNotMatch(JSON.stringify(report), /FULL_ARTICLE_BODY|session=secret|sk-/);
   assert.equal(JSON.stringify(report).includes('M'.repeat(80)), false);
+});
+
+test('worst-case narrow body truncates the title and stays inside the cap fence', async () => {
+  assert.equal(NARROW_SHADOW_MAX_TITLE_CHARS, 2000);
+  assert.equal(NARROW_SHADOW_APPROVED_OPERATING_POINTS.estimatedUsdPerCall, null);
+  assert.equal(process.env.MEDIA_LENS_JEV_SHADOW_NARROW_ESTIMATED_USD_PER_CALL, undefined);
+  assert.equal(process.env.MEDIA_LENS_TYPESAFE_API_KEY, undefined);
+  assert.equal(process.env.MEDIA_LENS_JEV_SHADOW_NARROW, undefined);
+  assert.equal(process.env.MEDIA_LENS_ENABLE_LIVE, undefined);
+
+  const questionSet = await loadQuestionSetFile(NARROW_QUESTION_SET_PATH);
+  const sendableIds = Object.entries(questionSet.questions)
+    .filter(([, question]) => question && question.send_to_jev !== false && question.policy !== 'derived')
+    .map(([questionId]) => questionId);
+  assert.equal(sendableIds.length, 7);
+  assert.equal(sendableIds.includes('observed_vs_candidate'), false);
+
+  const rawTitle = 'T'.repeat(5000);
+  const spanText = 'M'.repeat(NARROW_SHADOW_MAX_SPAN_CHARS + 300);
+  const beforeText = 'B'.repeat(NARROW_SHADOW_MAX_CONTEXT_CHARS + 100);
+  const afterText = 'A'.repeat(NARROW_SHADOW_MAX_CONTEXT_CHARS + 100);
+  const graph = {
+    graph_id: RUN_ID,
+    artifact: {
+      title: rawTitle,
+      text_sha256: TEXT_SHA,
+      publisher: { domain: 'example.com' },
+      kind: 'article'
+    },
+    spans: [
+      { id: 'span-b', role: 'authorial', role_basis: 'default', text: beforeText },
+      { id: 'span-m', role: 'authorial', role_basis: 'default', text: spanText },
+      { id: 'span-a', role: 'authorial', role_basis: 'default', text: afterText }
+    ],
+    observations: [],
+    claims: [],
+    abstentions: [],
+    engine: { jev: { mode: 'fixture', model_reported: 'jev-1.13.0', calls: 0 } }
+  };
+
+  const seen = [];
+  let fetchCalls = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    fetchCalls += 1;
+    throw new Error('title-cap test must not use the network');
+  };
+  try {
+    const report = await buildNarrowShadowReport({
+      enabled: true,
+      graph,
+      articleHint: { mode: 'url' },
+      limits: {
+        maxCallsPerAnalysis: NARROW_SHADOW_APPROVED_OPERATING_POINTS.maxCallsPerAnalysis,
+        timeoutMs: NARROW_SHADOW_APPROVED_OPERATING_POINTS.timeoutMs,
+        rateLimitPerMinute: NARROW_SHADOW_APPROVED_OPERATING_POINTS.rateLimitPerMinute,
+        monthlyCostCeilingUsd: NARROW_SHADOW_APPROVED_OPERATING_POINTS.monthlyCostCeilingUsd,
+        estimatedUsdPerCall: 0.01
+      },
+      provider: {
+        async ask(request) {
+          seen.push(request);
+          return {
+            ok: true,
+            model_reported: 'jev-1.13.0',
+            answers: answersFor(questionSet, NARROW_MOCK_CHOICES)
+          };
+        }
+      },
+      providerKind: 'injected_mock',
+      liveNetworkPermitted: false,
+      liveNetworkBlockReason: 'fixture_mode',
+      recordedAt: RECORDED_AT
+    });
+    assert.equal(fetchCalls, 0);
+    assert.equal(report.network_calls, 3);
+    assert.equal(report.retention, 'stderr_process_log_only_no_disk_store');
+    assert.equal(report.cost.production_budget_written, false);
+    assert.equal(JSON.stringify(report).includes(rawTitle), false);
+    assert.equal(JSON.stringify(report).includes('M'.repeat(80)), false);
+
+    const middle = seen.find((request) => request.span_id === 'span-m');
+    const body = narrowLiveRequestBody('jev-1.13.0', middle);
+    assert.deepEqual(Object.keys(body).sort(), ['model', 'questions', 'state']);
+    assert.equal(body.model, questionSet.model_requested);
+    assert.deepEqual(Object.keys(body.questions).sort(), [...sendableIds].sort());
+    assert.equal(Object.hasOwn(body.questions, 'observed_vs_candidate'), false);
+    assert.equal(body.state.artifact.title.length, NARROW_SHADOW_MAX_TITLE_CHARS);
+    assert.equal(body.state.artifact.title, 'T'.repeat(NARROW_SHADOW_MAX_TITLE_CHARS));
+    assert.equal(body.state.span.text.length, NARROW_SHADOW_MAX_SPAN_CHARS);
+    assert.ok(body.state.span.text.length <= NARROW_SHADOW_MAX_SPAN_CHARS);
+    assert.equal(body.state.context.before.length, NARROW_SHADOW_MAX_CONTEXT_CHARS);
+    assert.equal(body.state.context.after.length, NARROW_SHADOW_MAX_CONTEXT_CHARS);
+    assert.ok(body.state.context.before.length <= NARROW_SHADOW_MAX_CONTEXT_CHARS);
+    assert.ok(body.state.context.after.length <= NARROW_SHADOW_MAX_CONTEXT_CHARS);
+
+    const serialized = JSON.stringify(body);
+    const skeleton = JSON.parse(serialized);
+    skeleton.state.artifact.title = '';
+    skeleton.state.span.text = '';
+    skeleton.state.context.before = '';
+    skeleton.state.context.after = '';
+    const structuralChars = JSON.stringify(skeleton).length;
+    const boundedTextChars =
+      NARROW_SHADOW_MAX_TITLE_CHARS +
+      NARROW_SHADOW_MAX_SPAN_CHARS +
+      NARROW_SHADOW_MAX_CONTEXT_CHARS +
+      NARROW_SHADOW_MAX_CONTEXT_CHARS;
+    const charBound = structuralChars + boundedTextChars;
+    const tokenCeiling = Math.ceil(charBound / 3);
+    assert.equal(serialized.length, charBound);
+    assert.ok(serialized.length <= charBound);
+    assert.ok(Math.ceil(serialized.length / 3) <= tokenCeiling);
+    assert.equal(serialized.includes('T'.repeat(NARROW_SHADOW_MAX_TITLE_CHARS + 1)), false);
+    const uncappedTitleChars = rawTitle.length;
+    assert.ok(
+      structuralChars +
+        uncappedTitleChars +
+        NARROW_SHADOW_MAX_SPAN_CHARS +
+        NARROW_SHADOW_MAX_CONTEXT_CHARS * 2 >
+        charBound
+    );
+
+    const missingTitle = await buildNarrowShadowReport({
+      enabled: true,
+      graph: {
+        ...graph,
+        artifact: { ...graph.artifact, title: null },
+        spans: [{ id: 'span-1', role: 'authorial', role_basis: 'default', text: 'Short span.' }]
+      },
+      articleHint: { mode: 'url' },
+      limits: {
+        maxCallsPerAnalysis: 5,
+        timeoutMs: 10000,
+        rateLimitPerMinute: 6,
+        monthlyCostCeilingUsd: 5,
+        estimatedUsdPerCall: 0.01
+      },
+      provider: {
+        async ask(request) {
+          seen.push(request);
+          return {
+            ok: true,
+            model_reported: 'jev-1.13.0',
+            answers: answersFor(questionSet, NARROW_MOCK_CHOICES)
+          };
+        }
+      },
+      providerKind: 'injected_mock',
+      liveNetworkPermitted: false,
+      recordedAt: RECORDED_AT
+    });
+    assert.equal(missingTitle.network_calls, 1);
+    const nullTitle = seen.find((request) => request.span_id === 'span-1');
+    assert.equal(nullTitle.state.artifact.title, null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.equal(fetchCalls, 0);
 });

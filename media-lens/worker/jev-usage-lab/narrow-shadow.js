@@ -58,6 +58,7 @@ const PRODUCTION_QUESTION_SET_ID = 'influence-questions.v1';
 const RUNTIME_SPLIT = 'runtime_shadow';
 export const NARROW_SHADOW_MAX_SPAN_CHARS = 1200;
 export const NARROW_SHADOW_MAX_CONTEXT_CHARS = 400;
+export const NARROW_SHADOW_MAX_TITLE_CHARS = 2000;
 const EXCLUDED_ROLES = new Set(['boilerplate', 'byline_meta']);
 const ID_RE = /^[A-Za-z0-9._:-]{1,128}$/;
 const TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
@@ -667,7 +668,10 @@ export async function buildNarrowShadowReport(input = {}) {
     }
 
     const kind = typeof graph?.artifact?.kind === 'string' ? graph.artifact.kind : null;
-    const title = typeof graph?.artifact?.title === 'string' ? graph.artifact.title : null;
+    const title = truncate(
+      typeof graph?.artifact?.title === 'string' ? graph.artifact.title : null,
+      NARROW_SHADOW_MAX_TITLE_CHARS
+    );
     const shells = new Map();
     const drafts = [];
     let stopReason = null;
@@ -910,6 +914,14 @@ export function armNarrowShadow(args = {}) {
   });
 }
 
+export function narrowLiveRequestBody(model, request) {
+  return {
+    model,
+    state: request?.state,
+    questions: request?.questions
+  };
+}
+
 export function createNarrowLiveProvider({ fetchImpl, baseUrl, apiKey, model }) {
   if (typeof fetchImpl !== 'function' || typeof baseUrl !== 'string' || !baseUrl || typeof apiKey !== 'string' || !apiKey) {
     return {
@@ -925,11 +937,7 @@ export function createNarrowLiveProvider({ fetchImpl, baseUrl, apiKey, model }) 
         response = await fetchImpl(`${baseUrl.replace(/\/$/, '')}/v1/systemone`, {
           method: 'POST',
           headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify({
-            model,
-            state: request?.state,
-            questions: request?.questions
-          }),
+          body: JSON.stringify(narrowLiveRequestBody(model, request)),
           signal,
           redirect: 'manual'
         });

@@ -20,7 +20,7 @@ Approved for any later live narrow request, and already the shape the code build
 
 - Public-URL live path only, after the existing consent and public-material gate (`user_asserted_public` must be true). Live pasted text returns `live_pasted_text_disabled` before analysis, so the narrow schedule does not run. A request without that consent is rejected the same way.
 - Pasted text, private material, paywalled material, and unauthorized material stay outside this approval. Paywall detection records an abstention and does not bypass a wall, send cookies, or send credentials. This approval does not add a new narrow-path filter, and it does not authorize a narrow request for those materials. The unset estimate keeps the live client off for every article.
-- Eligible span text is at most 1200 characters (`NARROW_SHADOW_MAX_SPAN_CHARS`). Neighboring context is at most 400 characters before and 400 after (`NARROW_SHADOW_MAX_CONTEXT_CHARS`). The public article title is the title already on the artifact, sent as `state.artifact.title`.
+- Eligible span text is at most 1200 characters (`NARROW_SHADOW_MAX_SPAN_CHARS`). Neighboring context is at most 400 characters before and 400 after (`NARROW_SHADOW_MAX_CONTEXT_CHARS`). The public article title is the title already on the artifact. Before serialization it is capped at 2000 characters (`NARROW_SHADOW_MAX_TITLE_CHARS`) with the same truncate helper as span text and context. A missing title stays null.
 - The live body is one POST of `{ model, state, questions }` per span. `state` carries artifact kind and title, span id, role, and truncated text, context before and after, and provenance ids. It does not add raw HTML, the full article body, a dedicated URL field, cookies, credentials, or secrets.
 - One request per span. No retries. Redirects are not followed.
 
@@ -48,7 +48,11 @@ The $5.00 ceiling is process-local memory. It resets when the process restarts. 
 
 The parser still rejects blanks, zero, and non-numeric text. Whole-number fields must be integers. The ceiling and the estimate must be greater than 0. Values outside the parser window are treated as unset. Those windows are validation bounds, not the approved operating points: calls `1..10000`, timeout `1..120000` ms, rate `1..100000` per minute, ceiling `> 0..1000000`, estimate `> 0..10000`.
 
-Before any real narrow call, a separate owner authorization must set `MEDIA_LENS_JEV_SHADOW_NARROW_ESTIMATED_USD_PER_CALL` to a conservative per-call estimate. Compute it from the verified current TypeSafe input price multiplied by the maximum token count of one bounded request (span text at most 1200 characters, context at most 400 characters before and after, the public title, and the question instructions), then round up. This repository does not record that price or that token count as a dollar amount. Do not invent one.
+Before any real narrow call, a separate owner authorization must set `MEDIA_LENS_JEV_SHADOW_NARROW_ESTIMATED_USD_PER_CALL` to a conservative per-call estimate. Compute it from the verified current TypeSafe input price multiplied by the maximum token count of one bounded request (span text at most 1200 characters, context at most 400 characters before and after, the public title at most 2000 characters, and the question instructions), then round up. This repository does not record that price or that token count as a dollar amount. Do not invent one.
+
+A public list price of $0.042 per million tokens is a planning reference only. The account invoice is unverified. That rate is not `ESTIMATED_USD_PER_CALL`. The estimate stays unset until after this title-cap remediation and QA, and a later owner authorization is still required before any real call. This change does not set the estimate.
+
+The regression fence for one request body `{ model, state, questions }` is the JSON length of that body with title, span text, and both context strings empty, plus 2000 + 1200 + 400 + 400. A chars/3 rounding of that length, rounded up, is a size fence only. It is not a price.
 
 ## Two flags
 

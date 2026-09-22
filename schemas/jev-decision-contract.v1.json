@@ -1,0 +1,194 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://manipulationscore.com/schemas/jev-decision-contract.v1.json",
+  "title": "Jev decision contract v1 shadow record",
+  "description": "One shadow decision for a typed Jev question. Shadow records do not authorize action and do not contain article text. Descriptive for review; tests check records with media-lens/worker/jev-usage-lab/schema-check.js.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "question_set_id",
+    "question_set_version",
+    "question_id",
+    "acted",
+    "shadow_mode",
+    "model_option",
+    "selected_option",
+    "probabilities",
+    "confidence",
+    "noul",
+    "margin",
+    "evidence_strength",
+    "review",
+    "abstained",
+    "abstention_reason",
+    "escalation",
+    "final_action",
+    "mapped_ui_state",
+    "blocks_downstream_observation",
+    "policy_override",
+    "role_effect",
+    "role_write_authorized",
+    "claim_support_applied",
+    "suppressed_by_span_abstain",
+    "dropped_fields",
+    "provenance",
+    "disagreement",
+    "model_disagreement",
+    "outcome",
+    "historical_action",
+    "measurement",
+    "cost",
+    "audit",
+    "prohibited_outputs_present"
+  ],
+  "properties": {
+    "contract_version": { "const": "1.0.0" },
+    "question_set_id": { "type": "string", "minLength": 1 },
+    "question_set_version": { "type": "string", "minLength": 1 },
+    "question_id": { "type": "string", "minLength": 1 },
+    "acted": { "const": false },
+    "shadow_mode": { "const": true },
+    "model_option": { "type": ["string", "null"] },
+    "selected_option": { "type": ["string", "null"] },
+    "probabilities": {
+      "type": ["object", "null"],
+      "additionalProperties": { "type": "number", "minimum": 0, "maximum": 1 }
+    },
+    "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+    "noul": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+    "margin": { "type": ["number", "null"] },
+    "evidence_strength": { "type": ["string", "null"], "enum": ["observed", "candidate", "below_threshold", null] },
+    "review": { "type": "boolean" },
+    "abstained": { "type": "boolean" },
+    "abstention_reason": {
+      "type": ["string", "null"],
+      "enum": [
+        "malformed",
+        "unknown_question",
+        "derived_in_app",
+        "wrong_type",
+        "unknown_option",
+        "invalid_probabilities",
+        "incomplete_distribution",
+        "choice_not_argmax",
+        "ambiguous_tie",
+        "low_margin",
+        "insufficient_source_context",
+        "explicit_abstain",
+        "span_abstain",
+        null
+      ]
+    },
+    "escalation": { "enum": ["none", "human_review", "hold"] },
+    "final_action": { "enum": ["shadow_record", "shadow_abstain", "hold_for_human", "no_ui_change"] },
+    "mapped_ui_state": { "type": "string", "minLength": 1 },
+    "blocks_downstream_observation": { "type": "boolean" },
+    "policy_override": { "type": ["string", "null"] },
+    "role_effect": { "type": ["string", "null"], "enum": ["none", "authorial_to_uncertain", null] },
+    "role_write_authorized": { "const": false },
+    "claim_support_applied": { "const": false },
+    "suppressed_by_span_abstain": { "type": "boolean" },
+    "dropped_fields": { "type": "array", "items": { "type": "string" } },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["article_id", "source_id", "span_id", "source_ids", "span_role"],
+      "properties": {
+        "article_id": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$" },
+        "source_id": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9._:-]{1,128}$" },
+        "span_id": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$" },
+        "source_ids": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$" }
+        },
+        "span_role": {
+          "type": ["string", "null"],
+          "enum": [
+            "headline",
+            "subhead",
+            "authorial",
+            "quoted",
+            "attributed_paraphrase",
+            "caption",
+            "byline_meta",
+            "boilerplate",
+            "uncertain",
+            null
+          ]
+        }
+      }
+    },
+    "disagreement": { "type": ["boolean", "null"] },
+    "model_disagreement": { "type": ["boolean", "null"] },
+    "outcome": { "type": ["string", "null"] },
+    "historical_action": { "type": ["string", "null"] },
+    "measurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["latency_ms", "call_count", "basis"],
+      "properties": {
+        "latency_ms": { "type": ["number", "null"], "minimum": 0 },
+        "call_count": { "type": ["integer", "null"], "minimum": 0 },
+        "basis": { "enum": ["fixture_declared", "not_measured"] }
+      }
+    },
+    "cost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available", "reason"],
+      "properties": {
+        "available": { "const": false },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model_requested",
+        "model_reported",
+        "deployment_sha",
+        "question_set_sha256",
+        "recorded_at",
+        "contract_version"
+      ],
+      "properties": {
+        "model_requested": { "type": "string" },
+        "model_reported": { "type": ["string", "null"] },
+        "deployment_sha": { "type": ["string", "null"] },
+        "question_set_sha256": { "type": ["string", "null"] },
+        "recorded_at": { "type": ["string", "null"] },
+        "contract_version": { "const": "1.0.0" }
+      }
+    },
+    "prohibited_outputs_present": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "final_prose",
+        "overall_manipulation_score",
+        "outlet_rank",
+        "person_rank",
+        "unsupported_claim_applied",
+        "merge_authorization",
+        "deploy_authorization",
+        "spend_authorization",
+        "credential_authorization",
+        "live_flag_authorization"
+      ],
+      "properties": {
+        "final_prose": { "const": false },
+        "overall_manipulation_score": { "const": false },
+        "outlet_rank": { "const": false },
+        "person_rank": { "const": false },
+        "unsupported_claim_applied": { "const": false },
+        "merge_authorization": { "const": false },
+        "deploy_authorization": { "const": false },
+        "spend_authorization": { "const": false },
+        "credential_authorization": { "const": false },
+        "live_flag_authorization": { "const": false }
+      }
+    }
+  }
+}

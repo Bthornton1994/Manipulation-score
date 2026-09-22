@@ -246,7 +246,9 @@ test('index.html uses the v2 consent checkbox and keeps the full live-URL disclo
 
 test('public landing uses the Media Lens product headline and a fixture sample card', async () => {
   const html = await readFile('media-lens/index.html', 'utf8');
-  assert.match(html, /<h1[^>]*>Read the story behind the story<\/h1>/);
+  assert.match(html, /<h1[^>]*>Coverage context for a public story<\/h1>/);
+  assert.match(html, /Explore a fixture story/);
+  assert.match(html, /Analyze a public article URL/);
   assert.match(html, /Council approves downtown drainage upgrade/);
   assert.match(html, /synthetic-01-quoted-vs-authorial/);
   assert.match(html, /fictional-daily\.example/);

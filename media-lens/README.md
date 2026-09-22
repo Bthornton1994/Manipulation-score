@@ -4,6 +4,8 @@ Media Lens is an experimental, unreleased mode of Manipulation Score for analyzi
 
 Media Lens produces evidence-linked observations across four separate dimensions — **Language**, **Claims**, **Coverage**, and **Source context** — as an `influence-graph.v1` document. It never produces an overall 0-100 score for an article, and no field labels a person or outlet as manipulative. See `docs/media-lens-build-brief.md` (owner brief) and `docs/media-lens-influence-graph-plan.md` (implementation plan) for the full product and architecture rationale.
 
+The public page is a fixture-first story workspace: topic search and article URL analysis are separate entries, and sample coverage is labeled as fixture data. See `docs/media-lens-story-workspace.md`. Live story discovery is not implemented.
+
 ## Architecture
 
 A local Node `http` worker (`worker/server.js`, zero dependencies) owns all network access, keys, and limits. The browser page (`index.html` + `media-lens.js`) is a thin renderer that only talks to that worker, at `http://127.0.0.1:8787` or `http://localhost:8787` (the only two origins allowed by the page's Content Security Policy).

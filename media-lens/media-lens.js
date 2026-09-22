@@ -88,6 +88,72 @@ const TAXONOMY = Object.freeze({
   }
 });
 
+// In-repo story catalog. Titles and domains are checked against the golden
+// graphs in tests. Notes describe the fixture. They are not live coverage.
+const FIXTURE_STORIES = Object.freeze([
+  Object.freeze({
+    id: 'synthetic-01-quoted-vs-authorial',
+    title: "Council approves downtown drainage upgrade",
+    domain: 'fictional-daily.example',
+    byline: 'Jordan Reyes',
+    topics: ['drainage', 'council', 'quoted', 'authorial', 'flooding'],
+    fixtureNote: 'Fixture example. Quoted urgency stays separate from the writer wording.'
+  }),
+  Object.freeze({
+    id: 'synthetic-02-syndicated-cluster',
+    title: "Regional transit agency proposes fare increase",
+    domain: 'fictional-daily.example',
+    byline: 'Priya Nandan',
+    topics: ['transit', 'fare', 'syndicated', 'cluster'],
+    fixtureNote: 'Fixture example. A same-story cluster with syndicated repetition counted apart from independent reports.'
+  }),
+  Object.freeze({
+    id: 'synthetic-03-no-timestamp',
+    title: "Neighborhood group organizes cleanup weekend",
+    domain: 'fictional-daily.example',
+    byline: 'Sam Okafor',
+    topics: ['cleanup', 'neighborhood', 'timestamp'],
+    fixtureNote: 'Fixture example. No publish timestamp and no provenance record.'
+  }),
+  Object.freeze({
+    id: 'synthetic-04-injection',
+    title: "Housing permits rise this quarter",
+    domain: 'fictional-daily.example',
+    byline: 'Dana Whitfield',
+    topics: ['housing', 'permits', 'instruction'],
+    fixtureNote: 'Fixture example. Instruction-like text in the article is not treated as a command.'
+  }),
+  Object.freeze({
+    id: 'synthetic-05-paywall',
+    title: "Exclusive: inside the port authority's budget talks",
+    domain: 'fictional-daily.example',
+    byline: 'Elena Voss',
+    topics: ['paywall', 'budget', 'port'],
+    fixtureNote: 'Fixture example. A paywalled excerpt abstains instead of fetching the rest.'
+  }),
+  Object.freeze({
+    id: 'synthetic-06-short-excerpt',
+    title: "Brief: road closure this weekend",
+    domain: 'fictional-daily.example',
+    byline: '',
+    topics: ['road', 'closure', 'short'],
+    fixtureNote: 'Fixture example. The excerpt is too short for a language or claim record.'
+  })
+]);
+
+const FIXTURE_GRAPH_ID = /^synthetic-\d{2}-[a-z0-9-]+$/;
+const NOT_RECORDED = 'Not recorded';
+const OMISSION_EMPTY_COPY =
+  'No omission candidate was recorded. That is not proof a fact was left out.';
+const ALTERNATIVE_READINGS_EMPTY = 'No alternative reading was recorded for this result.';
+const RELATION_LABELS = Object.freeze({
+  surfaced: 'Surfaced article',
+  same_story: 'Same story',
+  syndicated: 'Syndicated repetition',
+  different_story: 'Different story',
+  unclear: 'Unclear relation'
+});
+
 let currentGraph = null;
 let liveUrlReady = false;
 let isSubmitting = false;
@@ -198,7 +264,6 @@ function setupInputModeToggle() {
     fixtureRadio.closest('fieldset').hidden = true;
     urlRadio.checked = true;
   } else {
-    fixtureRadio.checked = true;
     if (sampleAnalyze) sampleAnalyze.hidden = false;
   }
 
@@ -253,10 +318,14 @@ async function checkHealth() {
     return true;
   } catch {
     liveUrlReady = false;
-    statusEl.dataset.state = 'error';
-    textEl.textContent = IS_LOCAL_PREVIEW
-      ? 'No local worker found at 127.0.0.1:8787. Start it with: node media-lens/worker/server.js.'
-      : 'The Media Lens service is unavailable. Try again later.';
+    if (IS_LOCAL_PREVIEW || IS_FIXTURE_PREVIEW) {
+      statusEl.dataset.state = 'offline';
+      textEl.textContent =
+        'Fixture stories on this page do not need the worker. Live URL analysis is unavailable until a local worker is running.';
+    } else {
+      statusEl.dataset.state = 'error';
+      textEl.textContent = 'The Media Lens service is unavailable. Try again later.';
+    }
     updateUrlInputAvailability();
     updateSubmitEnabled();
     return false;
@@ -352,10 +421,6 @@ function statRow(label, value) {
 function renderCoverageStats(coverage) {
   const stats = [];
   if (coverage.status) stats.push(['Coverage status', coverage.status.replace(/_/g, ' ')]);
-  if (coverage.cluster) {
-    stats.push(['Independent sources', String(coverage.cluster.independent_sources_estimate)]);
-    stats.push(['Duplicate or syndicated', String(coverage.cluster.duplicate_or_syndicated_count)]);
-  }
   if (coverage.freshness_gate) {
     stats.push(['Freshness', coverage.freshness_gate.computed_status.replace(/_/g, ' ')]);
   }
@@ -372,7 +437,13 @@ function renderCoverageOrigin(coverage) {
   const rows = [
     ['Original source', origin.original_source || 'Unknown'],
     ['First public', formatTimestamp(origin.first_public_at) || 'Unknown'],
-    ['Same-story assessment', (origin.same_story_assessment || 'unknown').replace(/_/g, ' ')]
+    ['Same-story assessment', (origin.same_story_assessment || 'unknown').replace(/_/g, ' ')],
+    ['Canonical coverage source', origin.canonical_coverage_source || NOT_RECORDED],
+    [
+      'Canonical-source basis',
+      origin.canonical_coverage_basis ? String(origin.canonical_coverage_basis).replace(/_/g, ' ') : NOT_RECORDED
+    ],
+    ['Origin confidence', origin.confidence || NOT_RECORDED]
   ];
   const rationale = origin.rationale
     ? `<p class="ml-dimension-note">${escapeHtml(origin.rationale)}</p>`
@@ -714,15 +785,197 @@ function formatArtifactMeta(artifact) {
   return parts.join(' · ');
 }
 
-function renderGraph(graph) {
+function isFixtureResult(graph) {
+  return graph?.artifact?.input_mode === 'fixture' || graph?.coverage?.provenance === 'fixture';
+}
+
+function recordedOpening(graph) {
+  const spans = Array.isArray(graph?.spans) ? graph.spans : [];
+  const lede = spans.find((span) => span && span.role === 'authorial' && span.text) || spans.find((span) => span && span.role === 'headline' && span.text);
+  return lede ? String(lede.text) : '';
+}
+
+function storyOverviewCopy(graph) {
+  const opening = recordedOpening(graph);
+  const prefix = isFixtureResult(graph) ? 'Fixture example. ' : '';
+  if (!opening) return `${prefix}No opening text was recorded for this item.`;
+  return `${prefix}Recorded opening: ${opening}`;
+}
+
+function storySearchText(story) {
+  return [story?.title, story?.id, story?.domain, story?.byline, story?.fixtureNote, ...(story?.topics || [])]
+    .filter((part) => typeof part === 'string' && part.trim())
+    .join(' ')
+    .toLowerCase();
+}
+
+function filterFixtureStories(query, stories = FIXTURE_STORIES) {
+  const q = String(query ?? '').trim().toLowerCase();
+  const list = Array.isArray(stories) ? stories : [];
+  if (!q) return list.slice();
+  return list.filter((story) => storySearchText(story).includes(q));
+}
+
+function fixtureGraphUrl(id) {
+  if (typeof id !== 'string' || !FIXTURE_GRAPH_ID.test(id)) return null;
+  if (!FIXTURE_STORIES.some((story) => story.id === id)) return null;
+  return `./fixtures/expected/${id}.graph.json`;
+}
+
+function storyIdFromHash() {
+  if (typeof window === 'undefined') return null;
+  const match = /^#story=(synthetic-\d{2}-[a-z0-9-]+)$/.exec(window.location.hash || '');
+  return match ? match[1] : null;
+}
+
+function renderStoryCard(story) {
+  return `<li class="ml-story-card">
+    <p class="ml-sample-kicker">Fixture story</p>
+    <h3>${escapeHtml(story.title)}</h3>
+    <p>${escapeHtml(story.domain)} · <code>${escapeHtml(story.id)}</code></p>
+    <p>${escapeHtml(story.fixtureNote)}</p>
+    <button class="button button-secondary" type="button" data-fixture-id="${escapeHtml(story.id)}">Open fixture workspace</button>
+  </li>`;
+}
+
+function renderStoryCatalog(query) {
+  const stories = filterFixtureStories(query);
+  const list = byId('story-results');
+  const status = byId('story-search-status');
+  if (!list) return;
+  if (stories.length === 0) {
+    list.innerHTML = '';
+    if (status) status.textContent = 'No fixture story matches that search.';
+    return;
+  }
+  list.innerHTML = stories.map((story) => renderStoryCard(story)).join('');
+  if (status) {
+    const q = String(query || '').trim();
+    const noun = stories.length === 1 ? 'fixture story' : 'fixture stories';
+    status.textContent = q
+      ? `${stories.length} ${noun} match. These are examples, not live coverage.`
+      : `${stories.length} fixture stories. These are examples, not live coverage.`;
+  }
+}
+
+function renderRetrievalMetadata(graph) {
+  const artifact = graph?.artifact || {};
+  const coverage = graph?.coverage || {};
+  const engine = graph?.engine || {};
+  const url = safeHttpsUrl(artifact.url);
+  const rows = [
+    ['Input', artifact.input_mode || NOT_RECORDED],
+    ['Provenance', coverage.provenance ? String(coverage.provenance).replace(/_/g, ' ') : NOT_RECORDED],
+    ['Publisher domain', artifact.publisher?.domain || NOT_RECORDED],
+    ['Published', formatTimestamp(artifact.published_at, artifact.timestamp_precision) || NOT_RECORDED],
+    ['Timestamp precision', artifact.timestamp_precision || NOT_RECORDED],
+    ['Newsjack mode', engine.newsjack?.mode || NOT_RECORDED],
+    ['Generated', formatTimestamp(graph?.generated_at, 'time') || NOT_RECORDED]
+  ];
+  const link = url
+    ? `<p class="ml-dimension-note">Recorded URL: <a class="ml-cluster-link" href="${escapeHtml(url.href)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(url.hostname)}</a></p>`
+    : `<p class="ml-dimension-note">Recorded URL: ${artifact.url ? 'Not shown. The stored value is not a safe https URL.' : NOT_RECORDED}</p>`;
+  const fixtureNote = isFixtureResult(graph)
+    ? '<p class="ml-dimension-note">Retrieval fields describe this fixture record. They are not a live fetch.</p>'
+    : '';
+  return `<dl class="ml-coverage-grid">${rows.map(([label, value]) => statRow(label, value)).join('')}</dl>${link}${fixtureNote}`;
+}
+
+function renderReportingSplit(coverage) {
+  const cluster = coverage?.cluster;
+  if (!cluster || !Number.isFinite(cluster.independent_sources_estimate) || !Number.isFinite(cluster.duplicate_or_syndicated_count)) {
+    return '<p class="ml-empty-state">Independent and syndicated counts were not recorded for this result.</p>';
+  }
+  return `<dl class="ml-coverage-grid">${statRow('Independent reporting', String(cluster.independent_sources_estimate))}${statRow(
+    'Syndicated or duplicate repetition',
+    String(cluster.duplicate_or_syndicated_count)
+  )}</dl><p class="ml-dimension-note">These estimates come from the recorded cluster. The distribution below counts each member relation as stored. A same-story member can still sit in the duplicate estimate when the record marks it as wire copy. Syndicated repetition is not an independent report.</p>`;
+}
+
+function renderCoverageDistribution(coverage) {
+  const members = coverage?.cluster?.members;
+  if (!Array.isArray(members) || members.length === 0) {
+    return '<p class="ml-empty-state">No coverage distribution was recorded for this result.</p>';
+  }
+  const counts = new Map();
+  for (const member of members) {
+    const relation = typeof member?.relation === 'string' && member.relation ? member.relation : 'unclear';
+    counts.set(relation, (counts.get(relation) || 0) + 1);
+  }
+  const rows = [...counts.entries()]
+    .map(([relation, count]) => statRow(RELATION_LABELS[relation] || relation.replace(/_/g, ' '), String(count)))
+    .join('');
+  const bar = [...counts.entries()]
+    .map(([, count]) => `<span style="flex-grow:${Number(count)}"></span>`)
+    .join('');
+  const note =
+    coverage?.provenance === 'fixture'
+      ? 'Fixture distribution of recorded cluster relations. Not a live census and not a political bias chart.'
+      : 'Relation mix in the recorded cluster. Not a political bias chart.';
+  const total = members.length;
+  return `<p class="ml-dimension-note">${escapeHtml(note)}</p><dl class="ml-coverage-grid">${rows}</dl><div class="ml-distribution" aria-hidden="true">${bar}</div><p class="ml-dimension-note">${total} recorded cluster ${
+    total === 1 ? 'member' : 'members'
+  }.</p>`;
+}
+
+function renderFrameList(coverage) {
+  const frames = Array.isArray(coverage?.frames) ? coverage.frames : [];
+  if (frames.length === 0) return '';
+  return `<ul class="ml-cluster-list">${frames
+    .map((frame) => {
+      const label = typeof frame?.label === 'string' && frame.label.trim() ? frame.label.trim() : 'Unlabeled frame';
+      const count = Array.isArray(frame?.member_urls) ? frame.member_urls.length : 0;
+      const basis = typeof frame?.basis === 'string' && frame.basis ? frame.basis.replace(/_/g, ' ') : NOT_RECORDED;
+      return `<li class="ml-cluster-item"><strong>${escapeHtml(label)}</strong> · ${count} recorded member ${
+        count === 1 ? 'URL' : 'URLs'
+      } · basis ${escapeHtml(basis)}</li>`;
+    })
+    .join('')}</ul>`;
+}
+
+function omissionCandidates(graph) {
+  const observations = Array.isArray(graph?.observations) ? graph.observations : [];
+  return observations.filter((obs) => obs && (obs.signal === 'selective_context_candidate' || obs.dimension === 'coverage'));
+}
+
+function renderOmissionCandidates(graph) {
+  const items = omissionCandidates(graph);
+  if (items.length === 0) return `<li class="ml-empty-state">${escapeHtml(OMISSION_EMPTY_COPY)}</li>`;
+  return items.map((obs) => renderObservation(graph, obs)).join('');
+}
+
+function renderInfluenceProfile(graph) {
+  return buildAnalysisOverview(graph)
+    .map(
+      (item) =>
+        `<div class="ml-coverage-stat"><dt>${escapeHtml(item.label)}</dt><dd>${escapeHtml(item.state)}${
+          item.detail ? ` · ${escapeHtml(item.detail)}` : ''
+        }</dd></div>`
+    )
+    .join('');
+}
+
+function renderGraph(graph, source = 'analysis') {
   currentGraph = graph;
 
   const languageObservations = graph.observations.filter((o) => o.dimension === 'language');
   const artifact = graph.artifact || {};
+  const fixture = isFixtureResult(graph);
 
+  byId('result-kicker').textContent = fixture ? 'Fixture story workspace' : 'Story workspace';
+  const badge = byId('result-fixture-badge');
+  if (badge) {
+    badge.hidden = !fixture;
+    badge.textContent = fixture ? 'Fixture example. Not live coverage.' : '';
+  }
   byId('result-title').textContent = artifact.title || 'Untitled public article';
+  byId('result-overview').textContent = storyOverviewCopy(graph);
   byId('result-meta').textContent = formatArtifactMeta(artifact);
+  byId('result-limits').textContent = fixture
+    ? 'Fixture example. Evidence is inspectable. This is not live coverage, not a truth detector, and not a person or outlet score.'
+    : 'Experimental Jev-only preview. Evidence is inspectable. This is not a truth detector and not a person or outlet score.';
   byId('overview-list').innerHTML = renderAnalysisOverview(graph);
+  byId('retrieval-metadata').innerHTML = renderRetrievalMetadata(graph);
 
   byId('language-list').innerHTML =
     languageObservations.map((o) => renderObservation(graph, o)).join('') ||
@@ -734,19 +987,31 @@ function renderGraph(graph) {
   byId('coverage-stats').innerHTML = renderCoverageStats(graph.coverage);
   byId('coverage-freshness-rationale').textContent = graph.coverage.freshness_gate?.rationale || '';
   byId('coverage-origin').innerHTML = renderCoverageOrigin(graph.coverage);
-  byId('coverage-cluster').innerHTML = renderClusterMembers(graph.coverage);
+  const clusterHtml = renderClusterMembers(graph.coverage);
+  byId('coverage-cluster').innerHTML =
+    clusterHtml || '<li class="ml-empty-state">No related-source cluster was recorded for this result.</li>';
+  byId('reporting-split').innerHTML = renderReportingSplit(graph.coverage);
+  byId('coverage-distribution').innerHTML = renderCoverageDistribution(graph.coverage);
   byId('coverage-frames').textContent = renderCoverageFrames(graph.coverage);
+  byId('coverage-frame-list').innerHTML = renderFrameList(graph.coverage);
+  byId('omission-list').innerHTML = renderOmissionCandidates(graph);
   byId('coverage-list').innerHTML = renderCoverageObservationList(graph);
 
   byId('source-context-stats').innerHTML = renderSourceContextStats(graph.source_context);
   byId('source-context-note').textContent = graph.source_context?.note || '';
+  byId('influence-profile-list').innerHTML = renderInfluenceProfile(graph);
 
   byId('abstention-list').innerHTML = renderAbstentionList(graph);
+  byId('alternative-readings').textContent = ALTERNATIVE_READINGS_EMPTY;
   byId('engine-stats').innerHTML = renderEngineStats(graph);
 
   showView('results');
   byId('results')?.focus();
 
+  if (source === 'fixture-file') {
+    announceStatus('Fixture story opened. This is an in-repo example, not live coverage.');
+    return;
+  }
   announceStatus(
     `Analysis complete: ${languageObservations.length} language observation${languageObservations.length === 1 ? '' : 's'}, ${graph.claims.length} claim${graph.claims.length === 1 ? '' : 's'} found.`
   );
@@ -940,14 +1205,67 @@ function stopLoadingStages() {
   }
 }
 
+function clearStoryHash() {
+  if (typeof window === 'undefined' || !window.location.hash.startsWith('#story=')) return;
+  if (window.history && typeof window.history.replaceState === 'function') {
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  }
+}
+
+async function loadFixtureGraph(id) {
+  const url = fixtureGraphUrl(id);
+  if (!url) {
+    showError('That fixture story is not in the local catalog.');
+    return;
+  }
+  clearError();
+  announceStatus('Opening fixture example. No live coverage was requested.');
+  try {
+    const res = await fetch(url, { method: 'GET', credentials: 'same-origin', cache: 'no-store' });
+    if (!res.ok) throw new Error('fixture unavailable');
+    const graph = await res.json();
+    if (!graph || graph.schema !== 'influence-graph.v1') throw new Error('bad graph');
+    if (typeof window !== 'undefined' && window.history && typeof window.history.replaceState === 'function') {
+      const next = `#story=${id}`;
+      if (window.location.hash !== next) window.history.replaceState(null, '', next);
+    }
+    renderGraph(graph, 'fixture-file');
+  } catch {
+    showError('This fixture example could not be opened. No live coverage was requested.');
+  }
+}
+
+function setupStoryExplorer() {
+  const form = byId('story-search-form');
+  const query = byId('story-query');
+  if (form) {
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      renderStoryCatalog(query ? query.value : '');
+    });
+  }
+  if (query) query.addEventListener('input', () => renderStoryCatalog(query.value));
+  document.addEventListener('click', (event) => {
+    const target = event.target instanceof Element ? event.target.closest('[data-fixture-id]') : null;
+    if (!target) return;
+    const id = target.getAttribute('data-fixture-id');
+    if (id) loadFixtureGraph(id);
+  });
+  renderStoryCatalog('');
+  const initial = storyIdFromHash();
+  if (initial) loadFixtureGraph(initial);
+}
+
 function goToLanding() {
   stopLoadingStages();
   if (analyzeAbort) analyzeAbort.abort();
   isSubmitting = false;
+  clearStoryHash();
   showView('landing');
   clearError();
   updateSubmitEnabled();
-  byId('analyze-continue').focus();
+  const returnFocus = byId('story-query') || byId('analyze-continue');
+  returnFocus?.focus();
 }
 
 async function runAnalysis(payload) {
@@ -1037,6 +1355,7 @@ async function handleSubmit(event) {
 
 function setup() {
   setupInputModeToggle();
+  setupStoryExplorer();
   byId('consent-checkbox').addEventListener('change', updateSubmitEnabled);
   byId('pasted-text').addEventListener('input', updateSubmitEnabled);
   byId('analyze-form').addEventListener('submit', handleSubmit);
@@ -1086,19 +1405,28 @@ if (typeof document !== 'undefined') {
 }
 
 export {
+  ALTERNATIVE_READINGS_EMPTY,
   COVERAGE_FRAMES_EMPTY_COPY,
   COVERAGE_OBSERVATIONS_EMPTY_COPY,
   ABSTENTION_EMPTY_COPY,
+  FIXTURE_STORIES,
+  OMISSION_EMPTY_COPY,
   buildAnalysisOverview,
   consentDisclosure,
+  filterFixtureStories,
+  fixtureGraphUrl,
   liveUrlDisclosure,
   observationDisplayLabel,
+  omissionCandidates,
   renderAbstentionList,
   renderAnalysisOverview,
   renderClusterMember,
   renderClusterMembers,
+  renderCoverageDistribution,
   renderCoverageFrames,
   renderCoverageObservationList,
+  renderInfluenceProfile,
   renderObservation,
+  renderOmissionCandidates,
   safeHttpsUrl
 };

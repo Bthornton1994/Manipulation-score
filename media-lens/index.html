@@ -10,7 +10,7 @@
     <meta name="robots" content="noindex, nofollow" />
     <meta
       name="description"
-      content="Media Lens: a limited Jev-only preview for evidence-linked language, claims, coverage, and source context in approved public articles."
+      content="Media Lens: a fixture-first media-intelligence workspace for language, claims, coverage, and source context. Live URL analysis stays a limited Jev-only preview."
     />
     <link rel="icon" href="../icon.svg" type="image/svg+xml" />
     <title>Media Lens | Manipulation Score</title>
@@ -51,12 +51,109 @@
         <section class="ml-hero" aria-labelledby="ml-hero-heading">
           <div class="ml-hero-copy">
             <p class="eyebrow"><span></span> Limited Jev-only experimental preview</p>
-            <h1 id="ml-hero-heading">Read the story behind the story</h1>
+            <h1 id="ml-hero-heading">Coverage context for a public story</h1>
             <p class="ml-lede">
-              Media Lens inspects framing, claims, coverage differences, and source context in a public article.
-              It never scores a person or outlet, and it never produces a single score for an article.
+              Media Lens is a media-intelligence workspace for public coverage. It keeps language, claims, coverage, and source
+              context separate, and it shows the evidence behind each one.
             </p>
+            <ul class="ml-compare">
+              <li>
+                <strong>Media Lens</strong> reads public stories and article URLs. Fixture stories on this page are labeled examples,
+                not a live coverage census.
+              </li>
+              <li>
+                <strong>Clarity</strong> reviews a private message on your device.
+                <a href="https://manipulationscore.com/analyze.html">Open Clarity</a> for that. Clarity does not use this workspace.
+              </li>
+            </ul>
+          </div>
+        </section>
 
+        <div class="ml-entries">
+          <section class="ml-entry" aria-labelledby="story-explore-heading">
+            <h2 id="story-explore-heading">Explore a fixture story</h2>
+            <p class="ml-dimension-note">
+              Story and topic search is a separate entry from article URL analysis. It matches labeled fixture stories shipped with
+              this page. It does not discover live coverage.
+            </p>
+            <form id="story-search-form" role="search">
+              <label class="ml-field-label" for="story-query">Story or topic</label>
+              <input
+                id="story-query"
+                name="story-query"
+                type="search"
+                placeholder="Try transit, paywall, or quoted"
+                autocomplete="off"
+                enterkeyhint="search"
+                aria-describedby="story-query-help"
+              />
+              <p class="ml-form-note" id="story-query-help">
+                Sample coverage only. A match is an in-repo fixture, not a live fact about publishers or events.
+              </p>
+            </form>
+            <p class="ml-form-note" id="story-search-status" role="status"></p>
+            <ul class="ml-story-results" id="story-results"></ul>
+
+            <aside class="ml-sample-card" aria-labelledby="ml-sample-heading">
+              <p class="ml-sample-kicker">Fixture sample</p>
+              <h2 id="ml-sample-heading">Council approves downtown drainage upgrade</h2>
+              <p class="ml-sample-meta">
+                Jordan Reyes · fictional-daily.example · fixture
+                <code>synthetic-01-quoted-vs-authorial</code>
+              </p>
+              <p class="ml-sample-note">
+                Static excerpt of the in-repo golden graph. Not a live fetch and not an accuracy claim.
+              </p>
+              <ul class="ml-sample-findings">
+                <li data-observation-id="obs-jev-1">
+                  <span class="ml-chip" data-strength="observed">Quoted language not attributed as authorial</span>
+                  <q>We will fix the flooding problem this year,</q>
+                  <span class="ml-sample-signal">Urgency framing, quoted as the mayor</span>
+                </li>
+                <li data-observation-id="obs-jev-2">
+                  <span class="ml-chip" data-strength="candidate">Possible influence signal</span>
+                  <q>The council said it would fix the flooding problem this year, directing staff to begin engineering work within 30 days.</q>
+                  <span class="ml-sample-signal">Certainty beyond evidence</span>
+                </li>
+                <li data-observation-id="obs-jev-3">
+                  <span class="ml-chip" data-strength="candidate">Possible influence signal</span>
+                  <span class="ml-chip" data-review="needs_review">Needs review</span>
+                  <q>Sources close to the situation report growing frustration among residents who have filed dozens of complaints this year.</q>
+                  <span class="ml-sample-signal">Vague authority</span>
+                </li>
+              </ul>
+              <dl class="ml-sample-coverage">
+                <div>
+                  <dt>Independent sources</dt>
+                  <dd>1</dd>
+                </div>
+                <div>
+                  <dt>Duplicate or syndicated</dt>
+                  <dd>0</dd>
+                </div>
+                <div>
+                  <dt>Freshness</dt>
+                  <dd>stale</dd>
+                </div>
+              </dl>
+              <p class="ml-sample-rationale">Synthetic fixture published outside the freshness window.</p>
+              <div class="ml-form-actions">
+                <button class="button button-secondary" type="button" data-fixture-id="synthetic-01-quoted-vs-authorial">
+                  Open fixture workspace
+                </button>
+                <button class="button button-secondary button-small" type="button" id="sample-analyze" hidden>
+                  Analyze this example locally
+                </button>
+              </div>
+            </aside>
+          </section>
+
+          <section class="ml-entry" aria-labelledby="url-entry-heading">
+            <h2 id="url-entry-heading">Analyze a public article URL</h2>
+            <p class="ml-dimension-note">
+              URL analysis is separate from fixture search. On the approved operator host it can run a limited Jev-only live URL mode.
+              The secondary classifier is disabled. Live URL access is not production-ready for general use.
+            </p>
             <form class="ml-form" id="analyze-form">
               <fieldset class="ml-input-mode-wrap">
                 <legend>Analyze an approved public URL</legend>
@@ -139,56 +236,8 @@
               <span class="ml-status-dot" aria-hidden="true"></span>
               <span id="worker-status-text">Checking the Media Lens service...</span>
             </p>
-          </div>
-
-          <aside class="ml-sample-card" aria-labelledby="ml-sample-heading">
-            <p class="ml-sample-kicker">Sample analysis</p>
-            <h2 id="ml-sample-heading">Council approves downtown drainage upgrade</h2>
-            <p class="ml-sample-meta">
-              Jordan Reyes · fictional-daily.example · fixture
-              <code>synthetic-01-quoted-vs-authorial</code>
-            </p>
-            <p class="ml-sample-note">
-              Static excerpt of the in-repo golden graph. Not a live fetch and not an accuracy claim.
-            </p>
-            <ul class="ml-sample-findings">
-              <li data-observation-id="obs-jev-1">
-                <span class="ml-chip" data-strength="observed">Quoted language not attributed as authorial</span>
-                <q>We will fix the flooding problem this year,</q>
-                <span class="ml-sample-signal">Urgency framing, quoted as the mayor</span>
-              </li>
-              <li data-observation-id="obs-jev-2">
-                <span class="ml-chip" data-strength="candidate">Possible influence signal</span>
-                <q>The council said it would fix the flooding problem this year, directing staff to begin engineering work within 30 days.</q>
-                <span class="ml-sample-signal">Certainty beyond evidence</span>
-              </li>
-              <li data-observation-id="obs-jev-3">
-                <span class="ml-chip" data-strength="candidate">Possible influence signal</span>
-                <span class="ml-chip" data-review="needs_review">Needs review</span>
-                <q>Sources close to the situation report growing frustration among residents who have filed dozens of complaints this year.</q>
-                <span class="ml-sample-signal">Vague authority</span>
-              </li>
-            </ul>
-            <dl class="ml-sample-coverage">
-              <div>
-                <dt>Independent sources</dt>
-                <dd>1</dd>
-              </div>
-              <div>
-                <dt>Duplicate or syndicated</dt>
-                <dd>0</dd>
-              </div>
-              <div>
-                <dt>Freshness</dt>
-                <dd>stale</dd>
-              </div>
-            </dl>
-            <p class="ml-sample-rationale">Synthetic fixture published outside the freshness window.</p>
-            <button class="button button-secondary button-small" type="button" id="sample-analyze" hidden>
-              Analyze this example locally
-            </button>
-          </aside>
-        </section>
+          </section>
+        </div>
 
         <section class="ml-disclosure" aria-labelledby="ml-disclosure-heading">
           <h2 id="ml-disclosure-heading">Before you analyze</h2>
@@ -226,21 +275,30 @@
         <button class="button button-secondary" type="button" id="analyze-cancel">Cancel analysis</button>
       </section>
 
-      <!-- Info fix: a small, dedicated live region announces a brief
-           summary on each update, instead of aria-live on the whole
-           results tree below (which would re-read every observation,
-           claim, and stat aloud every time anything changes). -->
       <p class="ml-visually-hidden" id="analyze-status-live" role="status" aria-live="polite"></p>
 
       <div class="ml-results" id="results" hidden>
         <header class="ml-result-masthead">
-          <p class="ml-sample-kicker" id="result-kicker">Article analysis</p>
-          <p class="ml-result-title" id="result-title"></p>
+          <p class="ml-sample-kicker" id="result-kicker">Story workspace</p>
+          <p class="ml-fixture-preview-marker" id="result-fixture-badge" hidden>Fixture example. Not live coverage.</p>
+          <h2 class="ml-result-title" id="result-title"></h2>
+          <p class="ml-result-overview" id="result-overview"></p>
           <p class="ml-result-meta" id="result-meta"></p>
           <p class="ml-dimension-note" id="result-limits">
             Experimental Jev-only preview. Evidence is inspectable. This is not a truth detector and not a person or outlet score.
           </p>
         </header>
+
+        <nav class="ml-workspace-nav" aria-label="Story workspace">
+          <a href="#analysis-overview">Overview</a>
+          <a href="#retrieval-panel">Source and retrieval</a>
+          <a href="#ml-coverage-heading">Coverage</a>
+          <a href="#ml-language-heading">Language</a>
+          <a href="#ml-claims-heading">Claims</a>
+          <a href="#ml-source-context-heading">Source context</a>
+          <a href="#analysis-limitations">Limitations</a>
+          <a href="#influence-profile">Influence Profile</a>
+        </nav>
 
         <section aria-labelledby="ml-overview-heading" class="ml-dimension ml-overview" id="analysis-overview">
           <h2 id="ml-overview-heading">Analysis overview</h2>
@@ -248,6 +306,43 @@
             Each state names what this result contains for that section. It is not a score for the article, a person, or an outlet.
           </p>
           <ul class="ml-overview-list" id="overview-list"></ul>
+        </section>
+
+        <section aria-labelledby="ml-retrieval-heading" class="ml-dimension" id="retrieval-panel">
+          <h2 id="ml-retrieval-heading">Source and retrieval</h2>
+          <p class="ml-dimension-note">Where this record says it came from. Missing fields stay empty.</p>
+          <div id="retrieval-metadata"></div>
+        </section>
+
+        <section aria-labelledby="ml-coverage-heading" class="ml-dimension">
+          <h2 id="ml-coverage-heading">Coverage</h2>
+          <p class="ml-dimension-note">Origin, independent reporting, and duplication, when provenance data is available.</p>
+
+          <h3 id="ml-origin-heading">Story origin and canonical source</h3>
+          <p class="ml-dimension-note">Canonical-source status is recorded metadata. A missing canonical source is not a verdict.</p>
+          <div id="coverage-origin"></div>
+
+          <h3 id="ml-cluster-heading">Related sources</h3>
+          <p class="ml-dimension-note">Same-story cluster members recorded with this result.</p>
+          <ul class="ml-cluster-list" id="coverage-cluster"></ul>
+
+          <h3 id="ml-reporting-split-heading">Independent reporting and syndicated repetition</h3>
+          <div id="reporting-split"></div>
+
+          <h3 id="ml-distribution-heading">Coverage distribution and represented frames</h3>
+          <div id="coverage-distribution"></div>
+          <p class="ml-dimension-note" id="coverage-frames"></p>
+          <div id="coverage-frame-list"></div>
+
+          <h3 id="ml-omission-heading">Coverage gaps and omission candidates</h3>
+          <p class="ml-dimension-note">
+            An omission candidate is a possible gap. It does not establish that a fact was concealed.
+          </p>
+          <ul class="ml-observation-list" id="omission-list"></ul>
+
+          <dl class="ml-coverage-grid" id="coverage-stats"></dl>
+          <p class="ml-dimension-note" id="coverage-freshness-rationale"></p>
+          <ul class="ml-observation-list" id="coverage-list"></ul>
         </section>
 
         <section aria-labelledby="ml-language-heading" class="ml-dimension">
@@ -258,19 +353,8 @@
 
         <section aria-labelledby="ml-claims-heading" class="ml-dimension">
           <h2 id="ml-claims-heading">Claims</h2>
-          <p class="ml-dimension-note">Checkable-looking statements found in the text. Support is always "not checked" in this preview.</p>
+          <p class="ml-dimension-note">Claim ledger of checkable-looking statements found in the text. Support is always "not checked" in this preview.</p>
           <ul class="ml-claim-list" id="claims-list"></ul>
-        </section>
-
-        <section aria-labelledby="ml-coverage-heading" class="ml-dimension">
-          <h2 id="ml-coverage-heading">Coverage</h2>
-          <p class="ml-dimension-note">Origin, independent reporting, and duplication, when provenance data is available.</p>
-          <dl class="ml-coverage-grid" id="coverage-stats"></dl>
-          <p class="ml-dimension-note" id="coverage-freshness-rationale"></p>
-          <div id="coverage-origin"></div>
-          <ul class="ml-cluster-list" id="coverage-cluster"></ul>
-          <p class="ml-dimension-note" id="coverage-frames"></p>
-          <ul class="ml-observation-list" id="coverage-list"></ul>
         </section>
 
         <section aria-labelledby="ml-source-context-heading" class="ml-dimension">
@@ -280,9 +364,19 @@
           <p class="ml-dimension-note" id="source-context-note"></p>
         </section>
 
+        <section class="ml-dimension" id="influence-profile" aria-labelledby="ml-influence-profile-heading">
+          <h2 id="ml-influence-profile-heading">Influence Profile</h2>
+          <p class="ml-dimension-note">
+            Structured summary of observable evidence in this result. Not an overall score for the article, a person, or an outlet.
+          </p>
+          <dl class="ml-coverage-grid" id="influence-profile-list"></dl>
+        </section>
+
         <section class="ml-dimension" id="analysis-limitations" aria-labelledby="ml-abstention-heading">
           <h2 id="ml-abstention-heading">Analysis limitations</h2>
           <ul class="ml-abstention-list" id="abstention-list"></ul>
+          <h3 id="ml-alternative-readings-heading">Alternative readings</h3>
+          <p class="ml-dimension-note" id="alternative-readings"></p>
         </section>
 
         <details class="ml-engine-details">
@@ -292,13 +386,13 @@
 
         <div class="ml-export-row">
           <button class="button button-secondary" type="button" id="export-json-btn">Export evidence-only JSON</button>
-          <button class="button" type="button" id="analyze-another">Analyze another article</button>
+          <button class="button" type="button" id="analyze-another">Back to stories</button>
           <span class="ml-form-note">Export omits the text of any span not tied to a shown observation or claim.</span>
         </div>
       </div>
 
       <p class="ml-footer-note">
-        Media Lens is a limited Jev-only preview. It produces no overall score for an article, person, or outlet. See
+        Media Lens is a limited Jev-only preview and a fixture-first coverage workspace. It produces no overall score for an article, person, or outlet. See
         <a href="https://manipulationscore.com/methodology.html">Methodology</a>,
         <a href="https://manipulationscore.com/limitations.html">Limitations</a>, and
         <a href="https://manipulationscore.com/acceptable-use.html">Acceptable Use</a> for how this differs from Clarity.

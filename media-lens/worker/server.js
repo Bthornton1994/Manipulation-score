@@ -19,6 +19,16 @@ import {
 import { prepareFromHtml, prepareFromPastedText, emptyPreparedArtifactStub } from './prepare.js';
 import { createJevAdapter } from './adapters/jev.js';
 import { armAnalyzeShadow, createJevAnswerCapture } from './jev-usage-lab/analyze-shadow.js';
+import {
+  armNarrowShadow,
+  createNarrowCostLedger,
+  createNarrowLiveProvider,
+  createNarrowRateLimiter,
+  narrowNetworkBlockReason,
+  narrowShadowLiveNetworkPermitted,
+  selectNarrowProvider
+} from './jev-usage-lab/narrow-shadow.js';
+import { createProviderPinnedFetch } from './provider-pinned-fetch.js';
 import { createNewsjackAdapter } from './adapters/newsjack.js';
 import { createClassifierDevAdapter } from './adapters/classifier-dev.js';
 import { analyze, buildAbstentionOnlyGraph } from './analyze.js';
@@ -376,6 +386,15 @@ export function createServer(config = loadConfig(), options = {}) {
   const consumeLiveUrl = createFixedWindowLimiter(config.limits.maxLiveUrlPerMinute);
   const consumeLiveUrlHost = createKeyedFixedWindowLimiter(config.limits.maxLiveUrlPerHostPerMinute);
   const liveUrlConcurrency = createConcurrencyGate(config.limits.maxConcurrentLiveUrl);
+  const narrowRateLimiter =
+    options.narrowShadowRateLimiter ||
+    createNarrowRateLimiter({ perMinute: config.jevShadowNarrow?.rateLimitPerMinute ?? null });
+  const narrowCostLedger =
+    options.narrowShadowCostLedger ||
+    createNarrowCostLedger({
+      ceilingUsd: config.jevShadowNarrow?.monthlyCostCeilingUsd ?? null,
+      estimatedUsdPerCall: config.jevShadowNarrow?.estimatedUsdPerCall ?? null
+    });
 
   return http.createServer(async (req, res) => {
     const startedAt = Date.now();
@@ -645,6 +664,42 @@ export function createServer(config = loadConfig(), options = {}) {
               });
             } catch {
               // Shadow scheduling must not change the response already sent.
+            }
+          }
+          if (config.jevShadowNarrow?.enabled === true) {
+            try {
+              const killSwitchAsserted = effectiveLiveFlags(config).killSwitch === true;
+              const livePermitted = narrowShadowLiveNetworkPermitted(config, { killSwitchAsserted });
+              const selected = selectNarrowProvider({
+                injected: options.narrowShadowProvider || null,
+                livePermitted,
+                createLive: () =>
+                  createNarrowLiveProvider({
+                    fetchImpl: createProviderPinnedFetch({ timeoutMs: config.jevShadowNarrow.timeoutMs }),
+                    baseUrl: config.jev.baseUrl,
+                    apiKey: config.secrets.typesafeApiKey,
+                    model: config.jev.modelRequested
+                  })
+              });
+              armNarrowShadow({
+                enabled: true,
+                graph,
+                articleHint: {
+                  mode: payload.mode,
+                  fixtureId: typeof payload.fixture_id === 'string' ? payload.fixture_id : null
+                },
+                limits: config.jevShadowNarrow,
+                provider: selected.provider,
+                providerKind: selected.kind,
+                liveNetworkPermitted: livePermitted,
+                liveNetworkBlockReason: narrowNetworkBlockReason(config, { killSwitchAsserted }),
+                rateLimiter: narrowRateLimiter,
+                costLedger: narrowCostLedger,
+                sink: options.narrowShadowSink,
+                deploymentSha: null
+              });
+            } catch {
+              // Narrow shadow scheduling must not change the response already sent.
             }
           }
           return;

@@ -85,6 +85,8 @@ When it is true, `/analyze` still finishes the production graph, validates it, a
 
 The shadow log is one JSON object on stderr, or a test sink. It is not a field on the graph. It is not written to the budget file. Span text, titles, URLs, and secrets are not fields on the record. A shadow throw does not change the HTTP status or the body.
 
+`MEDIA_LENS_JEV_SHADOW` does not ask `media-lens-narrow.v1`. That comparison is a separate flag, documented in `docs/jev-usage-lab/10-narrow-shadow-execution.md`. It is default off and is not an accuracy result.
+
 `in_process` latency is the local schedule. `call_count` on each shadow record is 0. `production_jev_calls` copies `engine.jev.calls`. Fixture runs are labeled `fixture_replay`. `not_model_accuracy` is true. Holdout, calibration, and adversarial splits are not loaded on this path.
 
 Rollback is unsetting `MEDIA_LENS_JEV_SHADOW`. `analyze()` does not import the lab.

@@ -73,6 +73,7 @@ Tests in `tests/media-lens-jev-usage-lab.test.js` lock:
 - cross-span batches split
 - `analyze()` on `synthetic-01-quoted-vs-authorial` still reports 6 fixture-mode logical calls
 - `worker/config.js` reads `MEDIA_LENS_JEV_SHADOW` as an exact `true` and leaves it off otherwise. `analyze()` still does not import the lab
+- the CLI does not ask `media-lens-narrow.v1` on the network. That path is `MEDIA_LENS_JEV_SHADOW_NARROW`, default off, in `docs/jev-usage-lab/10-narrow-shadow-execution.md`
 - the committed report matches a fresh render
 
 ## How to run

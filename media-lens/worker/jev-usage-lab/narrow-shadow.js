@@ -7,10 +7,12 @@
 // graph, the production budget, live flags, or credentials.
 //
 // Live TypeSafe calls stay off unless worker/config.js has the exact flag
-// and every owner-approval limit, and the server finds live mode, no CI
-// block, no kill switch, and an API key. Fixture mode never takes that
-// path. Tests inject a mock provider. This file's live client only runs
-// when a caller passes fetchImpl.
+// and every numeric limit, including a positive per-call estimate, and the
+// server finds live mode, no CI block, no kill switch, and an API key.
+// The 2026-09-22 PT operating points are named in worker/config.js and are
+// not applied here. An unset estimate keeps this path at zero calls.
+// Fixture mode never takes the live path. Tests inject a mock provider.
+// This file's live client only runs when a caller passes fetchImpl.
 
 import { articleIdFromAnalyze, projectGraphForShadow, redactShadowReport, SHADOW_RETENTION } from './analyze-shadow.js';
 import { planQuestionBatch } from './batch-plan.js';
@@ -54,8 +56,8 @@ export const NARROW_AUTHORIZATION = Object.freeze({
 const NARROW_QUESTION_SET_ID = 'media-lens-narrow.v1';
 const PRODUCTION_QUESTION_SET_ID = 'influence-questions.v1';
 const RUNTIME_SPLIT = 'runtime_shadow';
-const MAX_SPAN_CHARS = 1200;
-const MAX_CONTEXT_CHARS = 400;
+export const NARROW_SHADOW_MAX_SPAN_CHARS = 1200;
+export const NARROW_SHADOW_MAX_CONTEXT_CHARS = 400;
 const EXCLUDED_ROLES = new Set(['boilerplate', 'byline_meta']);
 const ID_RE = /^[A-Za-z0-9._:-]{1,128}$/;
 const TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
@@ -725,9 +727,9 @@ export async function buildNarrowShadowReport(input = {}) {
           span: {
             id: spanId,
             role: roles.get(spanId) || span?.role || null,
-            text: truncate(span?.text || '', MAX_SPAN_CHARS)
+            text: truncate(span?.text || '', NARROW_SHADOW_MAX_SPAN_CHARS)
           },
-          context: { before: truncate(before, MAX_CONTEXT_CHARS), after: truncate(after, MAX_CONTEXT_CHARS) },
+          context: { before: truncate(before, NARROW_SHADOW_MAX_CONTEXT_CHARS), after: truncate(after, NARROW_SHADOW_MAX_CONTEXT_CHARS) },
           provenance: request.provenance
         }
       };

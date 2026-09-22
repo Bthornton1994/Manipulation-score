@@ -4,7 +4,7 @@ This document is a gate list. It does not flip a flag, merge, deploy, or close I
 
 ## Current step
 
-Shadow replay and `/analyze` observation stay default off. Observation does not send `media-lens-narrow.v1` and does not add a TypeSafe call. A separate flag, `MEDIA_LENS_JEV_SHADOW_NARROW`, can ask that set after the response as a non-authoritative comparison. It is default off. Live calls stay off until the owner sets every limit placeholder, and fixture mode and CI do not make those calls. This document does not turn the flag on. See `docs/jev-usage-lab/10-narrow-shadow-execution.md`.
+Shadow replay and `/analyze` observation stay default off. Observation does not send `media-lens-narrow.v1` and does not add a TypeSafe call. A separate flag, `MEDIA_LENS_JEV_SHADOW_NARROW`, can ask that set after the response as a non-authoritative comparison. It is default off. The 2026-09-22 PT approval records four operating points and leaves the per-call estimate unset, so live narrow calls stay off. Fixture mode and CI do not make those calls. This document does not turn the flag on. See `docs/jev-usage-lab/10-narrow-shadow-execution.md`.
 
 Production live Jev remains behind `MEDIA_LENS_MODE=live` and `MEDIA_LENS_ENABLE_LIVE=true`, which this change does not set. Live URL and live pasted text stay off.
 

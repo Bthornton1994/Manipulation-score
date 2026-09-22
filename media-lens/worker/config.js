@@ -46,6 +46,21 @@ export const DEFAULT_LIMITS = Object.freeze({
   urlFetchParseTimeoutMs: 2000
 });
 
+// Owner approval 2026-09-22 PT. These are the operating points for when an
+// operator sets the four narrow-shadow limit variables. loadConfig does not
+// read this object and does not copy it into the environment.
+// estimatedUsdPerCall is null on purpose: an unset per-call estimate keeps
+// real narrow calls at zero. A one-shot live shadow needs a separate
+// owner authorization before that variable is set.
+export const NARROW_SHADOW_APPROVED_OPERATING_POINTS = Object.freeze({
+  approvedOn: '2026-09-22',
+  maxCallsPerAnalysis: 5,
+  timeoutMs: 10000,
+  rateLimitPerMinute: 6,
+  monthlyCostCeilingUsd: 5,
+  estimatedUsdPerCall: null
+});
+
 function readMode(env) {
   const raw = (env.MEDIA_LENS_MODE || 'fixture').toLowerCase();
   return raw === 'live' ? 'live' : 'fixture';
@@ -191,7 +206,10 @@ export function loadConfig(env = process.env) {
     // Exact string only. Does not enable live Jev, live URL, pasted text,
     // classifier.dev, or pin verify. extraJevCallsEnabled stays false:
     // MEDIA_LENS_JEV_SHADOW only captures production answers. Narrow-question
-    // calls use jevShadowNarrow and stay off until every limit below is set.
+    // calls use jevShadowNarrow. The parsers below stay null when unset.
+    // They do not fall back to the approved operating points above.
+    // The approved operating posture leaves the per-call estimate unset,
+    // so real narrow calls stay at zero.
     jevShadow: {
       enabled: readExactTrue(env, 'MEDIA_LENS_JEV_SHADOW'),
       extraJevCallsEnabled: false

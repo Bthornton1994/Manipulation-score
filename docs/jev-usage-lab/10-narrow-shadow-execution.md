@@ -1,8 +1,54 @@
 # 10 — Narrow-question shadow execution
 
-Status: default off. This is not model accuracy and it is not production-ready.
+Status: default off. This is not model accuracy and it is not production-ready. The approved operating posture leaves the per-call estimate unset, so the network stays off.
 
-Vision check: **Aligns with constraints**. Relevant sections: "Uncertainty must be visible", "Evidence comes before a score", and "Privacy is the default architecture". The production question set and the HTTP graph stay authoritative. Narrow answers are a comparison log. They do not change observations, thresholds, abstentions, claim support, or roles. Turning the path on later would send span text to TypeSafe, so activation still needs an owner decision about consent, retention, and the numeric limits. This document does not make that decision.
+Vision check: **Aligns with constraints**. Relevant sections: "Uncertainty must be visible", "Evidence comes before a score", and "Privacy is the default architecture". The production question set and the HTTP graph stay authoritative. Narrow answers are a comparison log. They do not change observations, thresholds, abstentions, claim support, or roles.
+
+## Owner approval (2026-09-22 PT)
+
+Written owner approval for draft PR #148 at `9531d5958beb6655874c30435241f11f1959726d` covers configuration, documentation, and tests. It does not merge, deploy, or mark that draft ready. It does not set `MEDIA_LENS_JEV_SHADOW` or `MEDIA_LENS_JEV_SHADOW_NARROW` on any host. It does not send TypeSafe traffic.
+
+`NARROW_SHADOW_APPROVED_OPERATING_POINTS` in `media-lens/worker/config.js` records the four numeric points. `loadConfig` does not apply that object and does not write it into the environment. Unset variables still parse as null.
+
+An unset `MEDIA_LENS_JEV_SHADOW_NARROW_ESTIMATED_USD_PER_CALL` means the network stays off, including when the other four variables are set to the approved points and the flag is exact `true`. The block reason is `owner_limits_unset` and `network_calls` stays 0. A one-shot live shadow needs a separate owner authorization.
+
+This record is not an accuracy claim, not a production-ready claim, and not an availability claim. The $5.00 ceiling does not enforce a fleet-wide budget. This approval makes no claim that TypeSafe provides zero data retention, deletion, a retention period, or a no-training guarantee. Production output remains authoritative.
+
+### Span scope
+
+Approved for any later live narrow request, and already the shape the code builds:
+
+- Public-URL live path only, after the existing consent and public-material gate (`user_asserted_public` must be true). Live pasted text returns `live_pasted_text_disabled` before analysis, so the narrow schedule does not run.
+- Pasted text, private material, paywalled material, and unauthorized material stay disabled. Paywall handling does not bypass a wall and does not send cookies or credentials. This approval does not authorize a narrow request against those materials.
+- Eligible span text is at most 1200 characters (`NARROW_SHADOW_MAX_SPAN_CHARS`). Neighboring context is at most 400 characters before and 400 after (`NARROW_SHADOW_MAX_CONTEXT_CHARS`). The public article title is the title already on the artifact, sent as `state.artifact.title`.
+- The live body is one POST of `{ model, state, questions }` per span. `state` carries artifact kind and title, span id, role, and truncated text, context before and after, and provenance ids. It does not add raw HTML, the full article body, a dedicated URL field, cookies, credentials, or secrets.
+- One request per span. No retries. Redirects are not followed.
+
+While the estimate stays unset, that body is not sent.
+
+### Local retention
+
+`stderr_process_log_only_no_disk_store`
+
+No database write, no disk write, and no write to `/var/lib/media-lens/typesafe-budget.json`. Local logs do not include raw span text. The stderr record is redacted. Labels on the record: `shadow_only`, `not_model_accuracy`, `not_production_ready`.
+
+### Numeric limits
+
+These points apply only when the matching environment variable is set. They are not process defaults.
+
+| Limit | Approved point | Environment variable | If unset |
+| --- | --- | --- | --- |
+| Per-analysis call cap | 5 | `MEDIA_LENS_JEV_SHADOW_NARROW_MAX_CALLS_PER_ANALYSIS` | no call |
+| Timeout | 10000 ms | `MEDIA_LENS_JEV_SHADOW_NARROW_TIMEOUT_MS` | no call |
+| Rate limit | 6 per minute | `MEDIA_LENS_JEV_SHADOW_NARROW_RATE_LIMIT_PER_MINUTE` | no call |
+| Monthly cost ceiling | 5.00 USD | `MEDIA_LENS_JEV_SHADOW_NARROW_MONTHLY_COST_CEILING_USD` | no call |
+| Estimated USD per call | unset (required) | `MEDIA_LENS_JEV_SHADOW_NARROW_ESTIMATED_USD_PER_CALL` | no call |
+
+The $5.00 ceiling is process-local memory. It resets when the process restarts. It is not shared across workers. It does not enforce, replace, or coordinate the production TypeSafe stop (default $30) across workers or restarts. It does not write the production budget file. The log says `placeholder: true`, `available: false`, `not_a_production_budget: true`, and `production_budget_written: false`.
+
+The parser still rejects blanks, zero, and non-numeric text. Whole-number fields must be integers. The ceiling and the estimate must be greater than 0. Values outside the parser window are treated as unset. Those windows are validation bounds, not the approved operating points: calls `1..10000`, timeout `1..120000` ms, rate `1..100000` per minute, ceiling `> 0..1000000`, estimate `> 0..10000`.
+
+Before any real narrow call, a separate owner authorization must set `MEDIA_LENS_JEV_SHADOW_NARROW_ESTIMATED_USD_PER_CALL` to a conservative per-call estimate. Compute it from the verified current TypeSafe input price multiplied by the maximum token count of one bounded request (span text at most 1200 characters, context at most 400 characters before and after, the public title, and the question instructions), then round up. This repository does not record that price or that token count as a dollar amount. Do not invent one.
 
 ## Two flags
 
@@ -25,10 +71,10 @@ Records go through `buildDecisionRecord` and `prepareLabCases` with split `runti
 
 ## What can reach the network
 
-Live execution needs all of the following. Missing any one of them means zero TypeSafe calls:
+Live execution needs all of the following. Missing any one of them means zero TypeSafe calls. The 2026-09-22 PT approval leaves the estimate unset, so this list is not satisfied:
 
 - `MEDIA_LENS_JEV_SHADOW_NARROW` is the exact string `true`
-- every limit below is set to a value the parser accepts
+- every limit in the owner-approval table is set to a value the parser accepts, including a positive per-call estimate
 - the estimated price is less than or equal to the monthly ceiling, so one call could fit
 - `MEDIA_LENS_MODE=live`
 - `CI` is unset, empty, `false`, or `0`
@@ -37,23 +83,7 @@ Live execution needs all of the following. Missing any one of them means zero Ty
 
 Fixture mode never constructs the live client. CI never constructs it. Tests pass an injected provider with `ask`. That provider is not TypeSafe. The live client performs one POST to `/v1/systemone`, does not retry, and does not follow redirects. It is built with the pinned provider fetch only inside the post-response timer, and only when the gates above pass.
 
-## Owner-approval placeholders
-
-No production number is chosen here. Unset means the network stays off.
-
-| Limit | Environment variable | If unset |
-| --- | --- | --- |
-| Per-analysis call cap | `MEDIA_LENS_JEV_SHADOW_NARROW_MAX_CALLS_PER_ANALYSIS` | no call |
-| Timeout | `MEDIA_LENS_JEV_SHADOW_NARROW_TIMEOUT_MS` | no call |
-| Rate limit | `MEDIA_LENS_JEV_SHADOW_NARROW_RATE_LIMIT_PER_MINUTE` | no call |
-| Monthly cost ceiling | `MEDIA_LENS_JEV_SHADOW_NARROW_MONTHLY_COST_CEILING_USD` | no call |
-| Estimated USD per call | `MEDIA_LENS_JEV_SHADOW_NARROW_ESTIMATED_USD_PER_CALL` | no call |
-
-The parser rejects blanks, zero, and non-numeric text. Whole-number fields must be integers. The ceiling and the estimate must be greater than 0. Values outside the parser window are treated as unset. Those windows are validation bounds, not approved operating points: calls `1..10000`, timeout `1..120000` ms, rate `1..100000` per minute, ceiling `> 0..1000000`, estimate `> 0..10000`.
-
-The rate limit and the cost ledger are process-local. They reset when the process restarts. They are not shared across workers. They do not write `/var/lib/media-lens/typesafe-budget.json` and they do not change the production stop threshold. The log says `placeholder: true`, `available: false`, and `not_a_production_budget: true`.
-
-There are no retries. A retry would be another call, and that policy is not approved.
+The rate limit and the cost ledger described above are the only counters this path keeps. There are no retries.
 
 ## Labels and authority
 
@@ -67,4 +97,4 @@ Span text, titles, URLs, and secrets are not fields on the log. Extra answer key
 
 ## Rollback
 
-Unset `MEDIA_LENS_JEV_SHADOW_NARROW`. Unset the five limit variables. `analyze()` does not read the flag.
+Unset `MEDIA_LENS_JEV_SHADOW_NARROW`. Leave `MEDIA_LENS_JEV_SHADOW_NARROW_ESTIMATED_USD_PER_CALL` unset. That single omission keeps narrow calls at zero even if the other four approved points are present. `analyze()` does not read the flag.

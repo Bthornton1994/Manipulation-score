@@ -3,16 +3,18 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { createServer } from '../media-lens/worker/server.js';
-import { loadConfig, publicConfig, effectiveLiveFlags } from '../media-lens/worker/config.js';
+import { loadConfig, publicConfig, effectiveLiveFlags, NARROW_SHADOW_APPROVED_OPERATING_POINTS } from '../media-lens/worker/config.js';
 import { runFixture } from '../media-lens/worker/analyze-fixture.js';
 import { normalizeForGolden } from '../media-lens/schema/golden.js';
 import { validateContractSchema } from '../media-lens/worker/jev-usage-lab/schema-check.js';
-import { SHADOW_EXTRA_JEV_CALLS_ENABLED } from '../media-lens/worker/jev-usage-lab/analyze-shadow.js';
+import { SHADOW_EXTRA_JEV_CALLS_ENABLED, SHADOW_RETENTION } from '../media-lens/worker/jev-usage-lab/analyze-shadow.js';
 import { loadQuestionSetFile, NARROW_QUESTION_SET_PATH } from '../media-lens/worker/jev-usage-lab/run.js';
 import {
   NARROW_AUTHORIZATION,
   NARROW_SHADOW_ENV,
   NARROW_SHADOW_LIMIT_ENV,
+  NARROW_SHADOW_MAX_CONTEXT_CHARS,
+  NARROW_SHADOW_MAX_SPAN_CHARS,
   armNarrowShadow,
   buildNarrowShadowReport,
   compareNarrowDecisionToProduction,
@@ -741,4 +743,223 @@ test('fixture /analyze keeps the production body when narrow shadow is off and w
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+const NARROW_MOCK_CHOICES = {
+  authorial_vs_quotation: 'authorial',
+  emotionally_loaded_language: 'not_loaded',
+  false_dilemma: 'absent',
+  claim_support_status: 'not_checked',
+  source_independence: 'insufficient_source_context',
+  important_context_missing: 'not_missing',
+  should_abstain: 'answer'
+};
+
+function approvedLimitEnv(extra = {}) {
+  const approved = NARROW_SHADOW_APPROVED_OPERATING_POINTS;
+  return {
+    [NARROW_SHADOW_ENV]: 'true',
+    [NARROW_SHADOW_LIMIT_ENV.maxCallsPerAnalysis]: String(approved.maxCallsPerAnalysis),
+    [NARROW_SHADOW_LIMIT_ENV.timeoutMs]: String(approved.timeoutMs),
+    [NARROW_SHADOW_LIMIT_ENV.rateLimitPerMinute]: String(approved.rateLimitPerMinute),
+    [NARROW_SHADOW_LIMIT_ENV.monthlyCostCeilingUsd]: '5.00',
+    ...extra
+  };
+}
+
+test('approved operating points parse, and an unset estimate refuses the network', async () => {
+  const approved = NARROW_SHADOW_APPROVED_OPERATING_POINTS;
+  assert.equal(approved.approvedOn, '2026-09-22');
+  assert.equal(approved.maxCallsPerAnalysis, 5);
+  assert.equal(approved.timeoutMs, 10000);
+  assert.equal(approved.rateLimitPerMinute, 6);
+  assert.equal(approved.monthlyCostCeilingUsd, 5);
+  assert.equal(approved.estimatedUsdPerCall, null);
+  assert.equal(NARROW_SHADOW_MAX_SPAN_CHARS, 1200);
+  assert.equal(NARROW_SHADOW_MAX_CONTEXT_CHARS, 400);
+  assert.equal(SHADOW_RETENTION, 'stderr_process_log_only_no_disk_store');
+
+  const configSource = await readFile('media-lens/worker/config.js', 'utf8');
+  const loadBody = configSource.slice(configSource.indexOf('export function loadConfig'));
+  assert.equal(loadBody.includes('NARROW_SHADOW_APPROVED_OPERATING_POINTS'), false);
+  assert.equal(configSource.includes('jev-usage-lab'), false);
+  const shadowSource = await readFile('media-lens/worker/jev-usage-lab/analyze-shadow.js', 'utf8');
+  assert.match(shadowSource, /export const SHADOW_RETENTION = 'stderr_process_log_only_no_disk_store'/);
+  const narrowSource = await readFile('media-lens/worker/jev-usage-lab/narrow-shadow.js', 'utf8');
+  assert.equal(narrowSource.includes('typesafe-budget'), false);
+  assert.equal(narrowSource.includes('/var/lib/media-lens/typesafe-budget.json'), false);
+  assert.equal(narrowSource.includes('writeFile'), false);
+  const liveFn = narrowSource.slice(narrowSource.indexOf('export function createNarrowLiveProvider'));
+  assert.equal((liveFn.match(/fetchImpl\(/g) || []).length, 1);
+
+  const unset = loadConfig({});
+  assert.equal(unset.jevShadowNarrow.maxCallsPerAnalysis, null);
+  assert.equal(unset.jevShadowNarrow.estimatedUsdPerCall, null);
+
+  const four = loadConfig({
+    MEDIA_LENS_MODE: 'live',
+    MEDIA_LENS_ENABLE_LIVE: 'true',
+    MEDIA_LENS_TYPESAFE_API_KEY: API_KEY,
+    MEDIA_LENS_TYPESAFE_BASE_URL: 'https://api.typesafe.ai',
+    ...approvedLimitEnv()
+  });
+  assert.equal(four.jevShadowNarrow.enabled, true);
+  assert.equal(four.jevShadowNarrow.maxCallsPerAnalysis, approved.maxCallsPerAnalysis);
+  assert.equal(four.jevShadowNarrow.timeoutMs, approved.timeoutMs);
+  assert.equal(four.jevShadowNarrow.rateLimitPerMinute, approved.rateLimitPerMinute);
+  assert.equal(four.jevShadowNarrow.monthlyCostCeilingUsd, approved.monthlyCostCeilingUsd);
+  assert.equal(four.jevShadowNarrow.estimatedUsdPerCall, null);
+  assert.equal(narrowLimitsPresent(four.jevShadowNarrow), false);
+  assert.equal(narrowNetworkBlockReason(four), 'owner_limits_unset');
+  assert.equal(narrowShadowLiveNetworkPermitted(four), false);
+
+  let created = 0;
+  const selected = selectNarrowProvider({
+    injected: null,
+    livePermitted: narrowShadowLiveNetworkPermitted(four),
+    createLive() {
+      created += 1;
+      return {
+        async ask() {
+          throw new Error('live client constructed');
+        }
+      };
+    }
+  });
+  assert.equal(created, 0);
+  assert.equal(selected.kind, 'network_disabled');
+  assert.equal(selected.provider, null);
+
+  let calls = 0;
+  const report = await buildNarrowShadowReport({
+    enabled: true,
+    graph: syntheticGraph(),
+    articleHint: { mode: 'url' },
+    provider: {
+      async ask() {
+        calls += 1;
+        throw new Error('estimate unset must not call');
+      }
+    },
+    providerKind: 'injected_mock',
+    limits: {
+      maxCallsPerAnalysis: four.jevShadowNarrow.maxCallsPerAnalysis,
+      timeoutMs: four.jevShadowNarrow.timeoutMs,
+      rateLimitPerMinute: four.jevShadowNarrow.rateLimitPerMinute,
+      monthlyCostCeilingUsd: four.jevShadowNarrow.monthlyCostCeilingUsd,
+      estimatedUsdPerCall: four.jevShadowNarrow.estimatedUsdPerCall
+    },
+    liveNetworkPermitted: false,
+    liveNetworkBlockReason: 'owner_limits_unset',
+    recordedAt: RECORDED_AT
+  });
+  assert.equal(calls, 0);
+  assert.equal(report.network_calls, 0);
+  assert.equal(report.refused, 'owner_limits_unset');
+  assert.equal(report.retention, SHADOW_RETENTION);
+  assert.equal(report.shadow_only, true);
+  assert.equal(report.not_model_accuracy, true);
+  assert.equal(report.not_production_ready, true);
+  assert.equal(report.cost.production_budget_written, false);
+  assert.equal(report.cost.available, false);
+  assert.equal(report.acted, false);
+});
+
+test('mock provider still runs when a test-only estimate accompanies the approved points', async () => {
+  const testOnlyEstimateNotATypesafePrice = 0.01;
+  const approved = NARROW_SHADOW_APPROVED_OPERATING_POINTS;
+  const parsed = loadConfig({
+    MEDIA_LENS_MODE: 'fixture',
+    ...approvedLimitEnv({
+      [NARROW_SHADOW_LIMIT_ENV.estimatedUsdPerCall]: '0.01'
+    })
+  });
+  assert.equal(parsed.jevShadowNarrow.estimatedUsdPerCall, testOnlyEstimateNotATypesafePrice);
+  assert.equal(narrowLimitsPresent(parsed.jevShadowNarrow), true);
+  assert.equal(narrowNetworkBlockReason(parsed), 'fixture_mode');
+  assert.equal(narrowShadowLiveNetworkPermitted(parsed), false);
+
+  const questionSet = await loadQuestionSetFile(NARROW_QUESTION_SET_PATH);
+  const before = 'B'.repeat(NARROW_SHADOW_MAX_CONTEXT_CHARS + 100);
+  const middle = 'M'.repeat(NARROW_SHADOW_MAX_SPAN_CHARS + 300);
+  const after = 'A'.repeat(NARROW_SHADOW_MAX_CONTEXT_CHARS + 100);
+  const graph = {
+    graph_id: RUN_ID,
+    artifact: {
+      title: 'Public title',
+      url: 'https://user:sk-supersecretvalue@secret.example/private',
+      html: '<html>FULL_ARTICLE_BODY</html>',
+      cookie: 'session=secret',
+      text_sha256: TEXT_SHA,
+      publisher: { domain: 'example.com' },
+      kind: 'article'
+    },
+    spans: [
+      { id: 'span-b', role: 'authorial', role_basis: 'default', text: before },
+      { id: 'span-m', role: 'authorial', role_basis: 'default', text: middle },
+      { id: 'span-a', role: 'authorial', role_basis: 'default', text: after }
+    ],
+    observations: [],
+    claims: [],
+    abstentions: [],
+    engine: { jev: { mode: 'fixture', model_reported: 'jev-1.13.0', calls: 0 } }
+  };
+  const seen = [];
+  const report = await buildNarrowShadowReport({
+    enabled: true,
+    graph,
+    articleHint: { mode: 'url' },
+    limits: {
+      maxCallsPerAnalysis: approved.maxCallsPerAnalysis,
+      timeoutMs: approved.timeoutMs,
+      rateLimitPerMinute: approved.rateLimitPerMinute,
+      monthlyCostCeilingUsd: approved.monthlyCostCeilingUsd,
+      estimatedUsdPerCall: testOnlyEstimateNotATypesafePrice
+    },
+    provider: {
+      async ask(request) {
+        seen.push(request);
+        return {
+          ok: true,
+          model_reported: 'jev-1.13.0',
+          answers: answersFor(questionSet, NARROW_MOCK_CHOICES)
+        };
+      }
+    },
+    providerKind: 'injected_mock',
+    liveNetworkPermitted: false,
+    liveNetworkBlockReason: 'fixture_mode',
+    recordedAt: RECORDED_AT
+  });
+  assert.equal(seen.length, 3);
+  assert.equal(report.network_calls, 3);
+  assert.equal(report.cross_span_batched, false);
+  assert.equal(report.retention, SHADOW_RETENTION);
+  assert.equal(report.cost.production_budget_written, false);
+  assert.equal(report.cost.placeholder, true);
+  assert.equal(report.shadow_only, true);
+  assert.equal(report.not_model_accuracy, true);
+  assert.equal(report.not_production_ready, true);
+  const middleRequest = seen.find((request) => request.span_id === 'span-m');
+  assert.equal(middleRequest.state.span.text.length, NARROW_SHADOW_MAX_SPAN_CHARS);
+  assert.equal(middleRequest.state.context.before.length, NARROW_SHADOW_MAX_CONTEXT_CHARS);
+  assert.equal(middleRequest.state.context.after.length, NARROW_SHADOW_MAX_CONTEXT_CHARS);
+  assert.equal(middleRequest.state.artifact.title, 'Public title');
+  assert.equal(middleRequest.state.artifact.kind, 'article');
+  assert.deepEqual(Object.keys(middleRequest.state).sort(), ['artifact', 'context', 'provenance', 'span']);
+  assert.equal(Object.hasOwn(middleRequest.state, 'url'), false);
+  assert.equal(Object.hasOwn(middleRequest.state.artifact, 'url'), false);
+  assert.equal(Object.hasOwn(middleRequest.state.artifact, 'html'), false);
+  assert.equal(Object.hasOwn(middleRequest.state, 'html'), false);
+  assert.equal(Object.hasOwn(middleRequest.state, 'cookie'), false);
+  assert.equal(Object.hasOwn(middleRequest, 'cookie'), false);
+  const wire = JSON.stringify(middleRequest);
+  assert.equal(wire.includes('FULL_ARTICLE_BODY'), false);
+  assert.equal(wire.includes('<html'), false);
+  assert.equal(wire.includes('https://'), false);
+  assert.equal(wire.includes('session=secret'), false);
+  assert.equal(wire.includes('sk-'), false);
+  assert.equal(middleRequest.state.span.text.length < middle.length, true);
+  assert.doesNotMatch(JSON.stringify(report), /FULL_ARTICLE_BODY|session=secret|sk-/);
+  assert.equal(JSON.stringify(report).includes('M'.repeat(80)), false);
 });

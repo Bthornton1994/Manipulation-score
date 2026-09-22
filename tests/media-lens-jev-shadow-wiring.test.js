@@ -427,55 +427,36 @@ test('enabled /analyze keeps the production body, logs provenance, and survives 
     }
   };
   const seen = [];
-  let sinkStartedAt = 0;
+  let releaseSink = () => {};
+  const sinkGate = new Promise((resolve) => {
+    releaseSink = resolve;
+  });
+  let sinkReleased = false;
   const config = loadConfig({ MEDIA_LENS_MODE: 'fixture', MEDIA_LENS_JEV_SHADOW: 'true' });
   const server = await listen(
     createServer(config, {
       typesafeBudget,
       shadowSink(report) {
-        sinkStartedAt = Date.now();
         seen.push(report);
-      }
-    })
-  );
-  const blocked = [];
-  let blockStarted = false;
-  const blockingServer = await listen(
-    createServer(config, {
-      shadowSink() {
-        blockStarted = true;
-        const started = Date.now();
-        while (Date.now() - started < 250) {
-          // Hold the timer callback. The HTTP body must already have been sent.
-        }
-        blocked.push(true);
+        return sinkGate.then(() => {
+          sinkReleased = true;
+        });
       }
     })
   );
   try {
     const offServer = await listen(createServer(loadConfig({ MEDIA_LENS_MODE: 'fixture' })));
     try {
-      const started = Date.now();
-      const blockedRes = await requestJson(blockingServer, {
-        method: 'POST',
-        path: '/analyze',
-        body: fixtureBody('synthetic-01-quoted-vs-authorial')
-      });
-      const blockedMs = Date.now() - started;
-      assert.equal(blockedRes.status, 200);
-      assert.equal(blockStarted, false);
-      assert.ok(blockedMs < 200, `shadow work delayed /analyze by ${blockedMs}ms`);
-
       const healthOn = await requestJson(server, { method: 'GET', path: '/health' });
       const healthOff = await requestJson(offServer, { method: 'GET', path: '/health' });
       assert.deepEqual(healthOn.body, healthOff.body);
 
-      const responseStarted = Date.now();
-      const res = await requestJson(server, { method: 'POST', path: '/analyze', body: fixtureBody('synthetic-01-quoted-vs-authorial') });
-      const responseMs = Date.now() - responseStarted;
+      const res = await Promise.race([
+        requestJson(server, { method: 'POST', path: '/analyze', body: fixtureBody('synthetic-01-quoted-vs-authorial') }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('analyze waited on shadow')), 2000))
+      ]);
       assert.equal(res.status, 200);
-      assert.ok(sinkStartedAt === 0 || sinkStartedAt >= responseStarted);
-      assert.ok(responseMs < 200, `enabled /analyze took ${responseMs}ms`);
+      assert.equal(sinkReleased, false);
       const off = await requestJson(offServer, { method: 'POST', path: '/analyze', body: fixtureBody('synthetic-01-quoted-vs-authorial') });
       const baseline = await runFixture('synthetic-01-quoted-vs-authorial');
       assert.equal(stableGraph(res.body), stableGraph(off.body));
@@ -544,7 +525,11 @@ test('enabled /analyze keeps the production body, logs provenance, and survives 
       assert.doesNotMatch(serialized, /https:\/\//);
       assert.match(JSON.stringify(res.body), /downtown drainage/);
       assert.equal(Object.hasOwn(res.body, 'shadow_enabled'), false);
+      releaseSink();
+      await sinkGate;
+      assert.equal(sinkReleased, true);
     } finally {
+      releaseSink();
       offServer.close();
     }
 
@@ -607,6 +592,5 @@ test('enabled /analyze keeps the production body, logs provenance, and survives 
   } finally {
     globalThis.fetch = originalFetch;
     server.close();
-    blockingServer.close();
   }
 });

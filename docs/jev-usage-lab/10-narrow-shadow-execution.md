@@ -18,8 +18,8 @@ This record is not an accuracy claim, not a production-ready claim, and not an a
 
 Approved for any later live narrow request, and already the shape the code builds:
 
-- Public-URL live path only, after the existing consent and public-material gate (`user_asserted_public` must be true). Live pasted text returns `live_pasted_text_disabled` before analysis, so the narrow schedule does not run.
-- Pasted text, private material, paywalled material, and unauthorized material stay disabled. Paywall handling does not bypass a wall and does not send cookies or credentials. This approval does not authorize a narrow request against those materials.
+- Public-URL live path only, after the existing consent and public-material gate (`user_asserted_public` must be true). Live pasted text returns `live_pasted_text_disabled` before analysis, so the narrow schedule does not run. A request without that consent is rejected the same way.
+- Pasted text, private material, paywalled material, and unauthorized material stay outside this approval. Paywall detection records an abstention and does not bypass a wall, send cookies, or send credentials. This approval does not add a new narrow-path filter, and it does not authorize a narrow request for those materials. The unset estimate keeps the live client off for every article.
 - Eligible span text is at most 1200 characters (`NARROW_SHADOW_MAX_SPAN_CHARS`). Neighboring context is at most 400 characters before and 400 after (`NARROW_SHADOW_MAX_CONTEXT_CHARS`). The public article title is the title already on the artifact, sent as `state.artifact.title`.
 - The live body is one POST of `{ model, state, questions }` per span. `state` carries artifact kind and title, span id, role, and truncated text, context before and after, and provenance ids. It does not add raw HTML, the full article body, a dedicated URL field, cookies, credentials, or secrets.
 - One request per span. No retries. Redirects are not followed.

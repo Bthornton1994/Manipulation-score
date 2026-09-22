@@ -20,7 +20,7 @@ Instructions are static. They refer to `` `span.text` `` in state. They do not c
 | `claim_support_status` | `supported`, `contradicted`, `mixed`, `unclear`, `not_checked`, `abstain` | `claims[].support` is `not_checked` in this preview | `supported`, `contradicted`, and `mixed` are `hold_for_human`. They are not written onto the claim. `unclear` maps to the existing “claim support unclear” state as a recommendation only |
 | `source_independence` | `independent`, `repeating_or_syndicated`, `insufficient_source_context`, `abstain` | Coverage fields such as `independent_sources_estimate` come from Newsjack data today, not from Jev | Need two source ids or abstain. A passing answer is `coverage_candidate` at candidate strength. No outlet rank |
 | `important_context_missing` | `missing`, `not_missing`, `insufficient_context`, `abstain` | Abstentions and “Insufficient context” | `missing` or `insufficient_context` blocks an observed influence signal |
-| `should_abstain` | `abstain`, `answer` | Graph and span abstentions are first-class | `abstain` suppresses sibling questions on that span in the shadow log |
+| `should_abstain` | `abstain`, `answer` | Graph and span abstentions are first-class | `abstain` sets sibling questions on that span to `abstained: true` and clears `selected_option`. They are not scored as decisions |
 
 `selective_context_candidate` stays fusion-only, as in the build brief and `fusion.js`. It is not an option on this set.
 

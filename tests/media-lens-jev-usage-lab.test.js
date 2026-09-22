@@ -12,7 +12,9 @@ import {
   applySpanAbstainGate,
   buildDecisionRecord
 } from '../media-lens/worker/jev-usage-lab/decision.js';
+import { evaluateLab } from '../media-lens/worker/jev-usage-lab/evaluate.js';
 import { loadQuestionSetFile, runUsageLab, COS_QUESTION_SET_PATH } from '../media-lens/worker/jev-usage-lab/run.js';
+import { prepareLabCases } from '../media-lens/worker/jev-usage-lab/split-isolation.js';
 import { validateContractSchema } from '../media-lens/worker/jev-usage-lab/schema-check.js';
 import { isShadowEnabled } from '../media-lens/worker/jev-usage-lab/shadow.js';
 import { assertOutputPathAllowed, runCli } from '../scripts/jev-usage-lab.js';
@@ -54,11 +56,16 @@ test('fixture replay matches the committed report and the decision schema', asyn
   assert.equal(result.evaluation.thresholds_fit_on_holdout, false);
   assert.equal(result.evaluation.cost.available, false);
   assert.equal(result.evaluation.adversarial.pass, true);
-  assert.equal(result.evaluation.calibration.n, 9);
-  assert.equal(result.evaluation.calibration.abstained, 2);
-  assert.equal(result.evaluation.calibration.disagreements, 3);
+  assert.equal(result.evaluation.calibration.n, 12);
+  assert.equal(result.evaluation.calibration.abstained, 5);
+  assert.equal(result.evaluation.calibration.scored, 7);
+  assert.equal(result.evaluation.calibration.exact_on_non_abstain, 4);
+  assert.equal(result.evaluation.calibration.disagreements, 5);
   assert.equal(result.evaluation.calibration.false_positives, 1);
   assert.equal(result.evaluation.calibration.false_negatives, 1);
+  assert.equal(result.split_isolation.collisions.length, 0);
+  assert.equal(result.split_isolation.reassigned_cases, 0);
+  assert.equal(result.split_isolation.gate, 'per_assigned_split');
   assert.equal(result.evaluation.holdout.n, 4);
   assert.equal(result.evaluation.holdout.abstained, 2);
   assert.equal(result.evaluation.holdout.exact_on_non_abstain, 1);
@@ -231,11 +238,192 @@ test('two source ids stay candidate and a span abstain suppresses siblings', asy
     provenance,
     audit
   });
-  const gated = applySpanAbstainGate([abstain, loaded]);
+  const siblingLabel = { option: 'present', outcome_class: 'abstention', historical_action: 'abstain' };
+  const dilemma = buildDecisionRecord({
+    questionSet,
+    questionId: 'false_dilemma',
+    answer: choiceAnswer('present', ['present', 'absent', 'abstain']),
+    provenance,
+    audit,
+    label: siblingLabel
+  });
+  const labels = [
+    { option: 'abstain', outcome_class: 'abstention', historical_action: 'abstain' },
+    { option: 'loaded_moralized', outcome_class: 'abstention', historical_action: 'abstain' },
+    siblingLabel
+  ];
+  const gated = applySpanAbstainGate([abstain, loaded, dilemma], labels);
   assert.equal(gated[1].suppressed_by_span_abstain, true);
+  assert.equal(gated[1].abstained, true);
+  assert.equal(gated[1].selected_option, null);
+  assert.equal(gated[1].evidence_strength, null);
+  assert.equal(gated[1].mapped_ui_state, 'abstain');
   assert.equal(gated[1].final_action, 'shadow_abstain');
+  assert.equal(gated[1].abstention_reason, 'span_abstain');
+  assert.equal(gated[1].policy_override, 'span_abstain');
   assert.equal(gated[1].acted, false);
+  assert.equal(gated[1].claim_support_applied, false);
+  assert.equal(gated[1].role_write_authorized, false);
   assert.equal(gated[1].model_option, 'loaded_moralized');
+  assert.equal(gated[1].model_disagreement, false);
+  assert.equal(gated[1].disagreement, true);
+  assert.equal(gated[2].abstained, true);
+  assert.equal(gated[2].selected_option, null);
+  assert.equal(gated[2].suppressed_by_span_abstain, true);
+  assert.equal(gated[2].disagreement, true);
+  assert.equal(gated[2].evidence_strength, null);
+  assert.equal(gated[0].suppressed_by_span_abstain, false);
+  assert.equal(gated[0].abstention_reason, 'explicit_abstain');
+
+  const evaluation = evaluateLab({
+    questionSet,
+    cases: [
+      { id: 'abstain', split: 'calibration', label: labels[0], record: gated[0] },
+      { id: 'loaded', split: 'calibration', label: labels[1], record: gated[1] },
+      { id: 'dilemma', split: 'calibration', label: labels[2], record: gated[2] }
+    ]
+  });
+  assert.equal(evaluation.calibration.n, 3);
+  assert.equal(evaluation.calibration.abstained, 3);
+  assert.equal(evaluation.calibration.scored, 0);
+  assert.equal(evaluation.calibration.exact_on_non_abstain, 0);
+  assert.equal(evaluation.calibration.false_positives, 0);
+  assert.equal(evaluation.calibration.false_negatives, 0);
+  assert.equal(evaluation.holdout.n, 0);
+
+  const poisoned = evaluateLab({
+    questionSet,
+    cases: [
+      {
+        id: 'poisoned',
+        split: 'holdout',
+        label: labels[1],
+        record: {
+          ...gated[1],
+          abstained: false,
+          selected_option: 'loaded_moralized',
+          disagreement: false,
+          suppressed_by_span_abstain: true
+        }
+      }
+    ]
+  });
+  assert.equal(poisoned.holdout.scored, 0);
+  assert.equal(poisoned.holdout.abstained, 1);
+  assert.equal(poisoned.holdout.exact_on_non_abstain, 0);
+  assert.equal(poisoned.holdout.false_positives, 0);
+});
+
+test('shared article and span ids stay in one split and cannot change holdout', async () => {
+  const questionSet = await loadQuestionSetFile('media-lens/worker/jev-usage-lab/question-sets/media-lens-narrow.v1.json');
+  const audit = { recorded_at: FIXED_NOW, question_set_sha256: questionSet.sha256 };
+  const shared = { article_id: 'article-shared', source_id: 'source-a', span_id: 'span-shared' };
+  const abstain = buildDecisionRecord({
+    questionSet,
+    questionId: 'should_abstain',
+    answer: choiceAnswer('abstain', ['abstain', 'answer']),
+    provenance: shared,
+    audit,
+    label: { option: 'abstain', outcome_class: 'abstention' }
+  });
+  const sibling = buildDecisionRecord({
+    questionSet,
+    questionId: 'emotionally_loaded_language',
+    answer: choiceAnswer('loaded_moralized', ['loaded_moralized', 'not_loaded', 'abstain']),
+    provenance: shared,
+    audit,
+    label: { option: 'loaded_moralized', outcome_class: 'correct' }
+  });
+  const holdoutOther = buildDecisionRecord({
+    questionSet,
+    questionId: 'authorial_vs_quotation',
+    answer: choiceAnswer('authorial', ['authorial', 'quotation', 'attributed_paraphrase', 'uncertain']),
+    provenance: { article_id: 'article-holdout-only', source_id: 'source-a', span_id: 'span-holdout-only' },
+    audit,
+    label: { option: 'authorial', outcome_class: 'correct' }
+  });
+
+  function labCase(id, split, record, label) {
+    return { id, split, label, record, expect: null, forbidden_substrings: null };
+  }
+
+  const mixed = [
+    labCase('cal-abstain', 'calibration', abstain, { option: 'abstain', outcome_class: 'abstention' }),
+    labCase('hold-sibling', 'holdout', sibling, { option: 'loaded_moralized', outcome_class: 'correct' }),
+    labCase('hold-other', 'holdout', holdoutOther, { option: 'authorial', outcome_class: 'correct' })
+  ];
+  const first = prepareLabCases(mixed);
+  const second = prepareLabCases(mixed);
+  assert.deepEqual(first.collisions, second.collisions);
+  assert.deepEqual(
+    first.cases.map((item) => item.split),
+    second.cases.map((item) => item.split)
+  );
+  assert.equal(first.collisions.length, 1);
+  assert.equal(first.collisions[0].assigned_split, 'calibration');
+  assert.deepEqual(first.collisions[0].declared_splits, ['calibration', 'holdout']);
+  assert.equal(first.cases.find((item) => item.id === 'cal-abstain').split, 'calibration');
+  assert.equal(first.cases.find((item) => item.id === 'hold-sibling').split, 'calibration');
+  assert.equal(first.cases.find((item) => item.id === 'hold-other').split, 'holdout');
+
+  const splitsByKey = new Map();
+  for (const item of first.cases) {
+    const key = `${item.record.provenance.article_id}\u0000${item.record.provenance.span_id}`;
+    if (!splitsByKey.has(key)) splitsByKey.set(key, new Set());
+    splitsByKey.get(key).add(item.split);
+  }
+  for (const splits of splitsByKey.values()) assert.equal(splits.size, 1);
+
+  const moved = first.cases.find((item) => item.id === 'hold-sibling').record;
+  assert.equal(moved.abstained, true);
+  assert.equal(moved.selected_option, null);
+  assert.equal(moved.suppressed_by_span_abstain, true);
+  assert.equal(moved.final_action, 'shadow_abstain');
+  const untouched = first.cases.find((item) => item.id === 'hold-other').record;
+  assert.equal(untouched.suppressed_by_span_abstain, false);
+  assert.equal(untouched.abstained, false);
+  assert.equal(untouched.selected_option, 'authorial');
+
+  const alone = prepareLabCases([mixed[2]]);
+  assert.deepEqual(untouched, alone.cases[0].record);
+
+  const siblingAlone = prepareLabCases([mixed[1]]);
+  assert.equal(siblingAlone.cases[0].split, 'holdout');
+  assert.equal(siblingAlone.cases[0].record.abstained, false);
+  assert.equal(siblingAlone.cases[0].record.selected_option, 'loaded_moralized');
+  assert.equal(siblingAlone.cases[0].record.suppressed_by_span_abstain, false);
+
+  const evaluation = evaluateLab({ questionSet, cases: first.cases, splitIsolation: first });
+  assert.equal(evaluation.holdout.n, 1);
+  assert.equal(evaluation.holdout.scored, 1);
+  assert.equal(evaluation.holdout.exact_on_non_abstain, 1);
+  assert.equal(evaluation.holdout.abstained, 0);
+  assert.equal(evaluation.calibration.n, 2);
+  assert.equal(evaluation.calibration.scored, 0);
+  assert.equal(evaluation.calibration.exact_on_non_abstain, 0);
+  assert.equal(evaluation.calibration.abstained, 2);
+
+  const result = await enabledLab();
+  const siblings = result.cases.filter((item) => item.record.provenance.span_id === 'span-cal-siblings');
+  assert.equal(siblings.length, 3);
+  assert.equal(new Set(siblings.map((item) => item.split)).size, 1);
+  const loadedSibling = siblings.find((item) => item.id === 'lab-cal-span-siblings-loaded').record;
+  const dilemmaSibling = siblings.find((item) => item.id === 'lab-cal-span-siblings-dilemma').record;
+  const abstainSibling = siblings.find((item) => item.id === 'lab-cal-span-siblings-abstain').record;
+  assert.equal(loadedSibling.abstained, true);
+  assert.equal(loadedSibling.selected_option, null);
+  assert.equal(loadedSibling.evidence_strength, null);
+  assert.equal(loadedSibling.model_option, 'loaded_moralized');
+  assert.equal(loadedSibling.disagreement, true);
+  assert.equal(dilemmaSibling.abstained, true);
+  assert.equal(dilemmaSibling.selected_option, null);
+  assert.equal(dilemmaSibling.model_option, 'present');
+  assert.equal(abstainSibling.suppressed_by_span_abstain, false);
+  assert.equal(abstainSibling.abstention_reason, 'explicit_abstain');
+  for (const row of result.historical.rows) {
+    assert.equal(row.influence.suppressed_by_span_abstain, false);
+    assert.equal(row.quoted.suppressed_by_span_abstain, false);
+  }
 });
 
 test('CoS stub never authorizes merge, deploy, spend, credentials, or live flags', async () => {

@@ -471,31 +471,59 @@ export function buildQuotedNoulRecord({
   return attachComparison(record, label);
 }
 
+function spanAbstainKey(record) {
+  const articleId = record?.provenance?.article_id ?? '';
+  const spanId = record?.provenance?.span_id ?? '';
+  return `${articleId}\u0000${spanId}`;
+}
+
+/**
+ * Turn a sibling decision into an abstention. `model_option` stays so the
+ * log still shows what the model selected. Scoring uses `abstained` and
+ * `selected_option`, so both have to move with the gate.
+ */
+function suppressForSpanAbstain(record, label) {
+  const suppressed = {
+    ...record,
+    suppressed_by_span_abstain: true,
+    abstained: true,
+    abstention_reason: 'span_abstain',
+    selected_option: null,
+    evidence_strength: null,
+    final_action: 'shadow_abstain',
+    mapped_ui_state: 'abstain',
+    blocks_downstream_observation: true,
+    escalation: 'human_review',
+    policy_override: 'span_abstain',
+    role_effect: null,
+    acted: false,
+    claim_support_applied: false,
+    role_write_authorized: false
+  };
+  if (label) return attachComparison(suppressed, label);
+  return suppressed;
+}
+
 /**
  * If should_abstain withholds a span, other questions on that span stay
- * logged but cannot emit an influence observation. Does not call Jev.
+ * logged but are abstentions: `abstained` is true, `selected_option` is
+ * null, and derived strength / UI / action are cleared. Does not call Jev.
+ *
+ * Pass labels aligned with `records` so disagreement is recomputed. The
+ * gate only sees records in this list, so callers must not mix splits.
  */
-export function applySpanAbstainGate(records) {
+export function applySpanAbstainGate(records, labels = undefined) {
   const withheld = new Set();
   for (const record of records) {
     if (record.question_id !== 'should_abstain') continue;
     if (record.abstained || record.model_option === 'abstain') {
-      const key = `${record.provenance.article_id}\u0000${record.provenance.span_id}`;
-      withheld.add(key);
+      withheld.add(spanAbstainKey(record));
     }
   }
-  return records.map((record) => {
+  return records.map((record, index) => {
     if (record.question_id === 'should_abstain') return record;
-    const key = `${record.provenance.article_id}\u0000${record.provenance.span_id}`;
-    if (!withheld.has(key)) return record;
-    return {
-      ...record,
-      suppressed_by_span_abstain: true,
-      final_action: 'shadow_abstain',
-      blocks_downstream_observation: true,
-      acted: false,
-      claim_support_applied: false,
-      role_write_authorized: false
-    };
+    if (!withheld.has(spanAbstainKey(record))) return record;
+    const label = Array.isArray(labels) ? labels[index] : undefined;
+    return suppressForSpanAbstain(record, label);
   });
 }

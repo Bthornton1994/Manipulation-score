@@ -18,6 +18,10 @@ The harness scores fixture replays. It does not call Jev, does not fit threshold
 
 Holdout ids are not read by the threshold constants. `FROZEN_FUSION_THRESHOLDS` is copied from `fusion.js`. `SHADOW_MIN_MARGIN` is `0.15` and is documented as a shadow gate, not a fitted weight.
 
+Before any abstain gate or score, `prepareLabCases` groups records by `article_id` + `span_id` and assigns the group to one split. Holdout is kept only when every record in the group declared holdout. Otherwise the group takes the first present of `calibration`, `adversarial`, then `historical`. The span-abstain gate then runs inside each assigned split, not across a mixed calibration and holdout population. A calibration record cannot change a holdout score. The production historical replay is a separate list and is not an input to that gate.
+
+A suppressed sibling is an abstention: `abstained` is true and `selected_option` is null. `splitMetrics` also treats `suppressed_by_span_abstain` as abstention, so a leftover selected option cannot count as a scored decision.
+
 ## Metrics
 
 Per split:
@@ -64,6 +68,8 @@ Tests in `tests/media-lens-jev-usage-lab.test.js` lock:
 - unknown options and smuggled scores do not appear in the JSON
 - one-source independence abstains
 - two-source independence stays candidate, not observed
+- a span with `should_abstain` plus sibling questions is abstained, not scored
+- a shared article id and span id cannot sit in both calibration and holdout
 - cross-span batches split
 - `analyze()` on `synthetic-01-quoted-vs-authorial` still reports 6 fixture-mode logical calls
 - `worker/config.js` does not read `MEDIA_LENS_JEV_SHADOW`

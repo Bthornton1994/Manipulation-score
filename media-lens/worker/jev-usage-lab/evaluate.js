@@ -31,8 +31,12 @@ export function binaryScores(tp, fp, fn) {
   return { tp, fp, fn, precision: round3(precision), recall: round3(recall), f1: round3(f1) };
 }
 
+function isAbstainedRecord(record) {
+  return record?.abstained === true || record?.suppressed_by_span_abstain === true;
+}
+
 function predictedLabel(record) {
-  if (record.abstained || record.selected_option == null) return 'abstain';
+  if (isAbstainedRecord(record) || record.selected_option == null) return 'abstain';
   return record.selected_option;
 }
 
@@ -82,7 +86,7 @@ function questionMetrics(question, cases) {
       else tn += 1;
     }
 
-    if (!item.record.abstained && item.label?.option != null && item.label.option !== 'abstain') {
+    if (!isAbstainedRecord(item.record) && item.label?.option != null && item.label.option !== 'abstain') {
       const confidence = item.record.confidence;
       const bin = bins.find((candidate) => typeof confidence === 'number' && confidence >= candidate.min && confidence < candidate.max);
       if (bin) {
@@ -121,15 +125,15 @@ function splitMetrics(questionSet, cases) {
     const questionId = item.record.question_id;
     if (!byQuestion.has(questionId)) byQuestion.set(questionId, []);
     byQuestion.get(questionId).push(item);
-    if (item.record.abstained) abstained += 1;
+    if (isAbstainedRecord(item.record)) abstained += 1;
     else scored += 1;
     if (item.record.disagreement === true) disagreements += 1;
-    if (!item.record.abstained && item.label?.option != null && item.label.option !== 'abstain' && item.record.selected_option === item.label.option) {
+    if (!isAbstainedRecord(item.record) && item.label?.option != null && item.label.option !== 'abstain' && item.record.selected_option === item.label.option) {
       exact += 1;
     }
     const question = questionSet.questions[questionId];
     const positive = question?.binary_positive;
-    if (positive && !item.record.abstained && item.label?.option != null && item.label.option !== 'abstain') {
+    if (positive && !isAbstainedRecord(item.record) && item.label?.option != null && item.label.option !== 'abstain') {
       const actualPos = item.label.option === positive;
       const predPos = item.record.selected_option === positive;
       if (!actualPos && predPos) falsePositives += 1;
@@ -186,7 +190,7 @@ export function adversarialFindings(cases) {
   return { n: cases.length, pass: failures.length === 0, failures };
 }
 
-export function evaluateLab({ questionSet, cases, historical = null }) {
+export function evaluateLab({ questionSet, cases, historical = null, splitIsolation = null }) {
   const grouped = { calibration: [], holdout: [], adversarial: [] };
   for (const item of cases) {
     if (!grouped[item.split]) continue;
@@ -202,6 +206,7 @@ export function evaluateLab({ questionSet, cases, historical = null }) {
     },
     network_calls: 0,
     cost: { ...COST_UNAVAILABLE },
+    split_isolation: splitIsolation,
     calibration: splitMetrics(questionSet, grouped.calibration),
     holdout: splitMetrics(questionSet, grouped.holdout),
     adversarial: adversarialFindings(grouped.adversarial),
@@ -268,6 +273,13 @@ function splitMarkdown(split) {
   return lines.join('\n');
 }
 
+function splitIsolationMarkdown(splitIsolation) {
+  if (!splitIsolation) {
+    return 'Split isolation was not attached to this evaluation.';
+  }
+  return `Article and span identity is grouped before split assignment. A shared article id and span id stays in one split. Cross-split collisions reassigned: ${splitIsolation.collisions.length}. Cases moved off their declared split: ${splitIsolation.reassigned_cases}. The span-abstain gate runs only inside an assigned split, so a calibration record cannot change a holdout score. Suppressed sibling questions are abstentions (\`abstained: true\`, \`selected_option: null\`) and are not scored as ordinary decisions.`;
+}
+
 export function renderAccuracyReport({ evaluation, questionSet, generatedAt }) {
   const historicalRows = evaluation.historical?.rows || [];
   const historicalMismatches = historicalRows.filter((row) => row.disagreement);
@@ -287,6 +299,8 @@ ${evaluation.disclaimer}
 This report does not cite external accuracy, price, or rate-limit figures. Cost: unavailable (${evaluation.cost.reason}). Network calls performed by this replay: ${evaluation.network_calls}.
 
 Thresholds are frozen from \`media-lens/worker/fusion.js\` plus shadow margin ${evaluation.thresholds.shadow_min_margin}. \`thresholds_fit_on_holdout\` is ${evaluation.thresholds_fit_on_holdout}. Holdout cases were not used to choose thresholds.
+
+${splitIsolationMarkdown(evaluation.split_isolation)}
 
 Question set: \`${questionSet.id}\` version \`${questionSet.version}\`. \`observed_vs_candidate\` is derived in the app and is not a Jev question.
 

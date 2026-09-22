@@ -9,10 +9,11 @@ import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonicalStringify } from '../jev/canonical-json.js';
-import { applySpanAbstainGate, buildDecisionRecord } from './decision.js';
+import { buildDecisionRecord } from './decision.js';
 import { createShadowLog, isShadowEnabled } from './shadow.js';
 import { evaluateLab, renderAccuracyReport } from './evaluate.js';
 import { replayHistoricalFixtures } from './historical.js';
+import { prepareLabCases } from './split-isolation.js';
 
 const LAB_DIR = dirname(fileURLToPath(import.meta.url));
 const MEDIA_LENS_DIR = join(LAB_DIR, '..', '..');
@@ -80,7 +81,6 @@ export async function runUsageLab({
       label: item.label,
       requireCompleteDistribution: true
     });
-    log.record(record);
     cases.push({
       id: item.id,
       split: item.split,
@@ -90,8 +90,10 @@ export async function runUsageLab({
       forbidden_substrings: item.forbidden_substrings || null
     });
   }
-  const gated = applySpanAbstainGate(log.entries());
-  const gatedCases = cases.map((item, index) => ({ ...item, record: gated[index] }));
+  // Group by article+span and assign one split before the gate. Historical
+  // production replay is a separate list and is not an input to the gate.
+  const prepared = prepareLabCases(cases);
+  for (const item of prepared.cases) log.record(item.record);
   const historical = includeHistorical
     ? await replayHistoricalFixtures({
         pairs: HISTORICAL_FIXTURES.map((fixtureId) => ({
@@ -102,14 +104,25 @@ export async function runUsageLab({
         audit: auditBase
       })
     : null;
-  const evaluation = evaluateLab({ questionSet, cases: gatedCases, historical });
+  const splitIsolation = {
+    collisions: prepared.collisions,
+    reassigned_cases: prepared.reassigned_cases,
+    gate: prepared.gate
+  };
+  const evaluation = evaluateLab({
+    questionSet,
+    cases: prepared.cases,
+    historical,
+    splitIsolation
+  });
   return {
     shadow_enabled: true,
     acted: false,
     network_calls: 0,
     question_set_sha256: questionSet.sha256,
-    records: gatedCases.map((item) => item.record),
-    cases: gatedCases,
+    records: prepared.cases.map((item) => item.record),
+    cases: prepared.cases,
+    split_isolation: splitIsolation,
     evaluation,
     historical,
     report_markdown: renderAccuracyReport({ evaluation, questionSet, generatedAt: recordedAt })

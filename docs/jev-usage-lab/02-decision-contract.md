@@ -57,11 +57,13 @@ Production answer files are partial on purpose. `compareProductionAnswerToObserv
 
 `abstained: true` and `selected_option: null` when the record withholds a class. `model_option` still holds a valid argmax when the parse succeeded and a later policy withheld it.
 
-Reasons: `malformed`, `unknown_question`, `derived_in_app`, `wrong_type`, `unknown_option`, `invalid_probabilities`, `incomplete_distribution`, `choice_not_argmax`, `ambiguous_tie`, `low_margin`, `insufficient_source_context`, `explicit_abstain`.
+Reasons: `malformed`, `unknown_question`, `derived_in_app`, `wrong_type`, `unknown_option`, `invalid_probabilities`, `incomplete_distribution`, `choice_not_argmax`, `ambiguous_tie`, `low_margin`, `insufficient_source_context`, `explicit_abstain`, `span_abstain`.
 
 `none` on the production question is a class, not an abstention.
 
-`should_abstain` choosing `abstain` withholds other questions on the same article id and span id via `applySpanAbstainGate`. Those rows stay in the log with `suppressed_by_span_abstain: true` and `final_action: shadow_abstain`. They do not change the active graph, because the gate is not called from `analyze.js`.
+`should_abstain` choosing `abstain`, or abstaining for any other reason, withholds other questions on the same article id and span id via `applySpanAbstainGate`. The gate runs only on records that already share one assigned split. A calibration row cannot suppress a holdout row.
+
+Suppressed siblings stay in the log and become abstentions. The gate sets `suppressed_by_span_abstain: true`, `abstained: true`, `abstention_reason: span_abstain`, `selected_option: null`, `evidence_strength: null`, `mapped_ui_state: abstain`, `final_action: shadow_abstain`, and `policy_override: span_abstain`. `model_option` still shows the argmax. Disagreement is recomputed against the fixture label, so a suppressed class is not an exact match. Metrics count these rows as abstentions, not as scored decisions. The gate is not called from `analyze.js`, so the active graph does not change.
 
 ## Escalation, threshold, fallback
 
@@ -70,6 +72,7 @@ Reasons: `malformed`, `unknown_question`, `derived_in_app`, `wrong_type`, `unkno
 | Valid class the app can show as a state id | `shadow_record` | `none`, or `human_review` if confidence `< 0.5` |
 | `no_signal` or below the candidate threshold | `no_ui_change` | as above |
 | Abstain | `shadow_abstain` | `human_review` for invalid or low-margin answers; `none` for an explicit abstain that is not in review |
+| Sibling suppressed by span abstain | `shadow_abstain` | `human_review`. `selected_option` is cleared |
 | `supported`, `contradicted`, or `mixed` on `claim_support_status` | `hold_for_human` | `hold` |
 
 Fallback is abstain or hold. The record never writes `claims[].support`. `claim_support_applied` is always false. Current fusion still sets `not_checked` only.

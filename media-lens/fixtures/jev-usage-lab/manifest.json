@@ -93,6 +93,51 @@
       }
     },
     {
+      "id": "lab-cal-span-siblings-abstain",
+      "split": "calibration",
+      "question_id": "should_abstain",
+      "provenance": { "article_id": "lab-cal-span-siblings", "source_id": "source-lab", "span_id": "span-cal-siblings", "span_role": "authorial" },
+      "label": { "option": "abstain", "outcome_class": "abstention", "historical_action": "abstain" },
+      "latency_ms": 10,
+      "call_count": 1,
+      "replay_answer": {
+        "type": "choice",
+        "choice": "abstain",
+        "probabilities": { "abstain": 0.91, "answer": 0.09 },
+        "confidence": 0.91
+      }
+    },
+    {
+      "id": "lab-cal-span-siblings-loaded",
+      "split": "calibration",
+      "question_id": "emotionally_loaded_language",
+      "provenance": { "article_id": "lab-cal-span-siblings", "source_id": "source-lab", "span_id": "span-cal-siblings", "span_role": "authorial" },
+      "label": { "option": "loaded_moralized", "outcome_class": "abstention", "historical_action": "abstain" },
+      "latency_ms": 10,
+      "call_count": 1,
+      "replay_answer": {
+        "type": "choice",
+        "choice": "loaded_moralized",
+        "probabilities": { "loaded_moralized": 0.86, "not_loaded": 0.09, "abstain": 0.05 },
+        "confidence": 0.86
+      }
+    },
+    {
+      "id": "lab-cal-span-siblings-dilemma",
+      "split": "calibration",
+      "question_id": "false_dilemma",
+      "provenance": { "article_id": "lab-cal-span-siblings", "source_id": "source-lab", "span_id": "span-cal-siblings", "span_role": "authorial" },
+      "label": { "option": "present", "outcome_class": "abstention", "historical_action": "abstain" },
+      "latency_ms": 10,
+      "call_count": 1,
+      "replay_answer": {
+        "type": "choice",
+        "choice": "present",
+        "probabilities": { "present": 0.9, "absent": 0.05, "abstain": 0.05 },
+        "confidence": 0.9
+      }
+    },
+    {
       "id": "lab-cal-context-missing",
       "split": "calibration",
       "question_id": "important_context_missing",

@@ -76,6 +76,7 @@
         "low_margin",
         "insufficient_source_context",
         "explicit_abstain",
+        "span_abstain",
         null
       ]
     },

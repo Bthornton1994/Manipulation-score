@@ -25,7 +25,7 @@ Active means a human-approved path where a typed answer can change an evidence-l
 
 1. Independent QA is seated. This contract decides future UI and abstention behavior even though the default path is unchanged.
 2. Bryant Thornton approves the question-set version in writing. The model cannot supply that approval.
-3. Holdout stays untouched. Any threshold change is a new contract version, fit only on a calibration split that is not the holdout, and still not described as real-world accuracy.
+3. Holdout stays untouched. Records that share an article id and span id stay in one split, and the span-abstain gate does not run on a mixed calibration/holdout set. Any threshold change is a new contract version, fit only on a calibration split that is not the holdout, and still not described as real-world accuracy.
 4. Provenance test stays green: article id, source id, and span id on every answer; no full text in the log.
 5. Cross-span batching stays off unless a response field carries the span id. The current TypeSafe body does not.
 6. Kill switch, 160-call cap, 8 s attempt timeout, and 15 s analysis timeout stay in force on any path that can reach the network.

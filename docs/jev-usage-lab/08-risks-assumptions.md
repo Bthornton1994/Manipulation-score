@@ -30,7 +30,7 @@ Numbers, prices, and rate limits in that post are unverified. They are not copie
 | Several questions in one request may run in parallel, if provenance survives | This client already puts both production questions in one body per span. Question ids are application keys. The response is not span-tagged | In-span batching stays. Cross-span batching is refused. Provider-side parallelism was not re-measured here |
 | Shadow mode first: the model decides, nothing acts, then a human gate for irreversible actions | Lab records recommendations, `acted` is false, CoS stub escalates external or irreversible work | Implemented as replay. Not wired into `/analyze`. Jev still cannot approve the gate |
 | A usage lab should route, dry-run, and log before expensive steps | CLI default off, fixture replay, no network, CoS stub with hard-coded denials | The lab does not call the model, so it does not spend. A future live shadow would still need the existing cap, timeout, and kill switch |
-| Calibrate on a labeled set and keep an untouched holdout. Do not cite external accuracy percents | Frozen fusion thresholds. Holdout is scored and not used to set the margin. Report says fixture replay only | The 0.15 margin is an explicit shadow choice, not a fitted weight and not a claim about the post’s percentages |
+| Calibrate on a labeled set and keep an untouched holdout. Do not cite external accuracy percents | Frozen fusion thresholds. Holdout is scored and not used to set the margin. Shared article/span ids stay in one split, and the abstain gate does not cross splits. Report says fixture replay only | The 0.15 margin is an explicit shadow choice, not a fitted weight and not a claim about the post’s percentages |
 | Do not hardcode the post’s pricing or rate limits | `cost.available` is false. Existing estimated budget constants stay labeled estimated | No new price or rate-limit constant was added from the post |
 
 ## Residual risks
@@ -40,7 +40,7 @@ Numbers, prices, and rate limits in that post are unverified. They are not copie
 - A later patch could import the lab from `analyze.js` and accidentally act on `final_action`. Tests currently assert `analyze.js`, `server.js`, `config.js`, and `adapters/jev.js` do not reference `jev-usage-lab`.
 - Claim-support options include `supported` and `contradicted` so the log can show a bad answer. The policy hold is the control. If a future mapper trusts `model_option` instead of `final_action`, it would violate the contract.
 - CoS `route` can still be the recommendation when every gate passes. It is not execution, but a caller that treats the string `route` as permission would be wrong. `executed` is the field to check, and it is false.
-- Fixture F1 on nine calibration rows is a unit-test number. Publishing it as accuracy would violate `VISION.md`.
+- Fixture F1 on the calibration and holdout rows is a unit-test number. Publishing it as model accuracy would violate `VISION.md`. The span-abstain gate does not score suppressed siblings, and a shared article/span id cannot sit in both calibration and holdout.
 
 ## Independent QA
 

@@ -58,6 +58,7 @@ Production call count is unchanged. The planner’s `http_calls` is 0.
 | Incorrect | `lab-cal-loaded-fp`, `lab-cal-dilemma-fn`, `lab-hold-loaded-fn` | Selected option does not match |
 | Ambiguous | `lab-cal-ambiguous`, `lab-hold-ambiguous` | Margin below 0.15, so the lab abstains |
 | Abstention | `lab-cal-should-abstain`, `lab-hold-malformed-abstain`, `lab-adv-unknown-option` | Explicit abstain or a rejected answer |
+| Span siblings | `lab-cal-span-siblings-abstain`, `lab-cal-span-siblings-loaded`, `lab-cal-span-siblings-dilemma` | Same article id and span id. The abstain clears the other two selected options so they are not exact matches |
 
 `lab-cal-claim-held` is an incorrect claim-support answer that is held, not applied.
 

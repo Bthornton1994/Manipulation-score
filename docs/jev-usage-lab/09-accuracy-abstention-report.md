@@ -8,13 +8,15 @@ This report does not cite external accuracy, price, or rate-limit figures. Cost:
 
 Thresholds are frozen from `media-lens/worker/fusion.js` plus shadow margin 0.15. `thresholds_fit_on_holdout` is false. Holdout cases were not used to choose thresholds.
 
+Article and span identity is grouped before split assignment. A shared article id and span id stays in one split. Cross-split collisions reassigned: 0. Cases moved off their declared split: 0. The span-abstain gate runs only inside an assigned split, so a calibration record cannot change a holdout score. Suppressed sibling questions are abstentions (`abstained: true`, `selected_option: null`) and are not scored as ordinary decisions.
+
 Question set: `media-lens-narrow.v1` version `1`. `observed_vs_candidate` is derived in the app and is not a Jev question.
 
 ## Calibration split
 
-Cases: 9. Abstained: 2. Abstention rate: 0.222. Scored (not abstained): 7. Exact selected-option matches among non-abstentions: 4. Disagreements with the fixture label: 3. Binary false positives: 1. Binary false negatives: 1.
+Cases: 12. Abstained: 5. Abstention rate: 0.417. Scored (not abstained): 7. Exact selected-option matches among non-abstentions: 4. Disagreements with the fixture label: 5. Binary false positives: 1. Binary false negatives: 1.
 
-Fixture-declared latency sum (ms): 90. Mean: 10. Fixture-declared call count sum: 9. Basis: `fixture_declared`. These are labels in the fixture file, not measured HTTP.
+Fixture-declared latency sum (ms): 120. Mean: 10. Fixture-declared call count sum: 12. Basis: `fixture_declared`. These are labels in the fixture file, not measured HTTP.
 
 ### authorial_vs_quotation
 
@@ -38,7 +40,7 @@ Calibration bins (non-abstained cases with a class label; rate is exact option m
 
 | actual \\ predicted | loaded_moralized | not_loaded | abstain |
 | --- | --- | --- | --- |
-| loaded_moralized | 1 | 0 | 0 |
+| loaded_moralized | 1 | 0 | 1 |
 | not_loaded | 1 | 0 | 0 |
 | abstain | 0 | 0 | 0 |
 
@@ -56,7 +58,7 @@ Calibration bins (non-abstained cases with a class label; rate is exact option m
 
 | actual \\ predicted | present | absent | abstain |
 | --- | --- | --- | --- |
-| present | 0 | 1 | 0 |
+| present | 0 | 1 | 1 |
 | absent | 0 | 0 | 0 |
 | abstain | 0 | 0 | 1 |
 
@@ -110,7 +112,7 @@ Calibration bins (non-abstained cases with a class label; rate is exact option m
 
 | actual \\ predicted | abstain | answer |
 | --- | --- | --- |
-| abstain | 1 | 0 |
+| abstain | 2 | 0 |
 | answer | 0 | 0 |
 
 Calibration bins (non-abstained cases with a class label; rate is exact option match):

@@ -103,10 +103,18 @@ export function readBudgetStore(storePath, io = {}) {
   const resolvedIo = resolveIo(io);
   try {
     const raw = JSON.parse(resolvedIo.readFileSync(storePath, 'utf8'));
-    return sanitizeBudgetStoreRecord(raw);
+    const record = sanitizeBudgetStoreRecord(raw);
+    if (!record) {
+      throw Object.assign(new Error('invalid typesafe budget store record'), { code: 'BUDGET_STORE_INVALID' });
+    }
+    return record;
   } catch (err) {
     if (err?.code === 'ENOENT') return null;
-    return null;
+    if (err?.code === 'BUDGET_STORE_INVALID') throw err;
+    throw Object.assign(new Error('typesafe budget store unreadable'), {
+      code: 'BUDGET_STORE_UNAVAILABLE',
+      cause: err
+    });
   }
 }
 

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from '../media-lens/worker/server.js';
@@ -375,6 +375,21 @@ test('R2: ESTIMATED budget store persists across process restart within the same
   assert.equal(Object.hasOwn(raw, 'text'), false);
   assert.equal(sanitizeBudgetStoreRecord({ ...raw, text: 'article body' }), null);
   assert.equal(DEFAULT_TYPESAFE_BUDGET_STORE_FILE, '/var/lib/media-lens/typesafe-budget.json');
+});
+
+test('R2b: corrupt budget store fails closed instead of resetting the monthly stop', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'media-lens-budget-corrupt-'));
+  const storePath = join(dir, 'typesafe-budget.json');
+  const fixedNow = () => Date.UTC(2026, 8, 21, 12, 0, 0);
+  const opts = { estimatedUsdPerCall: 1, warnUsd: 20, stopUsd: 30, storePath, now: fixedNow };
+
+  createTypesafeBudget(opts).recordCalls(30);
+  await writeFile(storePath, '{not-json', 'utf8');
+
+  const reloaded = createTypesafeBudget(opts);
+  assert.equal(reloaded.isStopped(), true);
+  assert.equal(reloaded.wouldExceed(1), true);
+  assert.equal(reloaded.getSnapshot().storeUnavailable, true);
 });
 
 test('Fix 4: concurrent budget ledger warns at $20 and hard-stops at $30', async () => {

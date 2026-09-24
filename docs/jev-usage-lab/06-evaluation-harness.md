@@ -54,7 +54,7 @@ Cost is unavailable. No price or rate limit is hardcoded.
 
 For each answered span it projects the Choice through the frozen probability cutoffs and the marker fail-closed rule, then compares signal and strength with the graph’s Jev observation, or with “no observation”.
 
-The one disagreement in the current fixtures is `synthetic-05-paywall` / `span-3`. The graph abstains for insufficient text and paywall, so it has no Jev observation. The answer file still contains `vague_authority`. The projection is `candidate` because the marker flag is not stored. That is a pipeline-versus-answer-file difference.
+The one disagreement in the current fixtures is `synthetic-05-paywall` / `span-2`. The graph abstains for insufficient text and paywall, so it has no Jev observation. The answer file still contains `vague_authority`. The projection is `candidate` because the marker flag is not stored. That is a pipeline-versus-answer-file difference.
 
 Noul rows recommend `authorial_to_uncertain` only when the pre-Jev role is `authorial` and noul is at least `0.70`. They do not write the role.
 

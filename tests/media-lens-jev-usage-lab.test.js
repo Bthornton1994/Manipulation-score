@@ -155,18 +155,18 @@ test('historical replay matches stored observations except the paywall answer fi
   const mismatch = result.evaluation.historical.rows.filter((row) => row.disagreement);
   assert.equal(mismatch.length, 1);
   assert.equal(mismatch[0].fixture_id, 'synthetic-05-paywall');
-  assert.equal(mismatch[0].span_id, 'span-3');
+  assert.equal(mismatch[0].span_id, 'span-2');
   assert.equal(mismatch[0].expected_signal, 'vague_authority');
   assert.equal(mismatch[0].expected_strength, 'candidate');
   assert.equal(mismatch[0].historical_signal, 'none');
 
   const quotedMove = result.historical.rows.find(
-    (row) => row.fixture_id === 'synthetic-01-quoted-vs-authorial' && row.span_id === 'span-7'
+    (row) => row.fixture_id === 'synthetic-01-quoted-vs-authorial' && row.span_id === 'span-6'
   );
   assert.equal(quotedMove.quoted.role_effect, 'authorial_to_uncertain');
   assert.equal(quotedMove.quoted.role_write_authorized, false);
   const quotedAlready = result.historical.rows.find(
-    (row) => row.fixture_id === 'synthetic-01-quoted-vs-authorial' && row.span_id === 'span-4'
+    (row) => row.fixture_id === 'synthetic-01-quoted-vs-authorial' && row.span_id === 'span-3'
   );
   assert.equal(quotedAlready.quoted.role_effect, 'none');
 });

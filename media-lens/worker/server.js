@@ -1,8 +1,11 @@
 #!/usr/bin/env node
-// Media Lens worker HTTP server: node:http, zero dependencies, listens on
+// Media Lens worker HTTP server: node:http, no npm dependencies, listens on
 // 127.0.0.1 only by default. GET /health, POST /analyze. Owns all network,
-// keys, and limits; the browser page talks only to this process. See
-// docs/media-lens-influence-graph-plan.md section 1.
+// keys, and limits; the browser page talks only to this process. Article
+// HTML preparation shells out asynchronously to pinned local Trafilatura.
+// The child refuses the Python socket methods named in
+// media-lens/worker/trafilatura/DEPS.md. That is not a network namespace.
+// See docs/media-lens-influence-graph-plan.md section 1.
 
 import http from 'node:http';
 import { readFile, readdir } from 'node:fs/promises';
@@ -163,7 +166,7 @@ async function buildAdapters({ config, payload, classifierDevFetch }) {
   return { jevAdapter, newsjackAdapter, classifierDevAdapter };
 }
 
-async function preparePayload({ payload, config, fetchArticle }) {
+async function preparePayload({ payload, config, fetchArticle, extractImpl }) {
   if (config.mode === 'live' && payload.mode === 'pasted_text') {
     throw Object.assign(
       new Error('Live pasted-text analysis is disabled until a later privacy and security review.'),
@@ -185,7 +188,8 @@ async function preparePayload({ payload, config, fetchArticle }) {
       html,
       kind: payload.kind || 'article',
       sourceUrl: payload.url || `https://fictional-daily.example/articles/${payload.fixture_id}`,
-      inputMode: 'fixture'
+      inputMode: 'fixture',
+      extractImpl
     });
   }
   if (payload.mode === 'url') {
@@ -208,7 +212,7 @@ async function preparePayload({ payload, config, fetchArticle }) {
       );
     }
     // Connect-time pin: never call global fetch on a user-supplied URL.
-    const { html } = await (fetchArticle || fetchArticleSafely)(payload.url, {
+    const fetched = await (fetchArticle || fetchArticleSafely)(payload.url, {
       timeoutMs: config.limits.urlFetchTimeoutMs,
       connectTimeoutMs: config.limits.urlFetchConnectTimeoutMs,
       maxBytes: config.limits.urlFetchMaxBytes,
@@ -217,7 +221,18 @@ async function preparePayload({ payload, config, fetchArticle }) {
       parseTimeoutMs: config.limits.urlFetchParseTimeoutMs,
       urlAllowlist: config.urlAllowlist
     });
-    return prepareFromHtml({ html, kind: payload.kind || 'article', sourceUrl: payload.url, inputMode: 'url' });
+    return prepareFromHtml({
+      html: fetched.html,
+      kind: payload.kind || 'article',
+      sourceUrl: payload.url,
+      inputMode: 'url',
+      acquisition: {
+        contentType: fetched.contentType ?? null,
+        fetchStatus: fetched.fetchStatus ?? '200',
+        fetchedAt: fetched.fetchedAt ?? null
+      },
+      extractImpl
+    });
   }
   throw Object.assign(new Error(`Unknown analyze mode: ${payload.mode}`), { code: 'UNKNOWN_MODE' });
 }
@@ -366,6 +381,7 @@ export function createServer(config = loadConfig(), options = {}) {
   const audit = options.auditLogger || createAuditLogger();
   // Test/programmatic only. Unused by startServer() / the CLI.
   const fetchArticle = options.fetchArticle || null;
+  const extractImpl = options.extractImpl || undefined;
   const classifierDevFetch = options.classifierDevFetch || null;
   const typesafeBudget =
     options.typesafeBudget ||
@@ -518,7 +534,7 @@ export function createServer(config = loadConfig(), options = {}) {
 
         let prepared;
         try {
-          prepared = await preparePayload({ payload, config, fetchArticle });
+          prepared = await preparePayload({ payload, config, fetchArticle, extractImpl });
         } catch (err) {
           if (heldLiveUrlSlot) liveUrlConcurrency.exit();
           if (SSRF_ERROR_CODES.has(err.code)) {
@@ -552,7 +568,11 @@ export function createServer(config = loadConfig(), options = {}) {
             });
           }
           if (PREPARE_FAILURE_AS_ABSTENTION.has(err.code)) {
-            const stub = emptyPreparedArtifactStub({ inputMode: payload.mode === 'url' ? 'url' : 'pasted_text', url: payload.url || null });
+            const stub = emptyPreparedArtifactStub({
+              inputMode: payload.mode === 'url' ? 'url' : 'pasted_text',
+              url: payload.url || null,
+              fetchStatus: err.code || 'fetch_failed'
+            });
             const fallback = await buildAbstentionOnlyGraph({
               prepared: stub,
               reason: 'engine_unavailable',

@@ -702,7 +702,7 @@ test('fixture /analyze keeps the production body when narrow shadow is off and w
       assert.equal(stableGraph(res.body), stableGraph(baseline));
       assert.equal(res.body.engine.jev.calls, baseline.engine.jev.calls);
       assert.equal(res.body.claims.every((claim) => claim.support === 'not_checked'), true);
-      assert.equal(res.body.spans.find((span) => span.id === 'span-7').role, 'uncertain');
+      assert.equal(res.body.spans.find((span) => span.text.startsWith('Sources close to the situation')).role, 'uncertain');
       assert.equal(budgetCalls.length, 0);
       assert.equal(fetchCalls, 0);
       releaseProvider();
@@ -719,7 +719,7 @@ test('fixture /analyze keeps the production body when narrow shadow is off and w
       assert.equal(calls.length, 6);
       assert.deepEqual(
         calls.map((request) => request.span_id),
-        ['span-1', 'span-3', 'span-4', 'span-5', 'span-6', 'span-7']
+        ['span-1', 'span-2', 'span-3', 'span-4', 'span-5', 'span-6']
       );
       assert.equal(report.live_network_permitted, false);
       assert.equal(report.live_network_block_reason, 'fixture_mode');
@@ -730,11 +730,11 @@ test('fixture /analyze keeps the production body when narrow shadow is off and w
       assert.equal(Object.values(report.authorizes).every((value) => value === false), true);
       assert.equal(report.analysis_run_id, res.body.graph_id);
       assert.equal(report.article_id, 'synthetic-01-quoted-vs-authorial');
-      const span7 = report.records.find((record) => record.provenance.span_id === 'span-7' && record.question_id === 'authorial_vs_quotation');
+      const span7 = report.records.find((record) => record.provenance.span_id === 'span-6' && record.question_id === 'authorial_vs_quotation');
       assert.equal(span7.provenance.span_role, 'authorial');
       assert.equal(span7.role_write_authorized, false);
       const loaded = report.production_disagreements.find(
-        (item) => item.span_id === 'span-4' && item.question_id === 'emotionally_loaded_language'
+        (item) => item.span_id === 'span-3' && item.question_id === 'emotionally_loaded_language'
       );
       assert.equal(loaded.class, 'differ');
       assert.equal(loaded.applied_to_production, false);

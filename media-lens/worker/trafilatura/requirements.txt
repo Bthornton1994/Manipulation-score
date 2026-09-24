@@ -1,0 +1,22 @@
+# Pinned worker-only extractor. Not installed in the browser, PWA, or Pages bundle.
+# Direct pins: trafilatura==2.2.0 (Apache-2.0), py3langid==0.4.0 (BSD-3-Clause).
+# Transitive pins match the set verified with those two versions.
+babel==2.18.0
+certifi==2026.7.22
+charset-normalizer==3.5.1
+courlan==1.4.0
+dateparser==1.4.3
+htmldate==1.10.0
+justext==3.0.2
+lxml==6.1.3
+lxml-html-clean==0.4.5
+numpy==2.5.3
+py3langid==0.4.0
+python-dateutil==2.9.0.post0
+pytz==2026.4
+regex==2026.9.10
+six==1.17.0
+tld==0.13.2
+trafilatura==2.2.0
+tzlocal==5.4.4
+urllib3==2.8.0

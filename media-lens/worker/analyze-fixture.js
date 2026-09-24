@@ -24,7 +24,7 @@ export async function runFixture(fixtureId, { config = loadConfig({}), classifie
   const html = await readFile(articlePath, 'utf8');
   const sourceUrl = `https://fictional-daily.example/articles/${fixtureId}`;
 
-  const prepared = prepareFromHtml({ html, kind: 'article', sourceUrl, inputMode: 'fixture' });
+  const prepared = await prepareFromHtml({ html, kind: 'article', sourceUrl, inputMode: 'fixture' });
 
   const jevAdapter = createJevAdapter({ mode: 'fixture', fixtureId, fixtureDir: join(FIXTURES_DIR, 'jev') });
   const newsjackAdapter = createNewsjackAdapter({ mode: 'fixture', fixtureId, fixtureDir: join(FIXTURES_DIR, 'newsjack') });

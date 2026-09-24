@@ -98,11 +98,14 @@ test('fixture mode: missing span id in the fixture file is a failure, not a fabr
     fixtureId: 'synthetic-01-quoted-vs-authorial',
     fixtureDir: 'media-lens/fixtures/jev'
   });
-  const result = await adapter.analyzeSpans(SAMPLE_SPANS, ARTIFACT);
+  const result = await adapter.analyzeSpans(
+    [...SAMPLE_SPANS, { id: 'span-missing', role: 'authorial', text: 'This span has no fixture answer.' }],
+    ARTIFACT
+  );
   assert.ok(result.answersBySpanId.has('span-1'), 'span-1 is present in the fixture and must be kept');
-  assert.ok(result.failedSpanIds.has('span-2'), 'span-2 is absent from the fixture and must not be fabricated');
-  assert.equal(result.answersBySpanId.has('span-2'), false);
-  assert.equal(result.unavailableSpanIds.has('span-2'), true);
+  assert.ok(result.failedSpanIds.has('span-missing'), 'a span id absent from the fixture must not be fabricated');
+  assert.equal(result.answersBySpanId.has('span-missing'), false);
+  assert.equal(result.unavailableSpanIds.has('span-missing'), true);
   assert.equal(result.modelReported, JEV_MODEL_REQUESTED);
   assert.equal(result.modelMatch, true);
 });

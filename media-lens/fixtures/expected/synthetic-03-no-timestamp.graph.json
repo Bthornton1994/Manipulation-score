@@ -17,8 +17,8 @@
     "modified_at": null,
     "timestamp_precision": "none",
     "language": "en",
-    "text_sha256": "a26cd69ed85f9ba66ac29d8e2a810d83b317f6af43202a6c9539757953403c0e",
-    "text_length_chars": 322,
+    "text_sha256": "885b300829a750051631a73edf52cc1cd848f2ed446270e127c26670f7135497",
+    "text_length_chars": 308,
     "paywall_detected": false,
     "authorization": {
       "user_asserted_public": true,
@@ -42,22 +42,9 @@
     {
       "id": "span-2",
       "start": 45,
-      "end": 58,
-      "text": "By Sam Okafor",
-      "paragraph_index": 1,
-      "role": "byline_meta",
-      "attribution": {
-        "speaker": null,
-        "cue": null
-      },
-      "role_basis": "html_structure"
-    },
-    {
-      "id": "span-3",
-      "start": 59,
-      "end": 208,
+      "end": 194,
       "text": "A local neighborhood association is organizing a weekend cleanup along the riverfront trail, with volunteers asked to bring gloves and reusable bags.",
-      "paragraph_index": 2,
+      "paragraph_index": 1,
       "role": "authorial",
       "attribution": {
         "speaker": null,
@@ -66,11 +53,11 @@
       "role_basis": "default"
     },
     {
-      "id": "span-4",
-      "start": 209,
-      "end": 322,
+      "id": "span-3",
+      "start": 195,
+      "end": 308,
       "text": "Organizers said the event has grown every year since it began, drawing dozens of participants from nearby blocks.",
-      "paragraph_index": 3,
+      "paragraph_index": 2,
       "role": "authorial",
       "attribution": {
         "speaker": null,
@@ -126,7 +113,13 @@
     "pipeline_version": "media-lens-0.1.0",
     "preparation": {
       "version": "0.1.0",
-      "extractor": "fixture"
+      "extractor": "trafilatura",
+      "extractor_version": "2.2.0",
+      "extraction_status": "ok",
+      "body_sha256": "e5fc8f19ab93c06bb024507b05b535d41c864fe69ce66b127024da5d9dbf4498",
+      "content_type": "text/html",
+      "fetch_status": "not_fetched",
+      "fetched_at": null
     },
     "jev": {
       "mode": "fixture",

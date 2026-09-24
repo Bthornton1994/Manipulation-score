@@ -17,8 +17,8 @@
     "modified_at": null,
     "timestamp_precision": "time",
     "language": "en",
-    "text_sha256": "38ba6ff3b8435fe334682726a5ab61400100b6422a116770eda3e138ec7705db",
-    "text_length_chars": 187,
+    "text_sha256": "7c9fe21c542447c837561c02f26eae32ac1a8cdd2b42e8995ddccd800c0f75df",
+    "text_length_chars": 173,
     "paywall_detected": true,
     "authorization": {
       "user_asserted_public": true,
@@ -73,7 +73,13 @@
     "pipeline_version": "media-lens-0.1.0",
     "preparation": {
       "version": "0.1.0",
-      "extractor": "fixture"
+      "extractor": "trafilatura",
+      "extractor_version": "2.2.0",
+      "extraction_status": "ok",
+      "body_sha256": "95a3d8bf61465a2cdd98925053692ec77a8e9557d5880dcff78905325a0525e0",
+      "content_type": "text/html",
+      "fetch_status": "not_fetched",
+      "fetched_at": null
     },
     "jev": {
       "mode": "disabled",

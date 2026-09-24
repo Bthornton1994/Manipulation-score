@@ -66,7 +66,13 @@
     "pipeline_version": "media-lens-0.1.0",
     "preparation": {
       "version": "0.1.0",
-      "extractor": "fixture"
+      "extractor": "trafilatura",
+      "extractor_version": "2.2.0",
+      "extraction_status": "ok",
+      "body_sha256": "caa3cdd70daec48d8f37c840e94a9aaf01395eb6f082db2f71ca37e0a7e45a74",
+      "content_type": "text/html",
+      "fetch_status": "not_fetched",
+      "fetched_at": null
     },
     "jev": {
       "mode": "disabled",

@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url';
 
 export const TRAFILATURA_VERSION = '2.2.0';
 export const PY3LANGID_VERSION = '0.4.0';
+export const MIN_PYTHON_MAJOR = 3;
+export const MIN_PYTHON_MINOR = 12;
 export const EXTRACT_TIMEOUT_MS = 15000;
 export const MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
 export const MAX_INPUT_BYTES = 3 * 1024 * 1024;
@@ -67,6 +69,55 @@ export function createExtractionGate(maxConcurrent) {
 }
 
 const defaultGate = createExtractionGate(MAX_CONCURRENT_EXTRACTIONS);
+const pythonVersionChecks = new Map();
+
+export function pythonVersionIsSupported(versionText) {
+  const match = /^(\d+)\.(\d+)/.exec(String(versionText || '').trim());
+  if (!match) return false;
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  return major > MIN_PYTHON_MAJOR || (major === MIN_PYTHON_MAJOR && minor >= MIN_PYTHON_MINOR);
+}
+
+function probePythonVersion(pythonBin) {
+  if (!pythonVersionChecks.has(pythonBin)) {
+    pythonVersionChecks.set(
+      pythonBin,
+      new Promise((resolve) => {
+        let child;
+        try {
+          child = spawn(pythonBin, ['-c', 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")'], {
+            stdio: ['ignore', 'pipe', 'ignore'],
+            windowsHide: true
+          });
+        } catch {
+          resolve('');
+          return;
+        }
+        let out = '';
+        const timer = setTimeout(() => {
+          try {
+            child.kill('SIGKILL');
+          } catch {
+            // The probe already exited.
+          }
+        }, 3000);
+        child.stdout.on('data', (chunk) => {
+          out += chunk;
+        });
+        child.on('error', () => {
+          clearTimeout(timer);
+          resolve('');
+        });
+        child.on('close', () => {
+          clearTimeout(timer);
+          resolve(out.trim());
+        });
+      })
+    );
+  }
+  return pythonVersionChecks.get(pythonBin);
+}
 
 function failure(errorCode) {
   return { ...EMPTY_RESULT, error_code: errorCode };
@@ -196,6 +247,9 @@ export async function runExtractor(payload, options = {}) {
     return failure('spawn_failed');
   }
   if (Buffer.byteLength(stdin) > maxInputBytes) return failure('input_limit');
+
+  const versionText = options.pythonVersionText ?? (await probePythonVersion(command[0]));
+  if (!pythonVersionIsSupported(versionText)) return failure('python_version');
 
   const gate = options.gate ?? defaultGate;
   const acquired = await gate.acquire(timeoutMs);

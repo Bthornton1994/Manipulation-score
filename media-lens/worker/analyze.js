@@ -136,7 +136,10 @@ export async function analyze({
       consentAt
     });
   }
-  if (prepared.artifact.language === 'und' && prepared.extraction?.languageScope === 'article_html') {
+  if (
+    prepared.artifact.language === 'und' &&
+    (prepared.extraction?.languageScope === 'article_html' || prepared.extraction?.languageScope === 'pasted_text')
+  ) {
     return buildAbstentionOnlyGraph({
       prepared,
       reason: 'unsupported_language',

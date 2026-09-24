@@ -13,6 +13,8 @@ The Node worker has no npm dependency on these packages. Live URL retrieval stay
 
 ## Runtime prerequisite
 
+Python **3.12 or newer** is required. numpy 2.5.3 in `requirements.txt` does not install on older interpreters. CI uses Python 3.12. `install.sh` exits before creating a virtualenv when `python3` is older than 3.12. The worker also refuses to extract when the `python3` on `PATH` is older than 3.12, and `extract_html.py` returns `python_version` before it imports Trafilatura.
+
 CI installs this pin into a virtualenv and puts that environment's `python3` on `PATH` before tests. Copying the repo to `ml-jev` does not. `docs/media-lens-frontend-deployment.md` copies the checkout and Caddy site files. It does not create this virtualenv, and nothing in the repo starts a host install.
 
 On the worker host, before article preparation can succeed, install the pin and put its `bin` directory on the worker `PATH`:

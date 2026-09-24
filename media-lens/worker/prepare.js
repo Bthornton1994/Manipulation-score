@@ -12,7 +12,7 @@
 // fusion.js, not here; this module only extracts structure.
 
 import { createHash } from 'node:crypto';
-import { detectTextLanguage, extractLocalArticle, schemaLanguage, TRAFILATURA_VERSION } from './trafilatura-extract.js';
+import { detectTextLanguage, extractLocalArticle, schemaLanguage } from './trafilatura-extract.js';
 
 const VOID_ELEMENTS = new Set([
   'area',
@@ -447,7 +447,6 @@ function matchParagraphs(text) {
 function keepExtractedBlock(block, paragraphs) {
   const normalized = normalizeMatchText(block.text || '');
   if (!normalized) return false;
-  if (block.role === 'byline_meta') return true;
   return paragraphs.has(normalized);
 }
 
@@ -490,7 +489,7 @@ function extractionRecord({ status, extracted, bodySha256, contentType, fetchSta
   return {
     status,
     languageScope,
-    extractorVersion: extracted?.extractor_version || TRAFILATURA_VERSION,
+    extractorVersion: extracted?.extractor_version || null,
     languageDetectorVersion: extracted?.language_detector_version || null,
     bodySha256,
     contentType,
@@ -548,7 +547,7 @@ export function enginePreparation(prepared) {
   return {
     version: '0.1.0',
     extractor: pasted ? 'pasted' : 'trafilatura',
-    extractor_version: pasted ? null : extraction.extractorVersion || TRAFILATURA_VERSION,
+    extractor_version: pasted ? null : extraction.extractorVersion || null,
     extraction_status: extraction.status || (pasted ? 'not_html' : 'not_extracted'),
     body_sha256: pasted ? null : extraction.bodySha256 || null,
     content_type: extraction.contentType ?? null,
@@ -720,7 +719,7 @@ export function emptyPreparedArtifactStub({ inputMode, url = null, kind = 'artic
     extraction: {
       status: 'not_extracted',
       languageScope: 'none',
-      extractorVersion: inputMode === 'pasted_text' ? null : TRAFILATURA_VERSION,
+      extractorVersion: null,
       languageDetectorVersion: null,
       bodySha256: null,
       contentType: null,

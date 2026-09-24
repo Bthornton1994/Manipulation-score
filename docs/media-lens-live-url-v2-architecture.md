@@ -400,12 +400,17 @@ Implementation note: Node `fetch` may use environment proxies. The pinned client
 
 ### 10.2 Preparation (reuse `prepare.js`)
 
-`prepareFromHtml` runs pinned local Trafilatura 2.2.0 on HTML the worker already holds, then keeps the existing span builder for roles, quotes, and offsets. Trafilatura does not fetch the URL. Language is `en` only when detection says English and the declared `html` language does not disagree; otherwise it is `und`.
+`prepareFromHtml` runs pinned local Trafilatura 2.2.0 on HTML the worker already holds, then keeps the existing span builder for roles, quotes, and offsets. Trafilatura does not fetch the URL. Language is `en` only when detection says English and the declared `html` language does not disagree; otherwise it is `und`. Pasted text with language `und` abstains for the same reason.
+
+Block selection after Trafilatura returns text:
+
+1. Select the first `<article>` element, or the document root when the page has no `<article>`.
+2. Keep a walked block, including `byline_meta`, only when its normalized text appears in the Trafilatura paragraph text.
+3. If no content blocks remain, fall back to one block per Trafilatura line. The first line is the headline and later lines are authorial.
 
 Existing behavior remains the contract:
 
 - Strip `script`, `style`, `template`, comments, hidden nodes.
-- Prefer `<article>` or the largest text-bearing block.
 - Parse metadata (`og:title`, canonical, JSON-LD dates) with `JSON.parse` only — never `eval`.
 - Paywall markers → graph-level `paywall` abstention. No cookie retry, no AMP, no cached Google/archive mirrors.
 - Span roles assigned deterministically; Jev may only move `authorial` to `uncertain` on disagreement, never to `quoted`.

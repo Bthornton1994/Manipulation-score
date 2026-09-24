@@ -17,8 +17,8 @@
     "modified_at": null,
     "timestamp_precision": "time",
     "language": "en",
-    "text_sha256": "43e8866aa8472fb03ae5f4d6fe3e0ff6ef2581355605adf61fb9c1ab17690c0b",
-    "text_length_chars": 411,
+    "text_sha256": "1ef5b6def74467a883388f16e2d1102f5d9eb1ef91f287c08e6d937d7d2fc0e3",
+    "text_length_chars": 395,
     "paywall_detected": false,
     "authorization": {
       "user_asserted_public": true,
@@ -42,21 +42,21 @@
     {
       "id": "span-2",
       "start": 47,
-      "end": 62,
-      "text": "By Priya Nandan",
+      "end": 184,
+      "text": "The regional transit authority proposed a 12 percent fare increase on Wednesday, citing rising maintenance costs across the rail network.",
       "paragraph_index": 1,
-      "role": "byline_meta",
+      "role": "authorial",
       "attribution": {
         "speaker": null,
         "cue": null
       },
-      "role_basis": "html_structure"
+      "role_basis": "default"
     },
     {
       "id": "span-3",
-      "start": 63,
-      "end": 200,
-      "text": "The regional transit authority proposed a 12 percent fare increase on Wednesday, citing rising maintenance costs across the rail network.",
+      "start": 185,
+      "end": 294,
+      "text": "Riders and advocacy groups say the increase would burden low-income commuters who depend on the system daily.",
       "paragraph_index": 2,
       "role": "authorial",
       "attribution": {
@@ -67,23 +67,10 @@
     },
     {
       "id": "span-4",
-      "start": 201,
-      "end": 310,
-      "text": "Riders and advocacy groups say the increase would burden low-income commuters who depend on the system daily.",
-      "paragraph_index": 3,
-      "role": "authorial",
-      "attribution": {
-        "speaker": null,
-        "cue": null
-      },
-      "role_basis": "default"
-    },
-    {
-      "id": "span-5",
-      "start": 311,
-      "end": 411,
+      "start": 295,
+      "end": 395,
       "text": "A spokesperson for the agency said the change would take effect in January if approved by the board.",
-      "paragraph_index": 4,
+      "paragraph_index": 3,
       "role": "authorial",
       "attribution": {
         "speaker": null,
@@ -100,14 +87,14 @@
       "strength": "candidate",
       "localization": "span",
       "span_ids": [
-        "span-4"
+        "span-3"
       ],
       "authorial_attribution": "authorial",
       "evidence": {
         "engine": "jev",
         "question_id": "influence_signal",
         "top_probability": 0.5,
-        "answers_ref": "span-4"
+        "answers_ref": "span-3"
       },
       "review_status": "auto",
       "ui_phrase": "Observed influence signal"
@@ -117,7 +104,7 @@
     {
       "id": "claim-1",
       "span_ids": [
-        "span-3"
+        "span-2"
       ],
       "text": "The regional transit authority proposed a 12 percent fare increase on Wednesday, citing rising maintenance costs across the rail network.",
       "kind": "statistic",

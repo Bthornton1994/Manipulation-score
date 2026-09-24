@@ -181,9 +181,9 @@ Production-shaped answers under `media-lens/fixtures/jev/` were replayed locally
 
 Rows: 18. Matches: 17. Disagreements: 1.
 
-- `synthetic-05-paywall` / `span-3`: expected vague_authority/candidate vs graph none/n/a
+- `synthetic-05-paywall` / `span-2`: expected vague_authority/candidate vs graph none/n/a
 
-The synthetic-05-paywall span-3 row is the pipeline-versus-answer-file case: the stored graph abstains for insufficient text and paywall, so it has no Jev observation, while the recorded answer file still has vague_authority. The shadow projection of that answer is candidate because no deterministic marker flag is stored. This is not a tuned accuracy result.
+The synthetic-05-paywall span-2 row is the pipeline-versus-answer-file case: the stored graph abstains for insufficient text and paywall, so it has no Jev observation, while the recorded answer file still has vague_authority. The shadow projection of that answer is candidate because no deterministic marker flag is stored. This is not a tuned accuracy result.
 
 A disagreement here means the shadow projection (frozen probability thresholds, and candidate downgrade when a marker-gated choice has no marker flag) did not match the stored graph observation. It is not an accuracy score.
 

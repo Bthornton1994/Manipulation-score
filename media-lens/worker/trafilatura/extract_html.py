@@ -14,6 +14,7 @@ import warnings
 
 REQUIRED_TRAFILATURA = "2.2.0"
 REQUIRED_PY3LANGID = "0.4.0"
+MIN_PYTHON = (3, 12)
 
 TAG_RE = re.compile(r"<\s*/?\s*[a-zA-Z][^>]*>", re.S)
 HTML_LANG_RE = re.compile(
@@ -338,6 +339,9 @@ def detect_text(text, language_classifier, versions):
 def main():
     warnings.filterwarnings("ignore")
     logging.disable(logging.CRITICAL)
+    if sys.version_info < MIN_PYTHON:
+        emit(base_payload("error", "python_version"))
+        return 0
     refuse_network()
 
     raw = sys.stdin.read()

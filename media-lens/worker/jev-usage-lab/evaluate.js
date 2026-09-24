@@ -287,8 +287,8 @@ export function renderAccuracyReport({ evaluation, questionSet, generatedAt }) {
     (row) =>
       `- \`${row.fixture_id}\` / \`${row.span_id}\`: expected ${row.expected_signal}/${fmt(row.expected_strength)} vs graph ${row.historical_signal}/${fmt(row.historical_strength)}`
   );
-  const paywallNote = historicalMismatches.some((row) => row.fixture_id === 'synthetic-05-paywall' && row.span_id === 'span-3')
-    ? 'The synthetic-05-paywall span-3 row is the pipeline-versus-answer-file case: the stored graph abstains for insufficient text and paywall, so it has no Jev observation, while the recorded answer file still has vague_authority. The shadow projection of that answer is candidate because no deterministic marker flag is stored. This is not a tuned accuracy result.'
+  const paywallNote = historicalMismatches.some((row) => row.fixture_id === 'synthetic-05-paywall' && row.span_id === 'span-2')
+    ? 'The synthetic-05-paywall span-2 row is the pipeline-versus-answer-file case: the stored graph abstains for insufficient text and paywall, so it has no Jev observation, while the recorded answer file still has vague_authority. The shadow projection of that answer is candidate because no deterministic marker flag is stored. This is not a tuned accuracy result.'
     : '';
   return `# Jev accuracy and abstention report (fixture only)
 

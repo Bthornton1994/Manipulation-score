@@ -26,8 +26,8 @@ test('h1 becomes headline, and byline paragraph becomes byline_meta', async () =
   const prepared = await prepareFromHtml({ html, kind: 'article', sourceUrl: 'x', inputMode: 'fixture' });
   assert.equal(prepared.spans[0].role, 'headline');
   assert.equal(prepared.spans[0].role_basis, 'html_structure');
-  const byline = prepared.spans.find((s) => s.role === 'byline_meta');
-  assert.ok(byline);
+  assert.equal(prepared.spans.some((s) => s.role === 'byline_meta'), false);
+  assert.equal(prepared.preparedText.includes('By Jordan Reyes'), false);
 });
 
 test('metadata is extracted from meta tags, canonical link, and author', async () => {

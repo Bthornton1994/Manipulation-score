@@ -112,8 +112,8 @@ test('navigation and sidebar boilerplate stay out of prepared spans while quoted
   for (const span of prepared.spans) {
     assert.equal(prepared.preparedText.slice(span.start, span.end), span.text);
   }
-  const byline = prepared.spans.find((span) => span.role === 'byline_meta');
-  assert.equal(byline.text, 'By Ada Lovelace');
+  assert.equal(prepared.spans.some((span) => span.role === 'byline_meta'), false);
+  assert.equal(prepared.preparedText.includes('By Ada Lovelace'), false);
 });
 
 test('preparation retains the body hash, extractor version, and metadata without the raw HTML', async () => {
@@ -496,9 +496,161 @@ test('a slow extraction does not block /health and does not leave a child runnin
     assert.equal(analyzed.body.observations.length, 0);
     assert.ok(analyzed.body.abstentions.some((entry) => entry.reason === 'engine_failure'));
     assert.equal(JSON.stringify(analyzed.body).includes('Council approves'), false);
+    assert.equal(analyzed.body.engine.preparation.extractor_version, null);
   } finally {
     server.close();
   }
   assert.ok(pid);
   assert.equal(processAlive(pid), false);
+});
+
+test('Python 3.12 is the documented floor and an older interpreter does not extract', async () => {
+  const [deps, installer, deploy, workflow, script] = await Promise.all([
+    readFile('media-lens/worker/trafilatura/DEPS.md', 'utf8'),
+    readFile('media-lens/worker/trafilatura/install.sh', 'utf8'),
+    readFile('docs/media-lens-frontend-deployment.md', 'utf8'),
+    readFile('.github/workflows/ci.yml', 'utf8'),
+    readFile('media-lens/worker/trafilatura/extract_html.py', 'utf8')
+  ]);
+  for (const source of [deps, installer, deploy]) {
+    assert.match(source, /3\.12/);
+  }
+  assert.match(workflow, /python-version: '3\.12'/);
+  assert.match(script, /MIN_PYTHON = \(3, 12\)/);
+  assert.match(installer, /sys\.version_info >= \(3, 12\)/);
+  let spawned = false;
+  const result = await runExtractor(
+    { html: `<p>${SECRET}</p>` },
+    {
+      pythonVersionText: '3.11.9',
+      onSpawn() {
+        spawned = true;
+      }
+    }
+  );
+  assert.equal(result.error_code, 'python_version');
+  assert.equal(result.extractor_version, null);
+  assert.equal(result.text, null);
+  assert.equal(spawned, false);
+  const prepared = await prepareFromHtml({
+    html: `<p>${SECRET}</p>`,
+    inputMode: 'fixture',
+    extractImpl: async () => result
+  });
+  const graph = await analyzePrepared(prepared);
+  assert.equal(graph.engine.preparation.extractor_version, null);
+  assert.equal(validate(graph).valid, true);
+});
+
+test('unavailable, timeout, and busy failures do not record Trafilatura 2.2.0', async () => {
+  const cases = [
+    { status: 'error', error_code: 'extractor_unavailable', extractor_version: null },
+    { status: 'error', error_code: 'timeout', extractor_version: null },
+    { status: 'error', error_code: 'busy', extractor_version: null }
+  ];
+  for (const extracted of cases) {
+    const prepared = await prepareFromHtml({
+      html: '<html lang="en"><body><p>Visible paragraph that must not stamp a version.</p></body></html>',
+      sourceUrl: 'https://fictional-daily.example/fail',
+      inputMode: 'fixture',
+      extractImpl: async () => extracted
+    });
+    const graph = await analyzePrepared(prepared);
+    assert.equal(graph.engine.preparation.extraction_status, 'error', extracted.error_code);
+    assert.equal(graph.engine.preparation.extractor_version, null, extracted.error_code);
+    assert.equal(validate(graph).valid, true, extracted.error_code);
+    assert.ok(graph.abstentions.some((entry) => entry.reason === 'engine_failure'));
+  }
+});
+
+test('non-English pasted text abstains as unsupported_language and does not call Jev', async () => {
+  const serverSource = await readFile('media-lens/worker/server.js', 'utf8');
+  assert.match(serverSource, /live_pasted_text_disabled/);
+  const prepared = await prepareFromPastedText({
+    text: 'El ayuntamiento votó el martes para aprobar una obra de drenaje en el centro después de tres temporadas de inundaciones repetidas en el distrito. El alcalde dijo que las obras empezarán este año.'
+  });
+  assert.equal(prepared.artifact.language, 'und');
+  let calls = 0;
+  const graph = await analyze({
+    prepared,
+    config: loadConfig({}),
+    jevAdapter: {
+      mode: 'disabled',
+      analyzeSpans: async () => {
+        calls += 1;
+        return { answersBySpanId: {}, failedSpanIds: [], calls: 0, failures: 0, elapsedMs: 0, modelReported: null, modelMatch: null };
+      }
+    },
+    newsjackAdapter: createNewsjackAdapter({ mode: 'disabled' }),
+    userAssertedPublic: true,
+    consentAt: '2026-09-18T00:00:00.000Z'
+  });
+  assert.equal(calls, 0);
+  assert.equal(graph.observations.length, 0);
+  assert.ok(graph.abstentions.some((entry) => entry.reason === 'unsupported_language'));
+  assert.equal(validate(graph).valid, true);
+});
+
+test('a byline absent from the extractor text is dropped and a kept byline is not sent to Jev', async () => {
+  const body = 'The council voted on Tuesday to approve the drainage plan after the river flooded downtown streets and the public works director described the budget for the next construction season.';
+  const html = `<html lang="en"><body><article><h1>Council approves drainage</h1><p class="byline">By Ada Lovelace</p><p>${body}</p></article></body></html>`;
+  const dropped = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/byline',
+    inputMode: 'fixture',
+    extractImpl: async () => ({
+      status: 'ok',
+      extractor_version: TRAFILATURA_VERSION,
+      detected_language: 'en',
+      html_lang: 'en',
+      text: `Council approves drainage\n${body}`
+    })
+  });
+  assert.equal(dropped.spans.some((span) => span.role === 'byline_meta'), false);
+  assert.equal(dropped.preparedText.includes('By Ada Lovelace'), false);
+  for (const span of dropped.spans) {
+    assert.equal(dropped.preparedText.slice(span.start, span.end), span.text);
+  }
+
+  const kept = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/byline',
+    inputMode: 'fixture',
+    extractImpl: async () => ({
+      status: 'ok',
+      extractor_version: TRAFILATURA_VERSION,
+      detected_language: 'en',
+      html_lang: 'en',
+      text: `Council approves drainage\nBy Ada Lovelace\n${body}`
+    })
+  });
+  const byline = kept.spans.find((span) => span.role === 'byline_meta');
+  assert.equal(byline.text, 'By Ada Lovelace');
+  assert.equal(kept.preparedText.slice(byline.start, byline.end), byline.text);
+  let jevTexts = [];
+  await analyze({
+    prepared: kept,
+    config: loadConfig({}),
+    jevAdapter: {
+      mode: 'disabled',
+      analyzeSpans: async (spans) => {
+        jevTexts = spans.map((span) => span.text);
+        return { answersBySpanId: new Map(), failedSpanIds: [], calls: 0, failures: 0, elapsedMs: 0, modelReported: null, modelMatch: null };
+      }
+    },
+    newsjackAdapter: createNewsjackAdapter({ mode: 'disabled' }),
+    userAssertedPublic: true,
+    consentAt: '2026-09-18T00:00:00.000Z'
+  });
+  assert.equal(jevTexts.includes('By Ada Lovelace'), false);
+  assert.ok(jevTexts.some((text) => text.includes('council voted')));
+});
+
+test('architecture section 10.2 matches first-article Trafilatura matching', async () => {
+  const doc = await readFile('docs/media-lens-live-url-v2-architecture.md', 'utf8');
+  const section = doc.split('### 10.2 Preparation')[1].split('### 10.3')[0];
+  assert.equal(section.includes('largest text-bearing block'), false);
+  assert.match(section, /first `<article>`/);
+  assert.match(section, /Trafilatura paragraph/);
+  assert.match(section, /fall back to one block per Trafilatura line/);
 });

@@ -29,10 +29,11 @@ site configuration. It serves only:
 `/health` and `/analyze` proxy to the worker at `127.0.0.1:8787`. No worker
 source, fixtures, tests, repository documentation, or credentials are served.
 
-Article preparation needs the pinned Trafilatura virtualenv on the worker
-`PATH`. This deployment does not install it. Run
-`media-lens/worker/trafilatura/install.sh` on the host as documented in
-`media-lens/worker/trafilatura/DEPS.md` before expecting extraction to succeed.
+Article preparation needs Python 3.12 or newer and the pinned Trafilatura
+virtualenv on the worker `PATH`. numpy 2.5.3 does not install on an older
+interpreter. This deployment does not install the virtualenv and does not run
+`install.sh` on the host. When an operator installs it, `install.sh` refuses
+a `python3` older than 3.12. See `media-lens/worker/trafilatura/DEPS.md`.
 
 The page resolves its API base from the current origin on the live host. In a
 local browser preview it continues to use `http://127.0.0.1:8787` and fixture

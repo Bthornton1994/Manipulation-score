@@ -135,7 +135,7 @@ test('hard Jev cap (160) fail-closes with controlled abstention when span budget
   const config = loadConfig({ MEDIA_LENS_MODE: 'live', MEDIA_LENS_ENABLE_LIVE: 'true' });
   config.limits = { ...config.limits, maxJevCallsPerAnalysis: 2 };
 
-  const prepared = await prepareFromPastedText({ text: 'Word '.repeat(200) });
+  const prepared = await prepareFromPastedText({ text: 'The council voted on Tuesday to approve the drainage plan. '.repeat(12) });
   prepared.artifact.inputMode = 'url';
   prepared.spans = Array.from({ length: 3 }, (_, i) => ({
     id: `span-${i}`,
@@ -465,7 +465,7 @@ test('live URL oversized_input uses the exact locked copy string', async () => {
   const config = loadConfig({ MEDIA_LENS_MODE: 'live', MEDIA_LENS_ENABLE_LIVE: 'true' });
   config.limits = { ...config.limits, maxPreparedTextChars: 100 };
 
-  const prepared = await prepareFromPastedText({ text: 'Word '.repeat(80) });
+  const prepared = await prepareFromPastedText({ text: 'The council voted on Tuesday to approve the drainage plan. '.repeat(8) });
   prepared.artifact.inputMode = 'url';
 
   const graph = await analyze({

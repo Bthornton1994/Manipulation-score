@@ -599,15 +599,16 @@ export function createServer(config = loadConfig(), options = {}) {
             disclosureShown: true
           });
 
-          if (jevAdapter.mode === 'live' && (rawGraph.engine?.jev?.calls || 0) > 0) {
-            const budgetRecord = typesafeBudget.recordCalls(rawGraph.engine.jev.calls);
-            if (budgetRecord.shouldWarn) {
+          if (jevAdapter.mode === 'live') {
+            const budgetOutcome = typesafeBudget.consumeReservationOutcome?.();
+            if (budgetOutcome?.shouldWarn) {
+              const snapshot = typesafeBudget.getSnapshot();
               const alertMessage = buildBudgetWarnAlert({
-                estimatedUsd: budgetRecord.estimatedUsd,
+                estimatedUsd: snapshot.estimatedUsd,
                 warnUsd: config.typesafeBudget.warnUsd,
                 stopUsd: config.typesafeBudget.stopUsd,
-                basis: budgetRecord.basis,
-                calculationInputs: budgetRecord.calculationInputs
+                basis: snapshot.basis,
+                calculationInputs: snapshot.calculationInputs
               });
               alertTransport.send(alertMessage).catch(() => {});
             }

@@ -776,6 +776,7 @@ export async function buildNarrowShadowReport(input = {}) {
       shells.set(spanId, shell);
       if (!result.ok) {
         providerFailures += 1;
+        if (typeof costLedger.unreserve === 'function') costLedger.unreserve();
         continue;
       }
       shell.model_reported = result.model_reported;

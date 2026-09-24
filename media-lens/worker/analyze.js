@@ -158,7 +158,21 @@ export async function analyze({
       consentAt
     });
   }
-  if (jevAdapter.mode === 'live' && typesafeBudget?.wouldExceed?.(spansForJev.length)) {
+  let budgetReserved = 0;
+  if (jevAdapter.mode === 'live' && typesafeBudget?.tryReserveCalls) {
+    const reservation = typesafeBudget.tryReserveCalls(spansForJev.length);
+    if (!reservation.ok) {
+      return buildAbstentionOnlyGraph({
+        prepared,
+        reason: 'engine_unavailable',
+        message: 'This analysis would exceed the configured TypeSafe ESTIMATED monthly budget, so no live Jev analysis was performed.',
+        config,
+        userAssertedPublic,
+        consentAt
+      });
+    }
+    budgetReserved = reservation.reserved;
+  } else if (jevAdapter.mode === 'live' && typesafeBudget?.wouldExceed?.(spansForJev.length)) {
     return buildAbstentionOnlyGraph({
       prepared,
       reason: 'engine_unavailable',
@@ -334,6 +348,7 @@ export async function analyze({
     timer = setTimeout(() => resolve(TIMED_OUT), timeoutMs);
   });
 
+  let actualJevCalls = 0;
   try {
     const result = await Promise.race([runPipeline(), timeoutPromise]);
     if (result === TIMED_OUT) {
@@ -347,9 +362,13 @@ export async function analyze({
         consentAt
       });
     }
+    actualJevCalls = result?.engine?.jev?.calls ?? 0;
     return result;
   } finally {
     clearTimeout(timer);
+    if (budgetReserved > 0 && typesafeBudget?.finalizeReservedCalls) {
+      typesafeBudget.finalizeReservedCalls(budgetReserved, actualJevCalls);
+    }
   }
 }
 

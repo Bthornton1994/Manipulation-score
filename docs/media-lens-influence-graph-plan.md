@@ -17,7 +17,7 @@ Status of the conflict gate: one owner decision is required before Step 8 (priva
 
 ## 1. Architecture decision
 
-Decision: a local worker sidecar (`media-lens/worker/`, Node, `node:http`, zero dependencies) owns all network, keys, limits, and fusion. The browser page `media-lens/index.html` is a thin renderer that talks only to that worker. The static PWA and every Clarity file stay byte-identical.
+Decision: a local worker sidecar (`media-lens/worker/`, Node, `node:http`, no npm dependencies) owns all network, keys, limits, and fusion. Article HTML preparation calls pinned local Trafilatura 2.2.0 (Apache-2.0) on markup the worker already holds; that extractor does not fetch URLs and is not shipped in the browser bundle. The browser page `media-lens/index.html` is a thin renderer that talks only to that worker. The static PWA and every Clarity file stay byte-identical.
 
 Why not the alternatives:
 
@@ -137,7 +137,7 @@ abstentions[]:
 
 engine:
   pipeline_version: "media-lens-0.1.0"
-  preparation: { version, extractor: "html-lite" | "pasted" | "fixture" }
+  preparation: { version, extractor: "trafilatura" | "pasted" | "fixture", extractor_version, extraction_status, body_sha256, content_type, fetch_status, fetched_at }
   jev: { mode: "fixture" | "live" | "disabled", model_requested: "jev-1.13.0", model_reported: string | null, model_match: boolean | null,
          question_set: "influence-questions.v1", question_set_sha256, calls, failures, elapsed_ms }
   newsjack: { mode: "fixture" | "artifacts" | "cli" | "disabled", version: string | null, artifacts: string[] }

@@ -295,7 +295,13 @@
     "pipeline_version": "media-lens-0.1.0",
     "preparation": {
       "version": "0.1.0",
-      "extractor": "fixture"
+      "extractor": "trafilatura",
+      "extractor_version": "2.2.0",
+      "extraction_status": "ok",
+      "body_sha256": "d00cb633f1c7656bb5313b13ffd21990b867a2f7d0d21a93d2dffb4fde52fa7a",
+      "content_type": "text/html",
+      "fetch_status": "not_fetched",
+      "fetched_at": null
     },
     "jev": {
       "mode": "fixture",

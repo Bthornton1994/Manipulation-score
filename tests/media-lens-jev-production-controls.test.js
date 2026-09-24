@@ -902,7 +902,10 @@ test('server emits budget warn alert through injected mock transport without blo
         }
       }),
       fetchArticle: async () => ({
-        html: '<html><body><p>' + 'Word '.repeat(200) + '</p></body></html>'
+        html:
+          '<html lang="en"><body><p>' +
+          'The council voted on Tuesday to approve the drainage plan after the river flooded downtown streets. '.repeat(12) +
+          '</p></body></html>'
       })
     })
   );

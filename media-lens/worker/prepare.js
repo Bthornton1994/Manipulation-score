@@ -3,7 +3,8 @@
 // section 7. This module never fetches a network resource itself; the
 // worker (server.js/analyze.js) decides whether html/text came from a URL
 // fetch (live mode only), pasted text, or a fixture file, and passes the
-// already-obtained markup/text in here.
+// already-obtained markup/text in here. HTML body isolation uses pinned
+// local Trafilatura on that markup. Trafilatura is not given a URL.
 //
 // Article text is treated as untrusted data throughout: nothing here
 // executes scripts, follows redirects, or evaluates JSON-LD as code (JSON.parse
@@ -11,6 +12,7 @@
 // fusion.js, not here; this module only extracts structure.
 
 import { createHash } from 'node:crypto';
+import { detectTextLanguage, extractLocalArticle, schemaLanguage, TRAFILATURA_VERSION } from './trafilatura-extract.js';
 
 const VOID_ELEMENTS = new Set([
   'area',
@@ -422,6 +424,139 @@ function walkBlocks(node, { inSkipContainer } = {}) {
   return blocks;
 }
 
+function sha256Text(value) {
+  return createHash('sha256').update(value, 'utf8').digest('hex');
+}
+
+function normalizeMatchText(text) {
+  return collapseWhitespace(text)
+    .replace(/[\u2018\u2019\u2032]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/\u00a0/g, ' ');
+}
+
+function matchParagraphs(text) {
+  const paragraphs = new Set();
+  for (const part of String(text || '').split(/\n+/)) {
+    const normalized = normalizeMatchText(part);
+    if (normalized) paragraphs.add(normalized);
+  }
+  return paragraphs;
+}
+
+function keepExtractedBlock(block, paragraphs) {
+  const normalized = normalizeMatchText(block.text || '');
+  if (!normalized) return false;
+  if (block.role === 'byline_meta') return true;
+  return paragraphs.has(normalized);
+}
+
+function contentBlocks(blocks) {
+  return blocks.filter((block) => block.role !== 'byline_meta' && block.role !== 'boilerplate');
+}
+
+function blocksFromExtractedText(text) {
+  const lines = String(text || '')
+    .split(/\n+/)
+    .map((line) => collapseWhitespace(line))
+    .filter((line) => line.length > 0);
+  return lines.map((line, index) => ({
+    role: index === 0 ? 'headline' : 'authorial',
+    roleBasis: index === 0 ? 'html_structure' : 'default',
+    text: line,
+    attribution: { speaker: null, cue: null },
+    splitQuotes: index !== 0
+  }));
+}
+
+function dateOnly(value) {
+  if (typeof value !== 'string') return null;
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+}
+
+function mergeMetadata(local, extracted) {
+  return {
+    title: local.title || extracted.title || null,
+    author: local.author || extracted.author || null,
+    siteName: local.siteName || null,
+    canonical: local.canonical,
+    publishedAt: local.publishedAt || dateOnly(extracted.date),
+    modifiedAt: local.modifiedAt,
+    isAccessibleForFree: local.isAccessibleForFree
+  };
+}
+
+function extractionRecord({ status, extracted, bodySha256, contentType, fetchStatus, fetchedAt, languageScope }) {
+  return {
+    status,
+    languageScope,
+    extractorVersion: extracted?.extractor_version || TRAFILATURA_VERSION,
+    languageDetectorVersion: extracted?.language_detector_version || null,
+    bodySha256,
+    contentType,
+    fetchStatus,
+    fetchedAt
+  };
+}
+
+function acquisitionFor(inputMode, acquisition) {
+  if (acquisition) return acquisition;
+  if (inputMode === 'fixture') {
+    return { contentType: 'text/html', fetchStatus: 'not_fetched', fetchedAt: null };
+  }
+  return { contentType: null, fetchStatus: inputMode === 'pasted_text' ? 'not_fetched' : null, fetchedAt: null };
+}
+
+function failedHtmlPreparation({ kind, inputMode, sourceUrl, status, extracted, html, acquisition }) {
+  const acquired = acquisitionFor(inputMode, acquisition);
+  const preparedText = '';
+  return {
+    preparedText,
+    textSha256: sha256Text(preparedText),
+    textLengthChars: 0,
+    spans: [],
+    claimCandidates: [],
+    paywallDetected: false,
+    extraction: extractionRecord({
+      status,
+      extracted,
+      bodySha256: sha256Text(html || ''),
+      contentType: acquired.contentType ?? null,
+      fetchStatus: acquired.fetchStatus ?? null,
+      fetchedAt: acquired.fetchedAt ?? null,
+      languageScope: 'article_html'
+    }),
+    artifact: {
+      kind,
+      inputMode,
+      url: sourceUrl,
+      canonicalUrl: sourceUrl,
+      title: null,
+      byline: null,
+      publisherName: null,
+      publishedAt: null,
+      modifiedAt: null,
+      timestampPrecision: 'none',
+      language: 'und'
+    }
+  };
+}
+
+export function enginePreparation(prepared) {
+  const extraction = prepared.extraction || {};
+  const pasted = prepared.artifact.inputMode === 'pasted_text';
+  return {
+    version: '0.1.0',
+    extractor: pasted ? 'pasted' : 'trafilatura',
+    extractor_version: pasted ? null : extraction.extractorVersion || TRAFILATURA_VERSION,
+    extraction_status: extraction.status || (pasted ? 'not_html' : 'not_extracted'),
+    body_sha256: pasted ? null : extraction.bodySha256 || null,
+    content_type: extraction.contentType ?? null,
+    fetch_status: extraction.fetchStatus ?? null,
+    fetched_at: extraction.fetchedAt ?? null
+  };
+}
+
 function detectPaywall({ jsonLdAccessibleForFree, bodyText }) {
   if (jsonLdAccessibleForFree === false) return true;
   if (PAYWALL_CTA_PATTERN.test(bodyText) && bodyText.length < 400) return true;
@@ -432,12 +567,37 @@ function detectPaywall({ jsonLdAccessibleForFree, bodyText }) {
  * Prepare a document from raw HTML (fixture or live-fetched markup; this
  * function never fetches anything itself).
  */
-export function prepareFromHtml({ html, kind = 'article', sourceUrl = null, inputMode = 'fixture' }) {
-  const root = parseHtml(html);
-  const meta = extractMetadata(root);
+export function prepareFromHtml({
+  html,
+  kind = 'article',
+  sourceUrl = null,
+  inputMode = 'fixture',
+  acquisition = null,
+  extractImpl = extractLocalArticle
+}) {
+  const sourceHtml = typeof html === 'string' ? html : '';
+  const extracted = extractImpl(sourceHtml);
+  const status = extracted?.status;
+  if (status !== 'ok') {
+    return failedHtmlPreparation({
+      kind,
+      inputMode,
+      sourceUrl,
+      status: status || 'error',
+      extracted,
+      html: sourceHtml,
+      acquisition
+    });
+  }
 
+  const root = parseHtml(sourceHtml);
+  const meta = mergeMetadata(extractMetadata(root), extracted);
   const articleRoot = findFirst(root, (n) => n.type === 'element' && n.tag === 'article') || root;
-  const rawBlocks = walkBlocks(articleRoot, {});
+  const paragraphs = matchParagraphs(extracted.text);
+  let rawBlocks = walkBlocks(articleRoot, {}).filter((block) => keepExtractedBlock(block, paragraphs));
+  if (contentBlocks(rawBlocks).length === 0) {
+    rawBlocks = blocksFromExtractedText(extracted.text);
+  }
 
   const builder = new SpanBuilder();
   rawBlocks.forEach((block, i) => {
@@ -446,17 +606,26 @@ export function prepareFromHtml({ html, kind = 'article', sourceUrl = null, inpu
 
   const bodyTextForPaywallCheck = rawBlocks.map((b) => b.text).join(' ');
   const paywallDetected = detectPaywall({ jsonLdAccessibleForFree: meta.isAccessibleForFree, bodyText: bodyTextForPaywallCheck });
-
   const preparedText = builder.text;
-  const textSha256 = createHash('sha256').update(preparedText, 'utf8').digest('hex');
+  const acquired = acquisitionFor(inputMode, acquisition);
+  const language = schemaLanguage({ detected: extracted.detected_language, htmlLang: extracted.html_lang });
 
   return {
     preparedText,
-    textSha256,
+    textSha256: sha256Text(preparedText),
     textLengthChars: preparedText.length,
     spans: builder.spans,
     claimCandidates: builder.claims,
     paywallDetected,
+    extraction: extractionRecord({
+      status: 'ok',
+      extracted,
+      bodySha256: sha256Text(sourceHtml),
+      contentType: acquired.contentType ?? null,
+      fetchStatus: acquired.fetchStatus ?? null,
+      fetchedAt: acquired.fetchedAt ?? null,
+      languageScope: 'article_html'
+    }),
     artifact: {
       kind,
       inputMode,
@@ -468,7 +637,7 @@ export function prepareFromHtml({ html, kind = 'article', sourceUrl = null, inpu
       publishedAt: meta.publishedAt || null,
       modifiedAt: meta.modifiedAt || null,
       timestampPrecision: timestampPrecision(meta.publishedAt),
-      language: 'en'
+      language
     }
   };
 }
@@ -496,8 +665,10 @@ export function prepareFromPastedText({ text, kind = 'other_public' }) {
   });
 
   const preparedText = builder.text;
-  const textSha256 = createHash('sha256').update(preparedText, 'utf8').digest('hex');
+  const textSha256 = sha256Text(preparedText);
   const paywallDetected = PAYWALL_CTA_PATTERN.test(preparedText) && preparedText.length < 400;
+  const detected = detectTextLanguage(text);
+  const language = schemaLanguage({ detected: detected?.detected_language, htmlLang: null });
 
   return {
     preparedText,
@@ -506,6 +677,16 @@ export function prepareFromPastedText({ text, kind = 'other_public' }) {
     spans: builder.spans,
     claimCandidates: builder.claims,
     paywallDetected,
+    extraction: {
+      status: detected?.status === 'ok' ? 'not_html' : detected?.status || 'error',
+      languageScope: 'pasted_text',
+      extractorVersion: null,
+      languageDetectorVersion: detected?.language_detector_version || null,
+      bodySha256: null,
+      contentType: null,
+      fetchStatus: 'not_fetched',
+      fetchedAt: null
+    },
     artifact: {
       kind,
       inputMode: 'pasted_text',
@@ -517,7 +698,7 @@ export function prepareFromPastedText({ text, kind = 'other_public' }) {
       publishedAt: null,
       modifiedAt: null,
       timestampPrecision: 'none',
-      language: 'en'
+      language
     }
   };
 }
@@ -528,14 +709,24 @@ export function prepareFromPastedText({ text, kind = 'other_public' }) {
  * or was rejected) but the caller still needs to build a valid,
  * abstention-only influence-graph.v1 document rather than a raw error.
  */
-export function emptyPreparedArtifactStub({ inputMode, url = null, kind = 'article' }) {
+export function emptyPreparedArtifactStub({ inputMode, url = null, kind = 'article', fetchStatus = null }) {
   return {
     preparedText: '',
-    textSha256: createHash('sha256').update('', 'utf8').digest('hex'),
+    textSha256: sha256Text(''),
     textLengthChars: 0,
     spans: [],
     claimCandidates: [],
     paywallDetected: false,
+    extraction: {
+      status: 'not_extracted',
+      languageScope: 'none',
+      extractorVersion: inputMode === 'pasted_text' ? null : TRAFILATURA_VERSION,
+      languageDetectorVersion: null,
+      bodySha256: null,
+      contentType: null,
+      fetchStatus: fetchStatus ?? (inputMode === 'url' ? null : 'not_fetched'),
+      fetchedAt: null
+    },
     artifact: {
       kind,
       inputMode,
@@ -547,7 +738,7 @@ export function emptyPreparedArtifactStub({ inputMode, url = null, kind = 'artic
       publishedAt: null,
       modifiedAt: null,
       timestampPrecision: 'none',
-      language: 'en'
+      language: 'und'
     }
   };
 }

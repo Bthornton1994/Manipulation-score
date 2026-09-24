@@ -6,7 +6,7 @@ Media Lens produces evidence-linked observations across four separate dimensions
 
 ## Architecture
 
-A local Node `http` worker (`worker/server.js`, zero dependencies) owns all network access, keys, and limits. The browser page (`index.html` + `media-lens.js`) is a thin renderer that only talks to that worker, at `http://127.0.0.1:8787` or `http://localhost:8787` (the only two origins allowed by the page's Content Security Policy).
+A local Node `http` worker (`worker/server.js`, no npm dependencies) owns all network access, keys, and limits. Article HTML already obtained by that worker is prepared with pinned local Trafilatura 2.2.0 (Apache-2.0); the extractor does not fetch URLs and is not part of the browser page. The browser page (`index.html` + `media-lens.js`) is a thin renderer that only talks to that worker, at `http://127.0.0.1:8787` or `http://localhost:8787` (the only two origins allowed by the page's Content Security Policy).
 
 ```
 media-lens/

@@ -1,8 +1,10 @@
 #!/usr/bin/env node
-// Media Lens worker HTTP server: node:http, zero dependencies, listens on
+// Media Lens worker HTTP server: node:http, no npm dependencies, listens on
 // 127.0.0.1 only by default. GET /health, POST /analyze. Owns all network,
-// keys, and limits; the browser page talks only to this process. See
-// docs/media-lens-influence-graph-plan.md section 1.
+// keys, and limits; the browser page talks only to this process. Article
+// HTML preparation shells out to pinned local Trafilatura and does not
+// let that extractor fetch URLs. See docs/media-lens-influence-graph-plan.md
+// section 1 and media-lens/worker/trafilatura/DEPS.md.
 
 import http from 'node:http';
 import { readFile, readdir } from 'node:fs/promises';
@@ -208,7 +210,7 @@ async function preparePayload({ payload, config, fetchArticle }) {
       );
     }
     // Connect-time pin: never call global fetch on a user-supplied URL.
-    const { html } = await (fetchArticle || fetchArticleSafely)(payload.url, {
+    const fetched = await (fetchArticle || fetchArticleSafely)(payload.url, {
       timeoutMs: config.limits.urlFetchTimeoutMs,
       connectTimeoutMs: config.limits.urlFetchConnectTimeoutMs,
       maxBytes: config.limits.urlFetchMaxBytes,
@@ -217,7 +219,17 @@ async function preparePayload({ payload, config, fetchArticle }) {
       parseTimeoutMs: config.limits.urlFetchParseTimeoutMs,
       urlAllowlist: config.urlAllowlist
     });
-    return prepareFromHtml({ html, kind: payload.kind || 'article', sourceUrl: payload.url, inputMode: 'url' });
+    return prepareFromHtml({
+      html: fetched.html,
+      kind: payload.kind || 'article',
+      sourceUrl: payload.url,
+      inputMode: 'url',
+      acquisition: {
+        contentType: fetched.contentType ?? null,
+        fetchStatus: fetched.fetchStatus ?? '200',
+        fetchedAt: fetched.fetchedAt ?? null
+      }
+    });
   }
   throw Object.assign(new Error(`Unknown analyze mode: ${payload.mode}`), { code: 'UNKNOWN_MODE' });
 }
@@ -552,7 +564,11 @@ export function createServer(config = loadConfig(), options = {}) {
             });
           }
           if (PREPARE_FAILURE_AS_ABSTENTION.has(err.code)) {
-            const stub = emptyPreparedArtifactStub({ inputMode: payload.mode === 'url' ? 'url' : 'pasted_text', url: payload.url || null });
+            const stub = emptyPreparedArtifactStub({
+              inputMode: payload.mode === 'url' ? 'url' : 'pasted_text',
+              url: payload.url || null,
+              fetchStatus: err.code || 'fetch_failed'
+            });
             const fallback = await buildAbstentionOnlyGraph({
               prepared: stub,
               reason: 'engine_unavailable',

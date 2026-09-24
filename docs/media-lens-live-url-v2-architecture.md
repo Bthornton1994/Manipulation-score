@@ -400,6 +400,8 @@ Implementation note: Node `fetch` may use environment proxies. The pinned client
 
 ### 10.2 Preparation (reuse `prepare.js`)
 
+`prepareFromHtml` runs pinned local Trafilatura 2.2.0 on HTML the worker already holds, then keeps the existing span builder for roles, quotes, and offsets. Trafilatura does not fetch the URL. Language is `en` only when detection says English and the declared `html` language does not disagree; otherwise it is `und`.
+
 Existing behavior remains the contract:
 
 - Strip `script`, `style`, `template`, comments, hidden nodes.

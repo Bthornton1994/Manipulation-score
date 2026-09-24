@@ -124,7 +124,7 @@ export function assembleGraph({
     abstentions,
     engine: {
       pipeline_version: 'media-lens-0.1.0',
-      preparation: { version: '0.1.0', extractor: engineMeta.extractor },
+      preparation: engineMeta.preparation,
       jev: engineMeta.jev,
       newsjack: engineMeta.newsjack,
       fusion: { version: '0.1.0', thresholds: THRESHOLDS },

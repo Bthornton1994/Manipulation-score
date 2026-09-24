@@ -157,7 +157,7 @@ export async function loadSyntheticFixtureCases({
       throw error;
     }
     const html = await readFile(join(dir, `${fixtureId}.html`), 'utf8');
-    const prepared = prepareFromHtml({
+    const prepared = await prepareFromHtml({
       html,
       kind: 'article',
       sourceUrl: `https://fictional-daily.example/articles/${fixtureId}`,

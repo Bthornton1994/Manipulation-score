@@ -135,7 +135,7 @@ test('hard Jev cap (160) fail-closes with controlled abstention when span budget
   const config = loadConfig({ MEDIA_LENS_MODE: 'live', MEDIA_LENS_ENABLE_LIVE: 'true' });
   config.limits = { ...config.limits, maxJevCallsPerAnalysis: 2 };
 
-  const prepared = prepareFromPastedText({ text: 'Word '.repeat(200) });
+  const prepared = await prepareFromPastedText({ text: 'Word '.repeat(200) });
   prepared.artifact.inputMode = 'url';
   prepared.spans = Array.from({ length: 3 }, (_, i) => ({
     id: `span-${i}`,
@@ -173,7 +173,7 @@ test('perAnalysisTimeoutMs aborts in-flight Jev via shared AbortController', asy
   const config = loadConfig({ MEDIA_LENS_MODE: 'fixture' });
   config.limits = { ...config.limits, perAnalysisTimeoutMs: 60, maxJevCallsPerAnalysis: 160 };
 
-  const prepared = prepareFromPastedText({ text: 'A '.repeat(150) + 'long enough body.' });
+  const prepared = await prepareFromPastedText({ text: 'A '.repeat(150) + 'long enough body.' });
   let abortSeen = false;
   const jevAdapter = {
     mode: 'live',
@@ -217,7 +217,7 @@ test('R1: per-analysis timeout return prevents newsjack and downstream adapter w
   const config = loadConfig({ MEDIA_LENS_MODE: 'fixture' });
   config.limits = { ...config.limits, perAnalysisTimeoutMs: 50, maxJevCallsPerAnalysis: 160 };
 
-  const prepared = prepareFromPastedText({ text: 'A '.repeat(150) + 'long enough body for timeout guard test.' });
+  const prepared = await prepareFromPastedText({ text: 'A '.repeat(150) + 'long enough body for timeout guard test.' });
   let newsjackCalls = 0;
   let cascadeCalls = 0;
 
@@ -291,7 +291,7 @@ test('Fix 1: in-flight newsjack observes shared AbortSignal when per-analysis ti
   const config = loadConfig({ MEDIA_LENS_MODE: 'fixture' });
   config.limits = { ...config.limits, perAnalysisTimeoutMs: 50, maxJevCallsPerAnalysis: 160 };
 
-  const prepared = prepareFromPastedText({ text: 'A '.repeat(150) + 'long enough body for in-flight newsjack abort test.' });
+  const prepared = await prepareFromPastedText({ text: 'A '.repeat(150) + 'long enough body for in-flight newsjack abort test.' });
   let newsjackStarted = false;
   let newsjackAborted = false;
 
@@ -465,7 +465,7 @@ test('live URL oversized_input uses the exact locked copy string', async () => {
   const config = loadConfig({ MEDIA_LENS_MODE: 'live', MEDIA_LENS_ENABLE_LIVE: 'true' });
   config.limits = { ...config.limits, maxPreparedTextChars: 100 };
 
-  const prepared = prepareFromPastedText({ text: 'Word '.repeat(80) });
+  const prepared = await prepareFromPastedText({ text: 'Word '.repeat(80) });
   prepared.artifact.inputMode = 'url';
 
   const graph = await analyze({
@@ -516,7 +516,7 @@ test('analyze fail-closes live Jev when ESTIMATED monthly budget is already stop
 
   let fetchHits = 0;
   const graph = await analyze({
-    prepared: prepareFromPastedText({ text: 'A '.repeat(150) + 'enough text here.' }),
+    prepared: await prepareFromPastedText({ text: 'A '.repeat(150) + 'enough text here.' }),
     config,
     jevAdapter: createJevAdapter({
       mode: 'live',

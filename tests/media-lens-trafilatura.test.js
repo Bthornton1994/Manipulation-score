@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { createServer } from '../media-lens/worker/server.js';
 import { analyze } from '../media-lens/worker/analyze.js';
 import { createJevAdapter } from '../media-lens/worker/adapters/jev.js';
 import { createNewsjackAdapter } from '../media-lens/worker/adapters/newsjack.js';
@@ -12,7 +14,9 @@ import { enginePreparation, prepareFromHtml, prepareFromPastedText } from '../me
 import {
   PY3LANGID_VERSION,
   TRAFILATURA_VERSION,
+  createExtractionGate,
   extractLocalArticle,
+  runExtractor,
   schemaLanguage
 } from '../media-lens/worker/trafilatura-extract.js';
 import { validate } from '../media-lens/schema/validate.js';
@@ -68,7 +72,8 @@ test('pinned Trafilatura and py3langid versions match the worker requirements fi
   assert.match(script, new RegExp(`REQUIRED_PY3LANGID = "${PY3LANGID_VERSION}"`));
   assert.match(deps, /Apache-2\.0/);
   assert.match(deps, new RegExp(TRAFILATURA_VERSION));
-  assert.doesNotMatch(script, /fetch_url\(/);
+  assert.match(script, /socket\.socket\.connect_ex = _refuse_socket_method/);
+  assert.match(deps, /not a kernel network namespace/);
 });
 
 test('extractor refuses a fetch request and does not echo article text on that refusal', () => {
@@ -82,9 +87,9 @@ test('extractor refuses a fetch request and does not echo article text on that r
   assert.equal((refused.stderr || '').includes(SECRET), false);
 });
 
-test('extractor reads HTML already in hand and does not need a URL', () => {
+test('extractor reads HTML already in hand and does not need a URL', async () => {
   const html = `<html lang="en"><head><link rel="canonical" href="https://example.invalid/story"></head><body><article><h1>Council vote</h1><p>The council voted on Tuesday to approve the drainage plan after the river flooded downtown streets.</p></article></body></html>`;
-  const result = extractLocalArticle(html);
+  const result = await extractLocalArticle(html);
   assert.equal(result.status, 'ok');
   assert.equal(result.extractor_version, TRAFILATURA_VERSION);
   assert.equal(result.language_detector_version, PY3LANGID_VERSION);
@@ -92,8 +97,8 @@ test('extractor reads HTML already in hand and does not need a URL', () => {
   assert.doesNotMatch(result.text, /example\.invalid/);
 });
 
-test('navigation and sidebar boilerplate stay out of prepared spans while quoted body text remains an exact slice', () => {
-  const prepared = prepareFromHtml({ html: NAV_HTML, sourceUrl: 'https://fictional-daily.example/nav', inputMode: 'fixture' });
+test('navigation and sidebar boilerplate stay out of prepared spans while quoted body text remains an exact slice', async () => {
+  const prepared = await prepareFromHtml({ html: NAV_HTML, sourceUrl: 'https://fictional-daily.example/nav', inputMode: 'fixture' });
   assert.equal(prepared.extraction.status, 'ok');
   assert.equal(prepared.artifact.language, 'en');
   assert.equal(prepared.spans.some((span) => span.text.includes(SECRET)), false);
@@ -111,12 +116,12 @@ test('navigation and sidebar boilerplate stay out of prepared spans while quoted
   assert.equal(byline.text, 'By Ada Lovelace');
 });
 
-test('preparation retains the body hash, extractor version, and metadata without the raw HTML', () => {
+test('preparation retains the body hash, extractor version, and metadata without the raw HTML', async () => {
   const html = `<!doctype html><html lang="en"><head>
     <meta property="og:title" content="Some headline" />
     <meta property="og:site_name" content="Fictional Daily" />
   </head><body><article><h1>Some headline</h1><p>Enough authorial text to be analyzable in this test case for the drainage vote.</p></article><!-- ${COMMENT} --></body></html>`;
-  const prepared = prepareFromHtml({ html, sourceUrl: 'https://fictional-daily.example/articles/x', inputMode: 'fixture' });
+  const prepared = await prepareFromHtml({ html, sourceUrl: 'https://fictional-daily.example/articles/x', inputMode: 'fixture' });
   assert.equal(prepared.extraction.bodySha256, sha256(html));
   assert.equal(prepared.artifact.publisherName, 'Fictional Daily');
   assert.equal(prepared.artifact.title, 'Some headline');
@@ -130,9 +135,9 @@ test('preparation retains the body hash, extractor version, and metadata without
   assert.equal(JSON.stringify(preparation).includes(html), false);
 });
 
-test('missing metadata can be filled from extraction without labeling the publisher as the hostname', () => {
+test('missing metadata can be filled from extraction without labeling the publisher as the hostname', async () => {
   const html = `<html lang="en"><body><h1>Neighborhood cleanup</h1><p>Volunteers will meet at the riverfront trail on Saturday morning to collect litter and sort recycling.</p></body></html>`;
-  const prepared = prepareFromHtml({ html, sourceUrl: 'https://fictional-daily.example/cleanup', inputMode: 'fixture' });
+  const prepared = await prepareFromHtml({ html, sourceUrl: 'https://fictional-daily.example/cleanup', inputMode: 'fixture' });
   assert.equal(prepared.artifact.title, 'Neighborhood cleanup');
   assert.equal(prepared.artifact.publisherName, null);
   assert.equal(prepared.artifact.byline, null);
@@ -142,7 +147,7 @@ test('non-English and disagreed language labels stay und and do not produce a fi
   const spanish = `<html lang="es"><body><article><h1>El consejo aprueba el drenaje</h1><p>El ayuntamiento votó el martes para aprobar una obra de drenaje en el centro después de tres temporadas de inundaciones repetidas en el distrito.</p><p>El alcalde dijo que las obras empezarán este año y que el presupuesto ya está reservado para los vecinos.</p></article></body></html>`;
   const disagreed = spanish.replace('lang="es"', 'lang="en"');
   for (const html of [spanish, disagreed]) {
-    const prepared = prepareFromHtml({ html, sourceUrl: 'https://fictional-daily.example/es', inputMode: 'fixture' });
+    const prepared = await prepareFromHtml({ html, sourceUrl: 'https://fictional-daily.example/es', inputMode: 'fixture' });
     assert.equal(prepared.artifact.language, 'und');
     let calls = 0;
     const graph = await analyze({
@@ -185,7 +190,7 @@ test('empty, malformed, and unsupported inputs stay distinct and do not analyze'
     { html: '<html></html>', status: 'empty' }
   ];
   for (const item of cases) {
-    const prepared = prepareFromHtml({ html: item.html, sourceUrl: 'https://fictional-daily.example/bad', inputMode: 'fixture' });
+    const prepared = await prepareFromHtml({ html: item.html, sourceUrl: 'https://fictional-daily.example/bad', inputMode: 'fixture' });
     assert.equal(prepared.extraction.status, item.status, item.html);
     assert.equal(prepared.spans.length, 0);
     assert.equal(prepared.artifact.language, 'und');
@@ -198,7 +203,7 @@ test('empty, malformed, and unsupported inputs stay distinct and do not analyze'
 });
 
 test('parse_failed stays distinct from an empty extraction', async () => {
-  const prepared = prepareFromHtml({
+  const prepared = await prepareFromHtml({
     html: '<html><p>Visible paragraph that must not be analyzed after a parse failure.</p></html>',
     sourceUrl: 'https://fictional-daily.example/parse',
     inputMode: 'fixture',
@@ -212,7 +217,7 @@ test('parse_failed stays distinct from an empty extraction', async () => {
 });
 
 test('an extractor error is an engine failure and does not call Jev', async () => {
-  const prepared = prepareFromHtml({
+  const prepared = await prepareFromHtml({
     html: '<html lang="en"><body><p>Visible paragraph that must not be analyzed after an extractor error.</p></body></html>',
     sourceUrl: 'https://fictional-daily.example/err',
     inputMode: 'url',
@@ -242,14 +247,14 @@ test('an extractor error is an engine failure and does not call Jev', async () =
   assert.ok(graph.abstentions.some((entry) => entry.reason === 'engine_failure' && entry.message.startsWith('Article extraction failed')));
 });
 
-test('preparation does not log the article text', () => {
+test('preparation does not log the article text', async () => {
   const logs = [];
   const originals = ['log', 'info', 'warn', 'error', 'debug'].map((method) => [method, console[method]]);
   for (const [method] of originals) {
     console[method] = (...args) => logs.push(args.map((arg) => String(arg)).join(' '));
   }
   try {
-    const prepared = prepareFromHtml({ html: NAV_HTML, sourceUrl: 'https://fictional-daily.example/nav', inputMode: 'fixture' });
+    const prepared = await prepareFromHtml({ html: NAV_HTML, sourceUrl: 'https://fictional-daily.example/nav', inputMode: 'fixture' });
     assert.match(prepared.preparedText, /council voted/);
   } finally {
     for (const [method, original] of originals) console[method] = original;
@@ -259,8 +264,8 @@ test('preparation does not log the article text', () => {
   assert.equal(joined.includes('council voted on Tuesday'), false);
 });
 
-test('pasted text is not labeled English when detection disagrees', () => {
-  const prepared = prepareFromPastedText({
+test('pasted text is not labeled English when detection disagrees', async () => {
+  const prepared = await prepareFromPastedText({
     text: 'El ayuntamiento votó el martes para aprobar una obra de drenaje en el centro después de tres temporadas de inundaciones repetidas en el distrito. El alcalde dijo que las obras empezarán este año.'
   });
   assert.equal(prepared.artifact.language, 'und');
@@ -272,4 +277,228 @@ test('Newsjack adapter module is unchanged by extraction and still does not spaw
   const source = await readFile('media-lens/worker/adapters/newsjack.js', 'utf8');
   assert.match(source, /never spawns the Newsjack CLI/);
   assert.doesNotMatch(source, /trafilatura/);
+});
+
+function processAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function requestJson(server, { method, path, body }) {
+  return new Promise((resolve, reject) => {
+    const address = server.address();
+    const payload = body !== undefined ? JSON.stringify(body) : undefined;
+    const req = http.request(
+      {
+        host: address.address,
+        port: address.port,
+        method,
+        path,
+        headers: payload ? { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) } : {}
+      },
+      (res) => {
+        let raw = '';
+        res.on('data', (chunk) => {
+          raw += chunk;
+        });
+        res.on('end', () => {
+          let parsed = null;
+          try {
+            parsed = JSON.parse(raw);
+          } catch {
+            parsed = raw;
+          }
+          resolve({ status: res.statusCode, body: parsed });
+        });
+      }
+    );
+    req.on('error', reject);
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
+
+function listen(server) {
+  return new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => resolve(server));
+  });
+}
+
+test('pinned dependency connect paths refuse without a live request', () => {
+  const result = runScript({ probe_network: true });
+  assert.equal(result.status, 0, result.stderr);
+  const payload = JSON.parse(result.stdout);
+  assert.ok(Array.isArray(payload.network_probe));
+  for (const row of payload.network_probe) {
+    assert.ok(row.result === 'network_refused' || row.result === 'fetch_refused', `${row.path}=${row.result}`);
+  }
+  const paths = new Set(payload.network_probe.map((row) => row.path));
+  for (const required of [
+    'socket.socket.connect',
+    'socket.socket.connect_ex',
+    'socket.create_connection',
+    'urllib3.util.connection.create_connection',
+    'http.client.HTTPConnection._create_connection',
+    'ssl.SSLSocket.connect_ex',
+    'trafilatura.fetch_url',
+    'htmldate.utils.fetch_url',
+    'courlan.network.redirection_test'
+  ]) {
+    assert.equal(paths.has(required), true, required);
+  }
+  assert.equal(result.stdout.includes(SECRET), false);
+});
+
+test('a timed-out extraction does not leave the child running or log the article', async () => {
+  let pid = null;
+  const logs = [];
+  const originals = ['log', 'info', 'warn', 'error', 'debug'].map((method) => [method, console[method]]);
+  for (const [method] of originals) {
+    console[method] = (...args) => logs.push(args.map((arg) => String(arg)).join(' '));
+  }
+  try {
+    const result = await runExtractor(
+      { html: `<p>${SECRET}</p>` },
+      {
+        gate: createExtractionGate(1),
+        timeoutMs: 400,
+        command: ['python3', '-c', 'import time; time.sleep(30)'],
+        onSpawn(child) {
+          pid = child.pid;
+        }
+      }
+    );
+    assert.equal(result.error_code, 'timeout');
+    assert.equal(result.text, null);
+    assert.equal(JSON.stringify(result).includes(SECRET), false);
+  } finally {
+    for (const [method, original] of originals) console[method] = original;
+  }
+  assert.ok(pid);
+  assert.equal(processAlive(pid), false);
+  assert.equal(logs.join('\n').includes(SECRET), false);
+});
+
+test('oversized extractor output is discarded and the child is killed', async () => {
+  let pid = null;
+  const result = await runExtractor(
+    { html: '<p>short</p>' },
+    {
+      gate: createExtractionGate(1),
+      timeoutMs: 5000,
+      maxOutputBytes: 64,
+      command: ['python3', '-c', 'import sys; sys.stdout.write("Z" * 200000)'],
+      onSpawn(child) {
+        pid = child.pid;
+      }
+    }
+  );
+  assert.equal(result.error_code, 'output_limit');
+  assert.equal(result.status, 'error');
+  assert.equal(result.text, null);
+  assert.equal(JSON.stringify(result).includes('ZZZZ'), false);
+  assert.ok(pid);
+  assert.equal(processAlive(pid), false);
+});
+
+test('input over the byte cap does not spawn a child', async () => {
+  let spawned = false;
+  const result = await runExtractor(
+    { html: 'x'.repeat(100) },
+    {
+      maxInputBytes: 16,
+      onSpawn() {
+        spawned = true;
+      }
+    }
+  );
+  assert.equal(result.error_code, 'input_limit');
+  assert.equal(result.text, null);
+  assert.equal(spawned, false);
+});
+
+test('a second extraction fails closed while the only child slot is in use', async () => {
+  const gate = createExtractionGate(1);
+  let pid = null;
+  const first = runExtractor(
+    { html: '<p>one</p>' },
+    {
+      gate,
+      timeoutMs: 5000,
+      command: ['python3', '-c', 'import time; time.sleep(30)'],
+      onSpawn(child) {
+        pid = child.pid;
+      }
+    }
+  );
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const second = await runExtractor(
+    { html: `<p>${SECRET}</p>` },
+    {
+      gate,
+      timeoutMs: 200,
+      command: ['python3', '-c', 'import time; time.sleep(30)']
+    }
+  );
+  assert.equal(second.error_code, 'busy');
+  assert.equal(second.text, null);
+  assert.equal(JSON.stringify(second).includes(SECRET), false);
+  try {
+    process.kill(-pid, 'SIGKILL');
+  } catch {
+    // The first child already exited.
+  }
+  const firstResult = await first;
+  assert.equal(firstResult.text, null);
+  assert.equal(processAlive(pid), false);
+});
+
+test('a slow extraction does not block /health and does not leave a child running', async () => {
+  let pid = null;
+  const server = await listen(
+    createServer(loadConfig({}), {
+      extractImpl(html) {
+        return runExtractor(
+          { html },
+          {
+            gate: createExtractionGate(1),
+            timeoutMs: 700,
+            command: ['python3', '-c', 'import time; time.sleep(30)'],
+            onSpawn(child) {
+              pid = child.pid;
+            }
+          }
+        );
+      }
+    })
+  );
+  try {
+    const analyzePromise = requestJson(server, {
+      method: 'POST',
+      path: '/analyze',
+      body: { user_asserted_public: true, mode: 'fixture', fixture_id: 'synthetic-01-quoted-vs-authorial' }
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const started = Date.now();
+    const health = await requestJson(server, { method: 'GET', path: '/health' });
+    assert.equal(health.status, 200);
+    assert.equal(health.body.status, 'ok');
+    assert.ok(Date.now() - started < 400);
+    const other = await requestJson(server, { method: 'GET', path: '/health' });
+    assert.equal(other.status, 200);
+    const analyzed = await analyzePromise;
+    assert.equal(analyzed.status, 200);
+    assert.equal(analyzed.body.observations.length, 0);
+    assert.ok(analyzed.body.abstentions.some((entry) => entry.reason === 'engine_failure'));
+    assert.equal(JSON.stringify(analyzed.body).includes('Council approves'), false);
+  } finally {
+    server.close();
+  }
+  assert.ok(pid);
+  assert.equal(processAlive(pid), false);
 });

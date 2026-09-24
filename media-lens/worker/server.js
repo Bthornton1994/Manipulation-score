@@ -2,9 +2,10 @@
 // Media Lens worker HTTP server: node:http, no npm dependencies, listens on
 // 127.0.0.1 only by default. GET /health, POST /analyze. Owns all network,
 // keys, and limits; the browser page talks only to this process. Article
-// HTML preparation shells out to pinned local Trafilatura and does not
-// let that extractor fetch URLs. See docs/media-lens-influence-graph-plan.md
-// section 1 and media-lens/worker/trafilatura/DEPS.md.
+// HTML preparation shells out asynchronously to pinned local Trafilatura.
+// The child refuses the Python socket methods named in
+// media-lens/worker/trafilatura/DEPS.md. That is not a network namespace.
+// See docs/media-lens-influence-graph-plan.md section 1.
 
 import http from 'node:http';
 import { readFile, readdir } from 'node:fs/promises';
@@ -165,7 +166,7 @@ async function buildAdapters({ config, payload, classifierDevFetch }) {
   return { jevAdapter, newsjackAdapter, classifierDevAdapter };
 }
 
-async function preparePayload({ payload, config, fetchArticle }) {
+async function preparePayload({ payload, config, fetchArticle, extractImpl }) {
   if (config.mode === 'live' && payload.mode === 'pasted_text') {
     throw Object.assign(
       new Error('Live pasted-text analysis is disabled until a later privacy and security review.'),
@@ -187,7 +188,8 @@ async function preparePayload({ payload, config, fetchArticle }) {
       html,
       kind: payload.kind || 'article',
       sourceUrl: payload.url || `https://fictional-daily.example/articles/${payload.fixture_id}`,
-      inputMode: 'fixture'
+      inputMode: 'fixture',
+      extractImpl
     });
   }
   if (payload.mode === 'url') {
@@ -228,7 +230,8 @@ async function preparePayload({ payload, config, fetchArticle }) {
         contentType: fetched.contentType ?? null,
         fetchStatus: fetched.fetchStatus ?? '200',
         fetchedAt: fetched.fetchedAt ?? null
-      }
+      },
+      extractImpl
     });
   }
   throw Object.assign(new Error(`Unknown analyze mode: ${payload.mode}`), { code: 'UNKNOWN_MODE' });
@@ -378,6 +381,7 @@ export function createServer(config = loadConfig(), options = {}) {
   const audit = options.auditLogger || createAuditLogger();
   // Test/programmatic only. Unused by startServer() / the CLI.
   const fetchArticle = options.fetchArticle || null;
+  const extractImpl = options.extractImpl || undefined;
   const classifierDevFetch = options.classifierDevFetch || null;
   const typesafeBudget =
     options.typesafeBudget ||
@@ -530,7 +534,7 @@ export function createServer(config = loadConfig(), options = {}) {
 
         let prepared;
         try {
-          prepared = await preparePayload({ payload, config, fetchArticle });
+          prepared = await preparePayload({ payload, config, fetchArticle, extractImpl });
         } catch (err) {
           if (heldLiveUrlSlot) liveUrlConcurrency.exit();
           if (SSRF_ERROR_CODES.has(err.code)) {

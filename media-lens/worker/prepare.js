@@ -567,7 +567,7 @@ function detectPaywall({ jsonLdAccessibleForFree, bodyText }) {
  * Prepare a document from raw HTML (fixture or live-fetched markup; this
  * function never fetches anything itself).
  */
-export function prepareFromHtml({
+export async function prepareFromHtml({
   html,
   kind = 'article',
   sourceUrl = null,
@@ -576,7 +576,7 @@ export function prepareFromHtml({
   extractImpl = extractLocalArticle
 }) {
   const sourceHtml = typeof html === 'string' ? html : '';
-  const extracted = extractImpl(sourceHtml);
+  const extracted = await extractImpl(sourceHtml);
   const status = extracted?.status;
   if (status !== 'ok') {
     return failedHtmlPreparation({
@@ -647,7 +647,7 @@ export function prepareFromHtml({
  * metadata). Paragraphs are split on blank lines; each paragraph is
  * treated as authorial unless it contains quote marks.
  */
-export function prepareFromPastedText({ text, kind = 'other_public' }) {
+export async function prepareFromPastedText({ text, kind = 'other_public' }) {
   const paragraphs = text
     .split(/\r?\n\s*\r?\n/)
     .map((p) => collapseWhitespace(p))
@@ -667,7 +667,7 @@ export function prepareFromPastedText({ text, kind = 'other_public' }) {
   const preparedText = builder.text;
   const textSha256 = sha256Text(preparedText);
   const paywallDetected = PAYWALL_CTA_PATTERN.test(preparedText) && preparedText.length < 400;
-  const detected = detectTextLanguage(text);
+  const detected = await detectTextLanguage(text);
   const language = schemaLanguage({ detected: detected?.detected_language, htmlLang: null });
 
   return {

@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 # Local Trafilatura extraction for Media Lens preparation.
 # Reads one JSON object from stdin. Writes one JSON object to stdout.
-# Does not fetch URLs, follow links, or write the article to stderr.
+# Does not fetch URLs. Network refusal covers the Python socket methods
+# listed in refuse_network() and the dependency wrappers installed after
+# import. It is not a kernel network namespace. See DEPS.md.
 
 import json
 import logging
@@ -20,12 +22,171 @@ HTML_LANG_RE = re.compile(
 )
 
 
-def refuse_network():
-    def _refuse(*_args, **_kwargs):
-        raise RuntimeError("network_refused")
+def _mark_refusal(fn):
+    fn._media_lens_refusal = "network"
+    return fn
 
-    socket.create_connection = _refuse
-    socket.socket.connect = lambda self, *args, **kwargs: _refuse()
+
+@_mark_refusal
+def _refuse_network(*_args, **_kwargs):
+    raise RuntimeError("network_refused")
+
+
+@_mark_refusal
+def _refuse_socket_method(_self, *_args, **_kwargs):
+    raise RuntimeError("network_refused")
+
+
+def refuse_network():
+    """Block the connect paths this process and the pinned stack actually call.
+
+    Enforced here, before those libraries are imported:
+    - socket.socket.connect
+    - socket.socket.connect_ex (also used by ssl.SSLSocket via super())
+    - socket.create_connection (copied onto http.client connections at init)
+    - socket.getaddrinfo (urllib3.util.connection.create_connection resolves first)
+
+    Not enforced: the _socket C API, ctypes, a raw file descriptor, or
+    optional modules that are not in the pin (pycurl, PySocks).
+    """
+    socket.socket.connect = _refuse_socket_method
+    socket.socket.connect_ex = _refuse_socket_method
+    socket.create_connection = _refuse_network
+    socket.getaddrinfo = _refuse_network
+
+
+def install_dependency_refusal():
+    """Replace fetch wrappers the pinned packages expose or capture at import.
+
+    urllib3.util.connection.create_connection calls socket.getaddrinfo and
+    then socket.socket.connect. http.client.HTTPConnection copies
+    socket.create_connection onto the instance in __init__. urllib.request.urlopen
+    is the py3langid model-download path and is not used for article text.
+    htmldate.utils.fetch_url and courlan.network.redirection_test use urllib3
+    pools created at import, so they hit the same socket patches.
+    """
+    import http.client
+    import urllib.request
+
+    import urllib3.util.connection as urllib3_connection
+
+    urllib3_connection.create_connection = _refuse_network
+    urllib.request.urlopen = _refuse_network
+    http.client.HTTPConnection.connect = _refuse_socket_method
+
+    try:
+        import htmldate.utils as htmldate_utils
+
+        htmldate_utils.fetch_url = _refuse_network
+    except Exception:
+        pass
+
+    try:
+        import courlan.network as courlan_network
+
+        courlan_network.redirection_test = _refuse_network
+    except Exception:
+        pass
+
+
+def _refusal_marker(fn):
+    func = getattr(fn, "__func__", fn)
+    return getattr(func, "_media_lens_refusal", None)
+
+
+def _invoke_refused(name, marker_fn, call):
+    if _refusal_marker(marker_fn) != "network":
+        return {"path": name, "result": "unpatched"}
+    try:
+        call()
+    except RuntimeError as exc:
+        return {"path": name, "result": str(exc)}
+    except Exception as exc:
+        return {"path": name, "result": type(exc).__name__}
+    return {"path": name, "result": "allowed"}
+
+
+def network_block_probe():
+    """Exercise patched connect paths. Missing patches are not called.
+
+    Addresses are the TEST-NET documentation range. A path is invoked only
+    when its marker is this module's refusal, or, for ssl.SSLSocket, when
+    socket.socket.connect / connect_ex is already that refusal. SSLSocket
+    delegates to those methods through super() before any handshake.
+    """
+    refuse_network()
+    import http.client
+    import ssl
+    import urllib.request
+
+    import urllib3.util.connection as urllib3_connection
+    from trafilatura import downloads
+
+    import trafilatura
+
+    install_fetch_refusal(trafilatura, downloads)
+    install_dependency_refusal()
+
+    address = ("192.0.2.1", 9)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    context = ssl.create_default_context()
+
+    def make_ssl_socket():
+        return context.wrap_socket(socket.socket(socket.AF_INET, socket.SOCK_STREAM), server_hostname="192.0.2.1")
+
+    ssl_connect_sock = make_ssl_socket()
+    ssl_connect_ex_sock = make_ssl_socket()
+    http_conn = http.client.HTTPConnection("192.0.2.1", 9, timeout=0.01)
+    checks = [
+        _invoke_refused("socket.socket.connect", sock.connect, lambda: sock.connect(address)),
+        _invoke_refused("socket.socket.connect_ex", sock.connect_ex, lambda: sock.connect_ex(address)),
+        _invoke_refused("socket.create_connection", socket.create_connection, lambda: socket.create_connection(address, 0.01)),
+        _invoke_refused("socket.getaddrinfo", socket.getaddrinfo, lambda: socket.getaddrinfo("192.0.2.1", 9)),
+        _invoke_refused("http.client.HTTPConnection.connect", http_conn.connect, http_conn.connect),
+        _invoke_refused(
+            "http.client.HTTPConnection._create_connection",
+            http_conn._create_connection,
+            lambda: http_conn._create_connection(address, 0.01),
+        ),
+        _invoke_refused(
+            "urllib3.util.connection.create_connection",
+            urllib3_connection.create_connection,
+            lambda: urllib3_connection.create_connection(address, 0.01),
+        ),
+        _invoke_refused("urllib.request.urlopen", urllib.request.urlopen, lambda: urllib.request.urlopen("http://192.0.2.1/")),
+        _invoke_refused("trafilatura.fetch_url", trafilatura.fetch_url, lambda: trafilatura.fetch_url("http://192.0.2.1/")),
+        _invoke_refused("trafilatura.downloads.fetch_url", downloads.fetch_url, lambda: downloads.fetch_url("http://192.0.2.1/")),
+    ]
+    if _refusal_marker(socket.socket.connect) == "network":
+        checks.append(_invoke_refused("ssl.SSLSocket.connect", socket.socket.connect, lambda: ssl_connect_sock.connect(address)))
+    else:
+        checks.append({"path": "ssl.SSLSocket.connect", "result": "unpatched"})
+    if _refusal_marker(socket.socket.connect_ex) == "network":
+        checks.append(_invoke_refused("ssl.SSLSocket.connect_ex", socket.socket.connect_ex, lambda: ssl_connect_ex_sock.connect_ex(address)))
+    else:
+        checks.append({"path": "ssl.SSLSocket.connect_ex", "result": "unpatched"})
+    try:
+        import htmldate.utils as htmldate_utils
+
+        checks.append(_invoke_refused("htmldate.utils.fetch_url", htmldate_utils.fetch_url, lambda: htmldate_utils.fetch_url("http://192.0.2.1/")))
+    except Exception:
+        checks.append({"path": "htmldate.utils.fetch_url", "result": "import_failed"})
+    try:
+        import courlan.network as courlan_network
+
+        checks.append(
+            _invoke_refused(
+                "courlan.network.redirection_test",
+                courlan_network.redirection_test,
+                lambda: courlan_network.redirection_test("http://192.0.2.1/"),
+            )
+        )
+    except Exception:
+        checks.append({"path": "courlan.network.redirection_test", "result": "import_failed"})
+    sock.close()
+    ssl_connect_sock.close()
+    ssl_connect_ex_sock.close()
+    return checks
 
 
 def emit(payload):
@@ -66,6 +227,7 @@ def install_fetch_refusal(trafilatura, downloads):
     def _refuse_fetch(*_args, **_kwargs):
         raise RuntimeError("fetch_refused")
 
+    _refuse_fetch._media_lens_refusal = "network"
     trafilatura.fetch_url = _refuse_fetch
     if hasattr(downloads, "fetch_url"):
         downloads.fetch_url = _refuse_fetch
@@ -200,6 +362,10 @@ def main():
         return 0
 
     install_fetch_refusal(trafilatura, downloads)
+    install_dependency_refusal()
+    if request.get("probe_network") is True:
+        emit({"status": "ok", "error_code": None, "network_probe": network_block_probe()})
+        return 0
     versions = (trafilatura_version, py3langid_version)
     if trafilatura_version != REQUIRED_TRAFILATURA or py3langid_version != REQUIRED_PY3LANGID:
         payload = base_payload("error", "version_mismatch")

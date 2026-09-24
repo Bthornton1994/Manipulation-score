@@ -29,6 +29,11 @@ site configuration. It serves only:
 `/health` and `/analyze` proxy to the worker at `127.0.0.1:8787`. No worker
 source, fixtures, tests, repository documentation, or credentials are served.
 
+Article preparation needs the pinned Trafilatura virtualenv on the worker
+`PATH`. This deployment does not install it. Run
+`media-lens/worker/trafilatura/install.sh` on the host as documented in
+`media-lens/worker/trafilatura/DEPS.md` before expecting extraction to succeed.
+
 The page resolves its API base from the current origin on the live host. In a
 local browser preview it continues to use `http://127.0.0.1:8787` and fixture
 mode.

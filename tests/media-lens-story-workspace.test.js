@@ -147,7 +147,7 @@ test('source comparison filters recorded relations and coverage gaps stay non-cl
   assert.equal(renderCoverageGap(cluster.coverage), '');
   const missing = await golden('synthetic-03-no-timestamp');
   const gap = renderCoverageGap(missing.coverage);
-  assert.match(gap, /<h5>Coverage gap<\/h5>/);
+  assert.match(gap, /<h4>Coverage gap<\/h4>/);
   assert.match(gap, /insufficient/);
   assert.match(gap, /not proof a fact was left out/);
   assert.doesNotMatch(gap, /proven omission|blindspot|left-leaning|right-leaning/i);
@@ -250,6 +250,27 @@ test('independent reporting lists recorded evidence and excludes wire copy', asy
   assert.deepEqual(
     membersForCompare(wireInEvidence, 'independent').map((member) => member.source),
     ['Fictional Daily', 'Second Outlet']
+  );
+
+  // A member recorded as syndicated stays off the list even when its URL is
+  // in story-origin evidence. This URL carries no wire or press-release
+  // marker, so only the recorded relation keeps it off.
+  const syndicatedInEvidence = structuredClone(cluster.coverage);
+  const third = syndicatedInEvidence.cluster.members.find((member) => member.source === 'Third Outlet (syndicated feed)');
+  assert.equal(third.relation, 'syndicated');
+  assert.doesNotMatch(third.url, /press|applauds|statement|advocacy\.|newswire|businesswire|accesswire|stocktitan/);
+  syndicatedInEvidence.story_origin.evidence_urls.push(third.url);
+  syndicatedInEvidence.story_origin.timestamp_evidence.push({ url_key: third.url_key, published_at: third.published_at });
+  assert.deepEqual(
+    membersForCompare(syndicatedInEvidence, 'independent').map((member) => member.source),
+    ['Fictional Daily', 'Second Outlet']
+  );
+  // The same member with a same-story relation would be listed, so the
+  // exclusion above comes from the relation alone.
+  third.relation = 'same_story';
+  assert.deepEqual(
+    membersForCompare(syndicatedInEvidence, 'independent').map((member) => member.source),
+    ['Fictional Daily', 'Second Outlet', 'Third Outlet (syndicated feed)']
   );
 
   const sameStoryOnly = structuredClone(cluster.coverage);

@@ -127,6 +127,39 @@ export async function liveAbstentionGraph({ reason, message }) {
 }
 
 /**
+ * The worker's per-analysis timeout after live Jev calls were made: analyze()
+ * runs with a live Jev adapter that answers at once and a story-context step
+ * that never settles, so the timeout fires with the Jev calls already
+ * counted. The result is an abstention-only graph with engine.jev.mode
+ * "live", engine.jev.calls > 0, and an external_processing entry with
+ * occurred true.
+ */
+export async function liveTimeoutAbstentionGraph({ calls = 3 } = {}) {
+  const config = loadConfig({});
+  config.limits = { ...config.limits, perAnalysisTimeoutMs: 30 };
+  const jevAdapter = {
+    mode: 'live',
+    async analyzeSpans() {
+      return { calls, answersBySpanId: new Map(), failedSpanIds: new Set(), modelMatch: true, capReached: false };
+    }
+  };
+  const newsjackAdapter = {
+    mode: 'disabled',
+    getStoryContext() {
+      return new Promise(() => {});
+    }
+  };
+  return analyze({
+    prepared: preparedLiveArticle(),
+    config,
+    jevAdapter,
+    newsjackAdapter,
+    userAssertedPublic: true,
+    consentAt: new Date().toISOString()
+  });
+}
+
+/**
  * Early-exit graphs from the worker's analyze(): each returns before any
  * adapter runs, so the adapters here are never called.
  */

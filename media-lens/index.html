@@ -38,7 +38,7 @@
     </header>
 
     <main id="main" class="ml-main" tabindex="-1">
-      <p class="ml-status ml-error-banner" id="analyze-error" data-state="error" role="alert" hidden></p>
+      <p class="ml-status ml-error-banner" id="analyze-error" data-state="error" role="alert" tabindex="-1" hidden></p>
       <div class="ml-error-actions" id="error-actions" hidden>
         <button class="button" type="button" id="analyze-retry">Retry</button>
         <button class="button button-secondary" type="button" id="analyze-reset">Start over</button>
@@ -134,15 +134,16 @@
                 </div>
                 <p class="ml-field-error" id="article-url-error" role="alert" hidden></p>
                 <p class="ml-form-note" id="article-url-help">
-                  Live analysis accepts only public <code>https://</code> pages from a short list of sites the operator approves, for
-                  example English Wikipedia articles. Long pages may abstain before Jev runs. Private, paywalled, internal, and
+                  Live analysis accepts only public <code>https://</code> pages from a short list of sites the operator approves. For
+                  example, English Wikipedia article addresses on <code>en.wikipedia.org</code> are on the list. Mobile links on
+                  <code>en.m.wikipedia.org</code> are not. Long pages may abstain before Jev runs. Private, paywalled, internal, and
                   unauthorized material is not allowed.
                 </p>
                 <p class="ml-form-note" id="analyze-continue-note">
                   Analyze asks for consent next. Nothing is sent until you confirm.
                 </p>
 
-                <dialog class="ml-consent-dialog" id="consent-dialog" aria-labelledby="consent-dialog-title">
+                <dialog class="ml-consent-dialog" id="consent-dialog" aria-labelledby="consent-dialog-title" aria-describedby="consent-fetch-notice">
                   <h2 id="consent-dialog-title">Confirm public-material consent</h2>
                   <p id="consent-fetch-notice">
                     In operator-hosted live mode, the approved operator host may request the URL you entered. Prepared public spans may be
@@ -192,8 +193,8 @@
               does not compare coverage.
             </p>
 
-            <aside class="ml-sample-card" aria-labelledby="ml-sample-heading">
-              <p class="ml-sample-kicker">Made-up example</p>
+            <aside class="ml-sample-card" aria-labelledby="ml-sample-kicker ml-sample-heading">
+              <p class="ml-sample-kicker" id="ml-sample-kicker">Made-up example</p>
               <h3 id="ml-sample-heading">Council approves downtown drainage upgrade</h3>
               <p class="ml-sample-meta">
                 Jordan Reyes · fictional-daily.example · fixture
@@ -201,7 +202,7 @@
               </p>
               <p class="ml-sample-note">
                 A fixed excerpt from a made-up test article that ships with this page. Nothing was fetched, and it is not evidence of
-                accuracy.
+                accuracy. Live analyses do not show coverage counts.
               </p>
               <ul class="ml-sample-findings">
                 <li data-observation-id="obs-jev-1">
@@ -293,7 +294,7 @@
       </div>
 
       <section class="ml-loading" id="loading-panel" hidden aria-labelledby="ml-loading-heading">
-        <h2 id="ml-loading-heading">Analyzing the article</h2>
+        <h1 id="ml-loading-heading">Analyzing the article</h1>
         <p class="ml-dimension-note" id="loading-stage-text">Requesting article</p>
         <ol class="ml-loading-stages" id="loading-stages">
           <li data-stage="0">Requesting article</li>
@@ -310,7 +311,7 @@
         <header class="ml-result-masthead">
           <p class="ml-sample-kicker" id="result-kicker">Public page analysis</p>
           <p class="ml-fixture-preview-marker" id="result-fixture-badge" hidden>Fixture example. Not live coverage.</p>
-          <h2 class="ml-result-title" id="result-title" tabindex="-1"></h2>
+          <h1 class="ml-result-title" id="result-title" tabindex="-1"></h1>
           <p class="ml-result-overview" id="result-overview"></p>
           <p class="ml-result-meta" id="result-meta"></p>
           <p class="ml-result-meta" id="result-updated"></p>
@@ -337,7 +338,7 @@
         </nav>
 
         <section aria-labelledby="ml-overview-heading" class="ml-dimension ml-overview" id="analysis-overview">
-          <h3 id="ml-overview-heading">Analysis overview</h3>
+          <h2 id="ml-overview-heading">Analysis overview</h2>
           <p class="ml-dimension-note">
             Each state names what this result contains for that section. It is not a score for the article, a person, or an outlet.
           </p>
@@ -345,13 +346,13 @@
         </section>
 
         <section aria-labelledby="ml-retrieval-heading" class="ml-dimension" id="retrieval-panel">
-          <h3 id="ml-retrieval-heading">Source and retrieval</h3>
+          <h2 id="ml-retrieval-heading">Source and retrieval</h2>
           <p class="ml-dimension-note">Where this record says it came from. Missing fields stay empty.</p>
           <div id="retrieval-metadata"></div>
         </section>
 
         <section aria-labelledby="ml-coverage-heading" class="ml-dimension">
-          <h3 id="ml-coverage-heading">Coverage</h3>
+          <h2 id="ml-coverage-heading">Coverage</h2>
           <p class="ml-dimension-note" id="coverage-note">
             Origin, independent reporting, and duplication, when a coverage comparison was recorded.
           </p>
@@ -362,7 +363,7 @@
           </p>
 
           <div id="unattributed-quotes" hidden>
-            <h4 id="ml-unattributed-heading">Quotes without a named speaker</h4>
+            <h3 id="ml-unattributed-heading">Quotes without a named speaker</h3>
             <p class="ml-dimension-note">
               Media Lens did not find a named speaker or attribution next to each quote below. The check reads only the text right
               around the quote, so it can miss attribution written another way. Each quote is flagged as a possible
@@ -372,11 +373,11 @@
           </div>
 
           <div id="coverage-comparison">
-            <h4 id="ml-origin-heading">Story origin and canonical source</h4>
+            <h3 id="ml-origin-heading">Story origin and canonical source</h3>
             <p class="ml-dimension-note">Canonical-source status is recorded metadata. A missing canonical source is not a verdict.</p>
             <div id="coverage-origin"></div>
 
-            <h4 id="ml-cluster-heading">Related sources</h4>
+            <h3 id="ml-cluster-heading">Related sources</h3>
             <p class="ml-dimension-note">Same-story cluster members recorded with this result. Summary and metadata stay above this list.</p>
             <div class="ml-compare-controls" role="group" aria-label="Compare recorded sources">
               <button type="button" data-compare="all" aria-pressed="true">All recorded</button>
@@ -387,15 +388,15 @@
             <p class="ml-dimension-note" id="compare-status"></p>
             <ul class="ml-cluster-list" id="coverage-cluster"></ul>
 
-            <h4 id="ml-reporting-split-heading">Independent reporting and syndicated repetition</h4>
+            <h3 id="ml-reporting-split-heading">Independent reporting and syndicated repetition</h3>
             <div id="reporting-split"></div>
 
-            <h4 id="ml-distribution-heading">Coverage distribution and represented frames</h4>
+            <h3 id="ml-distribution-heading">Coverage distribution and represented frames</h3>
             <div id="coverage-distribution"></div>
             <p class="ml-dimension-note" id="coverage-frames"></p>
             <div id="coverage-frame-list"></div>
 
-            <h4 id="ml-omission-heading">Coverage gaps and omission candidates</h4>
+            <h3 id="ml-omission-heading">Coverage gaps and omission candidates</h3>
             <p class="ml-dimension-note">
               An omission candidate is a possible gap. It does not establish that a fact was concealed.
             </p>
@@ -408,26 +409,26 @@
         </section>
 
         <section aria-labelledby="ml-language-heading" class="ml-dimension">
-          <h3 id="ml-language-heading">Language</h3>
+          <h2 id="ml-language-heading">Language</h2>
           <p class="ml-dimension-note">Span-tied observations of influence language, with evidence you can inspect.</p>
           <ul class="ml-observation-list" id="language-list"></ul>
         </section>
 
         <section aria-labelledby="ml-claims-heading" class="ml-dimension">
-          <h3 id="ml-claims-heading">Claims</h3>
+          <h2 id="ml-claims-heading">Claims</h2>
           <p class="ml-dimension-note">Claim ledger of checkable-looking statements found in the text. Support is always "not checked" in this preview.</p>
           <ul class="ml-claim-list" id="claims-list"></ul>
         </section>
 
         <section aria-labelledby="ml-source-context-heading" class="ml-dimension">
-          <h3 id="ml-source-context-heading">Source context</h3>
+          <h2 id="ml-source-context-heading">Source context</h2>
           <p class="ml-dimension-note">Source context is metadata, not a manipulation judgment.</p>
           <dl class="ml-coverage-grid" id="source-context-stats"></dl>
           <p class="ml-dimension-note" id="source-context-note"></p>
         </section>
 
         <section class="ml-dimension" id="influence-profile" aria-labelledby="ml-influence-profile-heading">
-          <h3 id="ml-influence-profile-heading">Influence Profile</h3>
+          <h2 id="ml-influence-profile-heading">Influence Profile</h2>
           <p class="ml-dimension-note">
             Structured summary of observable evidence in this result. Not an overall score for the article, a person, or an outlet.
           </p>
@@ -435,12 +436,12 @@
         </section>
 
         <section class="ml-dimension" id="analysis-limitations" aria-labelledby="ml-abstention-heading">
-          <h3 id="ml-abstention-heading">Analysis limitations</h3>
+          <h2 id="ml-abstention-heading">Analysis limitations</h2>
           <p class="ml-form-note" id="question-reading-destination" hidden>
             This preview does not send feedback and does not store a correction. The limitations section lists what this record abstained from.
           </p>
           <ul class="ml-abstention-list" id="abstention-list"></ul>
-          <h4 id="ml-alternative-readings-heading">Alternative readings</h4>
+          <h3 id="ml-alternative-readings-heading">Alternative readings</h3>
           <p class="ml-dimension-note" id="alternative-readings"></p>
         </section>
 

@@ -22,6 +22,15 @@ const CANCELLED_MESSAGE =
 const CREDENTIALS_URL_MESSAGE = 'Remove the username or password from the URL.';
 const NO_ANALYSIS_TITLE = 'No analysis was run';
 const NO_ANALYSIS_ANNOUNCEMENT = 'No analysis was run.';
+// An abstention-only graph can follow live Jev calls: the worker's
+// per-analysis timeout keeps engine.jev.calls and records the external
+// processing that already happened. That page was sent, so "No analysis was
+// run" would be false.
+const STOPPED_ANALYSIS_TITLE = 'Analysis stopped before completion';
+const STOPPED_ANALYSIS_SENT_NOTE =
+  'Prepared public spans from this page were already sent to TypeSafe AI’s Jev service. No result is shown.';
+const STOPPED_ANALYSIS_ANNOUNCEMENT = `${STOPPED_ANALYSIS_TITLE}. ${STOPPED_ANALYSIS_SENT_NOTE}`;
+const RATE_LIMITED_HOST_MESSAGE = 'Media Lens has reached its per-minute limit for this site. Wait a minute and try again.';
 const COVERAGE_NOT_CHECKED_DETAIL = 'Other coverage not checked';
 const LOADING_STAGES = [
   'Requesting article',
@@ -193,8 +202,9 @@ let liveUrlReady = false;
 let isSubmitting = false;
 let pendingPayload = null;
 // The one action the Retry button runs for the error on screen, or null
-// when that error has no retry (validation errors). It holds the payload
-// of the analysis it re-runs, so returning to the landing view clears it.
+// when that error has no retry (validation errors). For an analysis it
+// holds the payload it offers to send again after fresh consent, so
+// returning to the landing view clears it.
 let retryAction = null;
 let analyzeAbort = null;
 let stageTimer = null;
@@ -696,6 +706,43 @@ function primaryNoAnalysisAbstention(graph) {
   return items.find((item) => !SUPPLEMENTARY_GRAPH_REASONS.has(item.reason)) || items[0] || null;
 }
 
+// True when the graph records that prepared spans already left the worker:
+// live Jev calls were counted, or a privacy entry says processing occurred.
+function externalProcessingOccurred(graph) {
+  const calls = graph?.engine?.jev?.calls;
+  if (Number.isFinite(calls) && calls > 0) return true;
+  const entries = graph?.privacy?.external_processing;
+  return Array.isArray(entries) && entries.some((entry) => entry && entry.occurred === true);
+}
+
+// Copy for a graph with no spans, observations, or claims. "stopped" means
+// the analysis began and sent spans, then ended without a result.
+function noAnalysisCopy(graph) {
+  if (externalProcessingOccurred(graph)) {
+    return {
+      stopped: true,
+      title: STOPPED_ANALYSIS_TITLE,
+      detail: 'Stopped before completion',
+      languageEmpty: 'The analysis stopped before completion, so no language observations are shown.',
+      claimsEmpty: 'The analysis stopped before completion, so no claims are listed.',
+      sourceNote:
+        'The analysis stopped before completion, so byline, publish time, and canonical-link checks are not shown. The domain comes from the URL.',
+      limits: 'Experimental Jev-only preview. No result or score is shown for this page.',
+      announcement: STOPPED_ANALYSIS_ANNOUNCEMENT
+    };
+  }
+  return {
+    stopped: false,
+    title: NO_ANALYSIS_TITLE,
+    detail: NO_ANALYSIS_TITLE,
+    languageEmpty: 'No analysis was run, so no language observations are shown.',
+    claimsEmpty: 'No analysis was run, so no claims are listed.',
+    sourceNote: NO_ANALYSIS_SOURCE_NOTE,
+    limits: 'Experimental Jev-only preview. No manipulation analysis or score was generated for this page.',
+    announcement: NO_ANALYSIS_ANNOUNCEMENT
+  };
+}
+
 function sourceUrlHost(graph) {
   return safeHttpsUrl(graph?.artifact?.url)?.hostname || '';
 }
@@ -736,7 +783,7 @@ function stateFromAbstentions(items) {
 function languageOverview(graph) {
   const item = { label: 'Language', href: '#ml-language-heading' };
   if (!Array.isArray(graph?.observations)) return { ...item, state: 'Not available', detail: '' };
-  if (isNoAnalysisGraph(graph)) return { ...item, state: 'Abstained', detail: NO_ANALYSIS_TITLE };
+  if (isNoAnalysisGraph(graph)) return { ...item, state: 'Abstained', detail: noAnalysisCopy(graph).detail };
   const language = graph.observations.filter((obs) => obs && obs.dimension === 'language');
   const observed = language.filter((obs) => obs.strength === 'observed').length;
   const possible = language.filter((obs) => obs.strength === 'candidate').length;
@@ -757,7 +804,7 @@ function languageOverview(graph) {
 function claimsOverview(graph) {
   const item = { label: 'Claims', href: '#ml-claims-heading' };
   if (!Array.isArray(graph?.claims)) return { ...item, state: 'Not available', detail: '' };
-  if (isNoAnalysisGraph(graph)) return { ...item, state: 'Abstained', detail: NO_ANALYSIS_TITLE };
+  if (isNoAnalysisGraph(graph)) return { ...item, state: 'Abstained', detail: noAnalysisCopy(graph).detail };
   if (graph.claims.length === 0) {
     const blockingGraph = graphAbstentions(graph).filter((entry) => entry.reason === 'insufficient_text');
     const fromAbstention = stateFromAbstentions([...abstentionsFor(graph, 'claims'), ...blockingGraph]);
@@ -982,11 +1029,15 @@ function storyIdFromHash() {
   return match ? match[1] : null;
 }
 
+// The card is named by its "Made-up example" label and its title, so the
+// label is part of what assistive technology reads for the card.
 function renderStoryCard(story) {
   const gap = !story.coverageCount;
-  return `<li class="ml-story-card${gap ? ' ml-gap-card' : ''}">
-    <p class="ml-sample-kicker">${gap ? 'Coverage gap' : 'Fixture story'}</p>
-    <h4>${escapeHtml(story.title)}</h4>
+  const kickerId = `story-kicker-${story.id}`;
+  const titleId = `story-title-${story.id}`;
+  return `<li class="ml-story-card${gap ? ' ml-gap-card' : ''}" aria-labelledby="${escapeHtml(kickerId)} ${escapeHtml(titleId)}">
+    <p class="ml-sample-kicker" id="${escapeHtml(kickerId)}">${gap ? 'Made-up example with a coverage gap' : 'Made-up example'}</p>
+    <h4 id="${escapeHtml(titleId)}">${escapeHtml(story.title)}</h4>
     <p>${escapeHtml(story.domain)} · <code>${escapeHtml(story.id)}</code></p>
     <p>${escapeHtml(story.fixtureNote)}</p>
     ${renderCoverageCountIndicator(story.coverageCount)}
@@ -1124,7 +1175,7 @@ function renderCoverageGap(coverage) {
   let reason = 'No related-source cluster was recorded.';
   if (coverage?.status === 'not_requested') reason = 'Coverage was not requested for this record.';
   else if (coverage?.status === 'insufficient') reason = 'Coverage evidence in this record is insufficient.';
-  return `<article class="ml-gap-card"><h5>Coverage gap</h5><p>${escapeHtml(reason)} This describes an absence in the record. It is not proof a fact was left out.</p></article>`;
+  return `<article class="ml-gap-card"><h4>Coverage gap</h4><p>${escapeHtml(reason)} This describes an absence in the record. It is not proof a fact was left out.</p></article>`;
 }
 
 // URL markers already used to compute independent_sources_estimate. They only
@@ -1308,13 +1359,17 @@ function renderMasthead(graph, { fixture, noAnalysis }) {
     badge.hidden = !fixture;
     badge.textContent = fixture ? 'Fixture example. Not live coverage.' : '';
   }
+  const copy = noAnalysis ? noAnalysisCopy(graph) : null;
   if (noAnalysis) {
+    // The headline states what happened. The page title, when recorded,
+    // stays in the meta line so it never reads as an analyzed article.
     const primary = primaryNoAnalysisAbstention(graph);
     const host = sourceUrlHost(graph);
     const label = fixture ? 'Recorded URL' : 'Entered URL';
     const meta = [host ? `${label}: ${host}` : '', artifact.title ? `Page title: ${artifact.title}` : ''].filter(Boolean);
-    setText('result-title', NO_ANALYSIS_TITLE);
-    setText('result-overview', primary?.message || 'The service did not return a reason.');
+    const reason = primary?.message || 'The service did not return a reason.';
+    setText('result-title', copy.title);
+    setText('result-overview', copy.stopped ? `${reason} ${STOPPED_ANALYSIS_SENT_NOTE}` : reason);
     setText('result-meta', meta.join(' · '));
   } else {
     setText('result-title', artifact.title || 'Untitled public article');
@@ -1328,7 +1383,7 @@ function renderMasthead(graph, { fixture, noAnalysis }) {
   if (fixture) {
     limits = 'Fixture example. Evidence is inspectable. This is not live coverage, not a truth detector, and not a person or outlet score.';
   } else if (noAnalysis) {
-    limits = 'Experimental Jev-only preview. No manipulation analysis or score was generated for this page.';
+    limits = copy.limits;
   }
   setText('result-limits', limits);
 }
@@ -1372,6 +1427,7 @@ function renderGraph(graph, source = 'analysis') {
   const languageObservations = graph.observations.filter((o) => o.dimension === 'language');
   const fixture = isFixtureResult(graph);
   const noAnalysis = isNoAnalysisGraph(graph);
+  const copy = noAnalysis ? noAnalysisCopy(graph) : null;
 
   renderMasthead(graph, { fixture, noAnalysis });
   setHtml('overview-list', renderAnalysisOverview(graph));
@@ -1380,26 +1436,22 @@ function renderGraph(graph, source = 'analysis') {
   setHtml(
     'language-list',
     languageObservations.map((o) => renderObservation(graph, o)).join('') ||
-      `<li class="ml-empty-state">${
-        noAnalysis
-          ? 'No analysis was run, so no language observations are shown.'
-          : 'No language signals reached the reporting threshold for this text.'
-      }</li>`
+      `<li class="ml-empty-state">${escapeHtml(
+        noAnalysis ? copy.languageEmpty : 'No language signals reached the reporting threshold for this text.'
+      )}</li>`
   );
 
   setHtml(
     'claims-list',
     graph.claims.map((c) => renderClaim(graph, c)).join('') ||
-      `<li class="ml-empty-state">${
-        noAnalysis ? 'No analysis was run, so no claims are listed.' : 'No checkable-looking claims were found.'
-      }</li>`
+      `<li class="ml-empty-state">${escapeHtml(noAnalysis ? copy.claimsEmpty : 'No checkable-looking claims were found.')}</li>`
   );
 
   renderCoverageSection(graph);
 
   if (noAnalysis) {
     setHtml('source-context-stats', renderNoAnalysisSourceContext(graph));
-    setText('source-context-note', NO_ANALYSIS_SOURCE_NOTE);
+    setText('source-context-note', copy.sourceNote);
   } else {
     setHtml('source-context-stats', renderSourceContextStats(graph.source_context));
     setText('source-context-note', graph.source_context?.note || '');
@@ -1415,12 +1467,12 @@ function renderGraph(graph, source = 'analysis') {
 
   if (source === 'fixture-file') {
     announceStatus(
-      `Fixture story opened. This is an in-repo example, not live coverage.${noAnalysis ? ` ${NO_ANALYSIS_ANNOUNCEMENT}` : ''}`
+      `Fixture story opened. This is an in-repo example, not live coverage.${noAnalysis ? ` ${copy.announcement}` : ''}`
     );
     return;
   }
   if (noAnalysis) {
-    announceStatus(NO_ANALYSIS_ANNOUNCEMENT);
+    announceStatus(copy.announcement);
     return;
   }
   announceStatus(
@@ -1501,10 +1553,20 @@ function showView(view) {
   if (view !== 'landing') setHidden('error-actions', true);
 }
 
+// Brings an element on screen at once. Smooth scrolling is skipped so the
+// error is in view as soon as it is focused, whatever scroll offset the
+// previous view left behind.
+function revealElement(el) {
+  if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center', behavior: 'instant' });
+}
+
 // Errors use exactly one announcement channel: the role="alert" banner or
 // the role="alert" field error. Neither is also written to the polite
 // status line. options.retry is the action the Retry button runs; without
-// it the error has no Retry and no Start over.
+// it the error has no Retry and no Start over. Focus moves to the banner
+// (tabindex -1) and the banner is scrolled into view, so keyboard and
+// screen reader users land on the message. Retry, when offered, is the next
+// Tab stop.
 function showError(message, options = {}) {
   const retry = typeof options.retry === 'function' ? options.retry : null;
   retryAction = retry;
@@ -1512,19 +1574,30 @@ function showError(message, options = {}) {
   el.textContent = message;
   el.hidden = false;
   byId('error-actions').hidden = !retry;
-  // Moving focus to Retry keeps keyboard users next to the recovery
-  // action. The alert reads the message; focus reads only the button.
-  if (retry) byId('analyze-retry')?.focus();
+  // Content behind an open modal dialog cannot take focus.
+  if (byId('consent-dialog')?.open) return;
+  el.focus({ preventScroll: true });
+  revealElement(el);
 }
 
+// A problem with the entered address is shown on the URL field: the field
+// is marked invalid, the error is linked through aria-describedby, focus
+// moves to the field, and the error is scrolled into view. When the field
+// cannot take focus (hidden or disabled), the banner is used instead.
 function showFieldError(message) {
   const articleUrl = byId('article-url');
   const error = byId('article-url-error');
+  if (!articleUrl || !error || articleUrl.disabled || byId('url-field')?.hidden) {
+    showError(message);
+    return;
+  }
   retryAction = null;
   error.textContent = message;
   error.hidden = false;
   articleUrl.setAttribute('aria-invalid', 'true');
   articleUrl.setAttribute('aria-describedby', 'article-url-help article-url-error');
+  articleUrl.focus({ preventScroll: true });
+  revealElement(error);
 }
 
 function clearError() {
@@ -1551,20 +1624,29 @@ function showBuildError(built) {
 // Errors where running the same analysis again can succeed. Validation
 // errors (not approved, bad URL, consent, oversized input, disabled modes)
 // would fail the same way, so they get no Retry.
-const RETRYABLE_API_ERRORS = new Set([
-  'rate_limited',
-  'TIMEOUT',
-  'timeout',
-  'FETCH_ERROR',
-  'TOO_MANY_REDIRECTS',
-  'internal_error',
-  'live_killed'
-]);
+const RETRYABLE_API_ERRORS = new Set(['rate_limited', 'TIMEOUT', 'timeout', 'FETCH_ERROR', 'TOO_MANY_REDIRECTS', 'internal_error']);
+// The operator kill switch and a disabled live URL mode stay in place until
+// an operator changes them. They get no Retry, and the page checks /health
+// again so the service status line is current.
+const OPERATOR_STOP_API_ERRORS = new Set(['live_killed', 'live_url_disabled']);
+// Errors about the entered address itself. They are shown on the URL field.
+const URL_POLICY_API_ERRORS = new Set(['live_url_not_allowlisted', 'BAD_URL', 'BLOCKED_HOST', 'BAD_SCHEME']);
 
 function isRetryableApiError(body, status) {
-  if (RETRYABLE_API_ERRORS.has(body?.error)) return true;
-  if (typeof body?.error === 'string' && body.error) return status >= 500;
+  const code = typeof body?.error === 'string' ? body.error : '';
+  if (OPERATOR_STOP_API_ERRORS.has(code)) return false;
+  if (RETRYABLE_API_ERRORS.has(code)) return true;
+  if (code) return status >= 500;
   return status >= 500 || status === 429;
+}
+
+// The worker applies per-minute limits and allows one live URL fetch at a
+// time. Each case gets plain copy; the worker's wording is not shown.
+function rateLimitedMessage(body) {
+  const detail = typeof body?.message === 'string' ? body.message : '';
+  if (/for this host/i.test(detail)) return RATE_LIMITED_HOST_MESSAGE;
+  if (/already in progress/i.test(detail)) return 'Media Lens is already analyzing another page. Wait a moment and try again.';
+  return 'Media Lens has reached its per-minute limit. Wait a minute and try again.';
 }
 
 function apiErrorMessage(body, status) {
@@ -1579,7 +1661,7 @@ function apiErrorMessage(body, status) {
     case 'live_url_disabled':
       return 'Live URL analysis is temporarily unavailable. No analysis was run.';
     case 'rate_limited':
-      return body.message || 'The service is busy. Wait a minute and try again.';
+      return rateLimitedMessage(body);
     case 'TIMEOUT':
     case 'timeout':
     case 'FETCH_ERROR':
@@ -1590,6 +1672,8 @@ function apiErrorMessage(body, status) {
       return 'This URL is not allowed. Use a public https:// address from an approved host.';
     case 'consent_required':
       return 'Confirm public-material consent before analyzing.';
+    case 'invalid_kind':
+      return 'Media Lens did not accept the page type in this request, so no analysis was run. Reload this page and try again.';
     case 'live_pasted_text_disabled':
       return 'Live pasted-text analysis stays disabled. Use Clarity for private messages, or a fixture example locally.';
     case 'live_fixture_disabled':
@@ -1599,6 +1683,17 @@ function apiErrorMessage(body, status) {
     default:
       return body?.message || `The Media Lens service returned an error (${status}).`;
   }
+}
+
+function showApiError(body, status, payload, retry) {
+  const code = typeof body?.error === 'string' ? body.error : '';
+  const message = apiErrorMessage(body, status);
+  if (payload?.mode === 'url' && URL_POLICY_API_ERRORS.has(code)) {
+    showFieldError(message);
+  } else {
+    showError(message, isRetryableApiError(body, status) ? { retry } : {});
+  }
+  if (OPERATOR_STOP_API_ERRORS.has(code)) checkHealth();
 }
 
 function closeConsentDialog() {
@@ -1824,10 +1919,30 @@ function goToLanding() {
   landingFocusTarget()?.focus();
 }
 
+// Retry never resends a request by itself. It opens the consent step again
+// for the same request with the box unchecked, and the request is sent only
+// after the person confirms, with a new consent time. The URL field (or the
+// local fixture choice) is set back to what is being retried so the consent
+// covers what is sent.
+function retryWithConsent(payload) {
+  if (isSubmitting || byId('consent-dialog').open) return;
+  if (payload.mode === 'url' && typeof payload.url === 'string') {
+    const articleUrl = byId('article-url');
+    if (articleUrl) articleUrl.value = payload.url;
+  }
+  if (payload.mode === 'fixture' && typeof payload.fixture_id === 'string') {
+    const fixtureSelect = byId('fixture-select');
+    if (fixtureSelect) fixtureSelect.value = payload.fixture_id;
+  }
+  pendingPayload = { ...payload, consent_at: null };
+  consentTrigger = document.activeElement;
+  openConsentDialog();
+}
+
 async function runAnalysis(payload) {
   clearError();
   closeConsentDialog();
-  const retry = () => runAnalysis(payload);
+  const retry = () => retryWithConsent(payload);
   isSubmitting = true;
   updateSubmitEnabled();
   showView('loading');
@@ -1849,7 +1964,7 @@ async function runAnalysis(payload) {
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
       showView('landing');
-      showError(apiErrorMessage(body, res.status), isRetryableApiError(body, res.status) ? { retry } : {});
+      showApiError(body, res.status, payload, retry);
       return;
     }
     renderGraph(body);
@@ -1894,9 +2009,11 @@ async function handleSubmit(event) {
     requestConsentThenAnalyze();
     return;
   }
-  const consent = byId('consent-checkbox').checked;
-  if (!consent) {
-    showError('Check the consent box before analyzing.');
+  const consent = byId('consent-checkbox');
+  if (!consent.checked) {
+    // Run analysis stays disabled until the box is checked. Keep focus on
+    // the box; a banner behind the modal dialog could not be reached.
+    consent.focus();
     return;
   }
   const built = pendingPayload ? { payload: pendingPayload } : buildPayload();
@@ -1972,6 +2089,8 @@ export {
   FIXTURE_STORIES,
   NO_ANALYSIS_TITLE,
   OMISSION_EMPTY_COPY,
+  RATE_LIMITED_HOST_MESSAGE,
+  STOPPED_ANALYSIS_TITLE,
   apiErrorMessage,
   buildAnalysisOverview,
   consentDisclosure,
@@ -2001,5 +2120,6 @@ export {
   renderUnattributedQuotes,
   safeHttpsUrl,
   stageForElapsed,
-  storiesForLane
+  storiesForLane,
+  toEvidenceOnlyExport
 };

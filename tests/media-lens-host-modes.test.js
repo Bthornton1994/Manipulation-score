@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { loadMediaLensPage } from './helpers/media-lens-dom.js';
+import { FakeEvent, LIVE_HEALTH, loadMediaLensPage } from './helpers/media-lens-dom.js';
 import { isCatalogMode } from '../media-lens/media-lens.js';
 
 const LIVE_HREF = 'https://ml-jev.manipulationscore.com/media-lens/';
@@ -109,6 +109,60 @@ test('catalog mode reveals the explorer, keeps lanes and search, and opens a fix
     assert.equal(page.byId('coverage-not-run').hidden, true);
     assert.match(page.byId('compare-status').textContent, /Fixture comparison only\.$/);
     assert.equal(page.document.activeElement, page.byId('result-title'));
+  } finally {
+    page.restore();
+  }
+});
+
+test('live host: the URL field stays disabled when /health reports the kill switch or no Jev API key', async () => {
+  const cases = [
+    { health: { ...LIVE_HEALTH, killSwitch: true }, status: 'Live analysis is paused by the operator kill switch.' },
+    { health: { ...LIVE_HEALTH, jev: { mode: 'live', hasApiKey: false } }, status: 'Worker reachable, but live URL analysis is not currently available.' }
+  ];
+  for (const { health, status } of cases) {
+    const page = await loadMediaLensPage({ href: LIVE_HREF, health });
+    try {
+      const label = JSON.stringify(health);
+      assert.equal(page.byId('worker-status-text').textContent, status, label);
+      assert.equal(page.byId('worker-status').dataset.state, 'error', label);
+      assert.equal(page.byId('article-url').disabled, true, label);
+      page.byId('article-url').value = 'https://en.wikipedia.org/wiki/Yes';
+      page.byId('article-url').dispatchEvent(new FakeEvent('input', { bubbles: true }));
+      assert.equal(page.byId('analyze-continue').disabled, true, label);
+      page.byId('analyze-continue').click();
+      await page.flush();
+      assert.equal(page.byId('consent-dialog').open, false, label);
+      assert.deepEqual(page.fetchCalls.filter((call) => call.url.endsWith('/analyze')), [], label);
+    } finally {
+      page.restore();
+    }
+  }
+  // The same page with a healthy worker enables the field.
+  const ready = await loadMediaLensPage({ href: LIVE_HREF, health: LIVE_HEALTH });
+  try {
+    assert.equal(ready.byId('article-url').disabled, false);
+  } finally {
+    ready.restore();
+  }
+});
+
+test('catalog story cards are named by their "Made-up example" label and title', async () => {
+  const page = await loadMediaLensPage({ href: LOCAL_HREF, health: null });
+  try {
+    const cards = page.byId('story-results').innerHTML;
+    const items = [...cards.matchAll(/<li class="ml-story-card[^"]*" aria-labelledby="([^"]+)">([\s\S]*?)<\/li>/g)];
+    assert.equal(items.length, 6);
+    for (const [, labelledBy, body] of items) {
+      const [kickerId, titleId] = labelledBy.split(' ');
+      const kicker = body.match(new RegExp(`<p class="ml-sample-kicker" id="${kickerId}">([^<]+)</p>`));
+      const title = body.match(new RegExp(`<h4 id="${titleId}">([^<]+)</h4>`));
+      assert.ok(kicker, `${kickerId} is in the card`);
+      assert.ok(title, `${titleId} is in the card`);
+      assert.match(kicker[1], /^Made-up example/);
+    }
+    const ids = items.flatMap(([, labelledBy]) => labelledBy.split(' '));
+    assert.equal(new Set(ids).size, ids.length, 'label ids are unique');
+    assert.match(cards, /Made-up example with a coverage gap/);
   } finally {
     page.restore();
   }

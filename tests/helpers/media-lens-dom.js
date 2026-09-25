@@ -155,7 +155,11 @@ export class FakeElement {
     this.ownerDocument.focusLog.push(this.id || this.tagName.toLowerCase());
   }
 
-  scrollIntoView() {}
+  // Records which element was brought into view, and how, so tests can
+  // check that an error is scrolled on screen.
+  scrollIntoView(options) {
+    this.ownerDocument.scrollLog.push({ id: this.id || this.tagName.toLowerCase(), options: options ?? null });
+  }
 
   showModal() {
     this.open = true;
@@ -240,6 +244,7 @@ class FakeDocument {
     this.listeners = new Map();
     this.readyState = 'complete';
     this.focusLog = [];
+    this.scrollLog = [];
     this.documentElement = new FakeElement(this, 'html');
     this.body = null;
     this.activeElement = null;
@@ -342,7 +347,8 @@ let instanceCounter = 0;
  * @param {object} options
  * @param {string} [options.href] page URL; decides the host mode
  * @param {boolean} [options.fixturePreview] add the fixture-preview meta
- * @param {object} [options.health] /health body, or null for a network failure
+ * @param {object|Function} [options.health] /health body, null for a network
+ *   failure, or (callIndex) => body to vary the answer between checks
  * @param {Function} [options.analyze] (payload, init, callIndex) => Response | 'pending'
  * @param {Function} [options.fixture] (url) => Response, default serves in-repo fixtures
  */
@@ -393,13 +399,16 @@ export async function loadMediaLensPage(options = {}) {
 
   const fetchCalls = [];
   let analyzeCount = 0;
+  let healthCount = 0;
   async function fakeFetch(input, init = {}) {
     const target = String(input);
     const call = { url: target, method: init.method || 'GET', body: init.body ? JSON.parse(init.body) : null };
     fetchCalls.push(call);
     if (target.endsWith('/health')) {
-      if (options.health === null) throw new TypeError('Failed to fetch');
-      return jsonResponse(options.health || LIVE_HEALTH);
+      healthCount += 1;
+      const health = typeof options.health === 'function' ? options.health(healthCount) : options.health;
+      if (health === null) throw new TypeError('Failed to fetch');
+      return jsonResponse(health || LIVE_HEALTH);
     }
     if (target.endsWith('/analyze')) {
       analyzeCount += 1;

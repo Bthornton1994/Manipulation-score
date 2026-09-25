@@ -49,6 +49,7 @@ function itemFromBlock(block, source, retrievedAt) {
   const title = tagText(block, 'title');
   const link = tagText(block, 'link') || atomLink(block);
   const published = parseTime(tagText(block, 'pubDate') || tagText(block, 'published') || tagText(block, 'updated'));
+  // Feed-supplied tag only. There is no external evidence store behind it.
   const origin = tagText(block, 'mediaLens:originEvidence');
   const canonical = safeCanonicalUrl(link);
   if (!title || !canonical) {

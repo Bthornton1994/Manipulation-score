@@ -43,10 +43,13 @@ function labelMember(record, seenUrlKeys) {
       independent_reporting: false
     };
   }
+  // origin_evidence is a tag the feed itself supplied
+  // (mediaLens:originEvidence). This repository only has that tag in fixture
+  // XML. It is not a separate evidence store.
   if (record.origin_evidence === 'first_independent_report') {
     return {
       relation: 'independent_reporting',
-      labeling_basis: 'recorded_origin_evidence_first_independent_report',
+      labeling_basis: 'feed_supplied_tag_first_independent_report',
       independent_reporting: true
     };
   }

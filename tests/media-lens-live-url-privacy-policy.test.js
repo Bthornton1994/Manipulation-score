@@ -117,9 +117,12 @@ test('privacy.html states fixture examples are made up and coverage comparison i
   assert.match(html, /compares coverage across outlets in live results/);
 });
 
-test('privacy.html discloses per-analysis consent, the network steps, what the host keeps, and sensitive-content limits', async () => {
+test('privacy.html discloses consent before sending, the network steps, what the host keeps, and sensitive-content limits', async () => {
   const html = await readFile('privacy.html', 'utf8');
-  assert.match(html, /asks you in a dialog to confirm that the material is public and that you are allowed to review it\. It asks again for each analysis\./);
+  assert.match(html, /Before anything is sent, the page asks you to confirm that the material is public and that you are allowed to review it\./);
+  // The public page must stay true while the operator host still serves an
+  // earlier page build, whose consent checkbox is not re-asked per analysis.
+  assert.doesNotMatch(html, /asks again for each analysis/);
   assert.match(html, /The URL is not sent until you confirm, and the operator host rejects an analysis request without that confirmation\./);
   assert.match(html, /Your browser sends the URL to the operator host inside the request body\./);
   assert.match(html, /The operator host, not your browser, requests the public page at that URL\./);

@@ -11,6 +11,7 @@ import { loadClassifierDevTaxonomy } from './classifier-dev/taxonomy.js';
 import { applyCascadeDispositions, cascadeEngineMeta, runSelectiveCascade } from './classifier-dev/cascade.js';
 import { LIVE_URL_OVERSIZED_MESSAGE } from './config.js';
 import { isAbortError } from './abort-utils.js';
+import { enginePreparation } from './prepare.js';
 
 const SPAN_ROLES_EXCLUDED_FROM_JEV = new Set(['boilerplate', 'byline_meta']);
 const TIMED_OUT = Symbol('media-lens-analysis-timed-out');
@@ -23,6 +24,25 @@ function oversizedInputMessage(prepared) {
 function oversizedSpanMessage(prepared) {
   if (prepared.artifact.inputMode === 'url') return LIVE_URL_OVERSIZED_MESSAGE;
   return 'This article has more sections than the analysis limit allows, so it was not processed.';
+}
+
+const EXTRACTION_FAILURE_MESSAGES = {
+  empty: 'The article body could not be extracted, so no analysis was performed.',
+  parse_failed: 'The page could not be parsed, so no analysis was performed.',
+  unsupported: 'The response is not supported article HTML, so no analysis was performed.',
+  error: 'Article extraction failed, so no analysis was performed.',
+  not_extracted: 'The article was not extracted, so no analysis was performed.'
+};
+
+function extractionFailureMessage(status) {
+  return EXTRACTION_FAILURE_MESSAGES[status] || EXTRACTION_FAILURE_MESSAGES.error;
+}
+
+function extractionBlocksAnalysis(prepared) {
+  const status = prepared.extraction?.status;
+  if (!status || status === 'ok' || status === 'not_html') return null;
+  if (prepared.artifact.inputMode === 'pasted_text') return null;
+  return status;
 }
 
 async function resolveQuestionSetHash(signal) {
@@ -54,7 +74,7 @@ async function buildAbstentionOnlyGraph({ prepared, reason, message, config, use
     prepared: { ...prepared, spans: [] },
     fusionResult,
     engineMeta: {
-      extractor: prepared.artifact.inputMode === 'pasted_text' ? 'pasted' : prepared.artifact.inputMode === 'fixture' ? 'fixture' : 'html-lite',
+      preparation: enginePreparation(prepared),
       jev: {
         mode: 'disabled',
         model_requested: 'jev-1.13.0',
@@ -105,6 +125,30 @@ export async function analyze({
   // N1: these early-abstention paths must record the same
   // userAssertedPublic/consentAt as every other graph, not silently drop
   // them back to the buildAbstentionOnlyGraph defaults (true / null).
+  const extractionStatus = extractionBlocksAnalysis(prepared);
+  if (extractionStatus) {
+    return buildAbstentionOnlyGraph({
+      prepared,
+      reason: 'engine_failure',
+      message: extractionFailureMessage(extractionStatus),
+      config,
+      userAssertedPublic,
+      consentAt
+    });
+  }
+  if (
+    prepared.artifact.language === 'und' &&
+    (prepared.extraction?.languageScope === 'article_html' || prepared.extraction?.languageScope === 'pasted_text')
+  ) {
+    return buildAbstentionOnlyGraph({
+      prepared,
+      reason: 'unsupported_language',
+      message: 'This article is not identified as English, so no signals are shown.',
+      config,
+      userAssertedPublic,
+      consentAt
+    });
+  }
   if (prepared.textLengthChars < config.limits.minAnalyzableChars) {
     return buildAbstentionOnlyGraph({
       prepared,
@@ -294,7 +338,7 @@ export async function analyze({
       prepared,
       fusionResult,
       engineMeta: {
-        extractor: prepared.artifact.inputMode === 'pasted_text' ? 'pasted' : prepared.artifact.inputMode === 'fixture' ? 'fixture' : 'html-lite',
+        preparation: enginePreparation(prepared),
         jev: {
           mode: jevAdapter.mode,
           model_requested: 'jev-1.13.0',

@@ -346,6 +346,31 @@ function validateEngine(engine, observations, errors) {
   }
   req(errors, engine.pipeline_version === 'media-lens-0.1.0', `${p}.pipeline_version must be literal "media-lens-0.1.0"`);
   req(errors, isPlainObject(engine.preparation), `${p}.preparation must be an object`);
+  if (isPlainObject(engine.preparation) && engine.preparation.extractor === 'trafilatura') {
+    const reportedVersion = engine.preparation.extractor_version;
+    const versionOk =
+      engine.preparation.extraction_status === 'ok'
+        ? reportedVersion === '2.2.0'
+        : reportedVersion === null || (typeof reportedVersion === 'string' && reportedVersion.length > 0);
+    req(
+      errors,
+      versionOk,
+      engine.preparation.extraction_status === 'ok'
+        ? `${p}.preparation.extractor_version must be the pinned Trafilatura version 2.2.0`
+        : `${p}.preparation.extractor_version must be null or the version the child reported`
+    );
+    req(
+      errors,
+      typeof engine.preparation.extraction_status === 'string' && engine.preparation.extraction_status.length > 0,
+      `${p}.preparation.extraction_status required for trafilatura`
+    );
+    req(
+      errors,
+      engine.preparation.body_sha256 === null ||
+        (typeof engine.preparation.body_sha256 === 'string' && /^[0-9a-f]{64}$/.test(engine.preparation.body_sha256)),
+      `${p}.preparation.body_sha256 must be a sha256 hex string or null`
+    );
+  }
   req(errors, isPlainObject(engine.jev), `${p}.jev must be an object`);
   req(errors, isPlainObject(engine.newsjack), `${p}.newsjack must be an object`);
   req(errors, isPlainObject(engine.fusion), `${p}.fusion must be an object`);

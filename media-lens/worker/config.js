@@ -46,6 +46,27 @@ export const DEFAULT_LIMITS = Object.freeze({
   urlFetchParseTimeoutMs: 2000
 });
 
+// Owner approval 2026-09-22 PT for the four numeric limits, and a same-day
+// owner authorization for a planning-only per-call estimate.
+// ESTIMATED planning value only. loadConfig must not inject it and must not
+// copy this object into the environment. Runtime still needs
+// MEDIA_LENS_JEV_SHADOW_NARROW_ESTIMATED_USD_PER_CALL set explicitly. An unset
+// env keeps the parsed per-call estimate null, so real narrow calls stay at zero.
+// Basis for 0.002: universal serialized request bound 9467 characters; planning
+// token bound 3156 = ceil(9467 / 3); public TypeSafe reference $0.042 / MTok
+// input (planning-only; account invoice unverified); 20% buffer makes the raw
+// buffered figure about $0.000159 / call. 0.002 is a conservative planning
+// estimate above that figure, not account-verified billing and not a
+// production-ready claim. Five calls at 0.002 are $0.010.
+export const NARROW_SHADOW_APPROVED_OPERATING_POINTS = Object.freeze({
+  approvedOn: '2026-09-22',
+  maxCallsPerAnalysis: 5,
+  timeoutMs: 10000,
+  rateLimitPerMinute: 6,
+  monthlyCostCeilingUsd: 5,
+  estimatedUsdPerCall: 0.002
+});
+
 function readMode(env) {
   const raw = (env.MEDIA_LENS_MODE || 'fixture').toLowerCase();
   return raw === 'live' ? 'live' : 'fixture';
@@ -69,6 +90,33 @@ function readNumber(env, name, fallback, { min = 0, max = 1 } = {}) {
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed < min || parsed > max) return fallback;
   return parsed;
+}
+
+function readUnsetOrWhole(env, name, { min, max }) {
+  const raw = env[name];
+  if (raw == null || String(raw).trim() === '') return null;
+  const text = String(raw).trim();
+  if (!/^\d+$/.test(text)) return null;
+  const parsed = Number(text);
+  if (!Number.isInteger(parsed) || parsed < min || parsed > max) return null;
+  return parsed;
+}
+
+function readUnsetOrPositiveDecimal(env, name, { max }) {
+  const raw = env[name];
+  if (raw == null || String(raw).trim() === '') return null;
+  const text = String(raw).trim();
+  if (!/^\d+(\.\d+)?$/.test(text)) return null;
+  const parsed = Number(text);
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed > max) return null;
+  return parsed;
+}
+
+function ciDisablesNarrowNetwork(env) {
+  const raw = env.CI;
+  if (raw == null) return false;
+  const text = String(raw).trim().toLowerCase();
+  return text !== '' && text !== 'false' && text !== '0';
 }
 
 function getEnv(config) {
@@ -160,6 +208,35 @@ export function loadConfig(env = process.env) {
       baseUrl: env.MEDIA_LENS_TYPESAFE_BASE_URL || 'https://api.typesafe.ai',
       modelRequested: 'jev-1.13.0',
       hasApiKey: Boolean(typesafeApiKey)
+    },
+    // Exact string only. Does not enable live Jev, live URL, pasted text,
+    // classifier.dev, or pin verify. extraJevCallsEnabled stays false:
+    // MEDIA_LENS_JEV_SHADOW only captures production answers. Narrow-question
+    // calls use jevShadowNarrow. The parsers below stay null when unset.
+    // They do not fall back to any planning value recorded above this function.
+    // An unset per-call estimate env stays null, so real narrow calls stay at zero.
+    jevShadow: {
+      enabled: readExactTrue(env, 'MEDIA_LENS_JEV_SHADOW'),
+      extraJevCallsEnabled: false
+    },
+    jevShadowNarrow: {
+      enabled: readExactTrue(env, 'MEDIA_LENS_JEV_SHADOW_NARROW'),
+      maxCallsPerAnalysis: readUnsetOrWhole(env, 'MEDIA_LENS_JEV_SHADOW_NARROW_MAX_CALLS_PER_ANALYSIS', {
+        min: 1,
+        max: 10000
+      }),
+      timeoutMs: readUnsetOrWhole(env, 'MEDIA_LENS_JEV_SHADOW_NARROW_TIMEOUT_MS', { min: 1, max: 120000 }),
+      rateLimitPerMinute: readUnsetOrWhole(env, 'MEDIA_LENS_JEV_SHADOW_NARROW_RATE_LIMIT_PER_MINUTE', {
+        min: 1,
+        max: 100000
+      }),
+      monthlyCostCeilingUsd: readUnsetOrPositiveDecimal(env, 'MEDIA_LENS_JEV_SHADOW_NARROW_MONTHLY_COST_CEILING_USD', {
+        max: 1000000
+      }),
+      estimatedUsdPerCall: readUnsetOrPositiveDecimal(env, 'MEDIA_LENS_JEV_SHADOW_NARROW_ESTIMATED_USD_PER_CALL', {
+        max: 10000
+      }),
+      ciDisablesNetwork: ciDisablesNarrowNetwork(env)
     },
     newsjack: {
       artifactsDir: env.MEDIA_LENS_NEWSJACK_ARTIFACTS_DIR || null
@@ -253,7 +330,9 @@ export function jevAdapterMode(config) {
 
 /**
  * A version of the config that is safe to serialize (e.g. for /health).
- * Never includes secret values, only presence booleans.
+ * Never includes secret values, only presence booleans. jevShadow and
+ * jevShadowNarrow are omitted so /health stays the same whether those
+ * flags are set or not.
  */
 export function publicConfig(config) {
   const flags = effectiveLiveFlags(config);

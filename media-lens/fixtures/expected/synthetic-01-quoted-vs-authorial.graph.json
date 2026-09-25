@@ -17,8 +17,8 @@
     "modified_at": null,
     "timestamp_precision": "time",
     "language": "en",
-    "text_sha256": "44ab5b03ac15fc16fe58e725363b06b6ad9a5e7e14da16fb0ba23a9c65c3e0cd",
-    "text_length_chars": 527,
+    "text_sha256": "af82cc08d58127c5629992bbc5273fda828e5a5a6c82c0c36d6a3318f3735644",
+    "text_length_chars": 511,
     "paywall_detected": false,
     "authorization": {
       "user_asserted_public": true,
@@ -42,21 +42,34 @@
     {
       "id": "span-2",
       "start": 43,
-      "end": 58,
-      "text": "By Jordan Reyes",
+      "end": 185,
+      "text": "The city council voted on Tuesday to approve a $4 million drainage upgrade for the downtown district after three seasons of repeated flooding.",
       "paragraph_index": 1,
-      "role": "byline_meta",
+      "role": "authorial",
       "attribution": {
         "speaker": null,
         "cue": null
       },
-      "role_basis": "html_structure"
+      "role_basis": "default"
     },
     {
       "id": "span-3",
-      "start": 59,
-      "end": 201,
-      "text": "The city council voted on Tuesday to approve a $4 million drainage upgrade for the downtown district after three seasons of repeated flooding.",
+      "start": 186,
+      "end": 229,
+      "text": "We will fix the flooding problem this year,",
+      "paragraph_index": 2,
+      "role": "quoted",
+      "attribution": {
+        "speaker": "the mayor",
+        "cue": "said"
+      },
+      "role_basis": "quote_marks"
+    },
+    {
+      "id": "span-4",
+      "start": 230,
+      "end": 270,
+      "text": "the mayor said during Tuesday's meeting.",
       "paragraph_index": 2,
       "role": "authorial",
       "attribution": {
@@ -66,23 +79,10 @@
       "role_basis": "default"
     },
     {
-      "id": "span-4",
-      "start": 202,
-      "end": 245,
-      "text": "We will fix the flooding problem this year,",
-      "paragraph_index": 3,
-      "role": "quoted",
-      "attribution": {
-        "speaker": "the mayor",
-        "cue": "said"
-      },
-      "role_basis": "quote_marks"
-    },
-    {
       "id": "span-5",
-      "start": 246,
-      "end": 286,
-      "text": "the mayor said during Tuesday's meeting.",
+      "start": 271,
+      "end": 390,
+      "text": "The council said it would fix the flooding problem this year, directing staff to begin engineering work within 30 days.",
       "paragraph_index": 3,
       "role": "authorial",
       "attribution": {
@@ -93,23 +93,10 @@
     },
     {
       "id": "span-6",
-      "start": 287,
-      "end": 406,
-      "text": "The council said it would fix the flooding problem this year, directing staff to begin engineering work within 30 days.",
-      "paragraph_index": 4,
-      "role": "authorial",
-      "attribution": {
-        "speaker": null,
-        "cue": null
-      },
-      "role_basis": "default"
-    },
-    {
-      "id": "span-7",
-      "start": 407,
-      "end": 527,
+      "start": 391,
+      "end": 511,
       "text": "Sources close to the situation report growing frustration among residents who have filed dozens of complaints this year.",
-      "paragraph_index": 5,
+      "paragraph_index": 4,
       "role": "uncertain",
       "attribution": {
         "speaker": null,
@@ -126,14 +113,14 @@
       "strength": "observed",
       "localization": "span",
       "span_ids": [
-        "span-4"
+        "span-3"
       ],
       "authorial_attribution": "quoted",
       "evidence": {
         "engine": "jev",
         "question_id": "influence_signal",
         "top_probability": 0.72,
-        "answers_ref": "span-4"
+        "answers_ref": "span-3"
       },
       "review_status": "auto",
       "ui_phrase": "Quoted language not attributed as authorial"
@@ -145,14 +132,14 @@
       "strength": "candidate",
       "localization": "span",
       "span_ids": [
-        "span-6"
+        "span-5"
       ],
       "authorial_attribution": "authorial",
       "evidence": {
         "engine": "jev",
         "question_id": "influence_signal",
         "top_probability": 0.75,
-        "answers_ref": "span-6"
+        "answers_ref": "span-5"
       },
       "review_status": "auto",
       "ui_phrase": "Observed influence signal"
@@ -164,14 +151,14 @@
       "strength": "candidate",
       "localization": "span",
       "span_ids": [
-        "span-7"
+        "span-6"
       ],
       "authorial_attribution": "unknown",
       "evidence": {
         "engine": "jev",
         "question_id": "influence_signal",
         "top_probability": 0.68,
-        "answers_ref": "span-7"
+        "answers_ref": "span-6"
       },
       "review_status": "needs_review",
       "ui_phrase": "Observed influence signal"
@@ -181,7 +168,7 @@
     {
       "id": "claim-1",
       "span_ids": [
-        "span-3"
+        "span-2"
       ],
       "text": "The city council voted on Tuesday to approve a $4 million drainage upgrade for the downtown district after three seasons of repeated flooding.",
       "kind": "event",
@@ -193,7 +180,7 @@
     {
       "id": "claim-2",
       "span_ids": [
-        "span-4"
+        "span-3"
       ],
       "text": "We will fix the flooding problem this year,",
       "kind": "prediction",
@@ -205,7 +192,7 @@
     {
       "id": "claim-3",
       "span_ids": [
-        "span-6"
+        "span-5"
       ],
       "text": "The council said it would fix the flooding problem this year, directing staff to begin engineering work within 30 days.",
       "kind": "statistic",
@@ -284,9 +271,9 @@
   },
   "abstentions": [
     {
-      "id": "abst-failure-span-5",
+      "id": "abst-failure-span-4",
       "scope": "span",
-      "target": "span-5",
+      "target": "span-4",
       "reason": "engine_failure",
       "message": "The typed classifier did not return a usable answer for this section, so no signal is shown for it."
     }
@@ -295,7 +282,13 @@
     "pipeline_version": "media-lens-0.1.0",
     "preparation": {
       "version": "0.1.0",
-      "extractor": "fixture"
+      "extractor": "trafilatura",
+      "extractor_version": "2.2.0",
+      "extraction_status": "ok",
+      "body_sha256": "d00cb633f1c7656bb5313b13ffd21990b867a2f7d0d21a93d2dffb4fde52fa7a",
+      "content_type": "text/html",
+      "fetch_status": "not_fetched",
+      "fetched_at": null
     },
     "jev": {
       "mode": "fixture",

@@ -15,7 +15,7 @@
         "type": "noul"
       }
     },
-    "span-3": {
+    "span-2": {
       "influence_signal": {
         "choice": "none",
         "probabilities": {
@@ -29,7 +29,7 @@
         "type": "noul"
       }
     },
-    "span-4": {
+    "span-3": {
       "influence_signal": {
         "choice": "urgency",
         "probabilities": {
@@ -44,7 +44,7 @@
         "type": "noul"
       }
     },
-    "span-6": {
+    "span-5": {
       "influence_signal": {
         "choice": "certainty_beyond_evidence",
         "probabilities": {
@@ -59,7 +59,7 @@
         "type": "noul"
       }
     },
-    "span-7": {
+    "span-6": {
       "influence_signal": {
         "choice": "vague_authority",
         "probabilities": {

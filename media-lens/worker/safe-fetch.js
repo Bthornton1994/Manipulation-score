@@ -23,7 +23,7 @@ import {
   taggedError
 } from './address-policy.js';
 import { hostIsAllowlisted } from './host-key.js';
-import { finalizePinnedResponse, performPinnedGet } from './pinned-http.js';
+import { finalizePinnedResponse, headerValue, performPinnedGet } from './pinned-http.js';
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const DEFAULT_CONNECT_TIMEOUT_MS = 3000;
@@ -271,7 +271,14 @@ async function fetchArticleSafelyUnlocked(
       }
 
       const html = await finalized.readHtml();
-      return { html, finalUrl: currentUrl, pin };
+      return {
+        html,
+        finalUrl: currentUrl,
+        pin,
+        contentType: headerValue(finalized.headers, 'content-type') || null,
+        fetchedAt: new Date().toISOString(),
+        fetchStatus: '200'
+      };
     } finally {
       timeout.cleanup();
     }

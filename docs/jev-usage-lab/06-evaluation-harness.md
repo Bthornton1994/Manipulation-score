@@ -1,0 +1,90 @@
+# 06 — Evaluation harness
+
+Module: `media-lens/worker/jev-usage-lab/evaluate.js`.
+
+Runner: `media-lens/worker/jev-usage-lab/run.js`.
+
+CLI: `node scripts/jev-usage-lab.js` (requires `MEDIA_LENS_JEV_SHADOW=true` to replay).
+
+The harness scores fixture replays. It does not call Jev, does not fit thresholds, and does not sample live articles.
+
+## Splits
+
+| Split | Role |
+| --- | --- |
+| `calibration` | Illustrates the frozen thresholds. Not used to choose them |
+| `holdout` | Scored with the same thresholds. `thresholds_fit_on_holdout` is false |
+| `adversarial` | Invariant stubs, not an accuracy number |
+
+Holdout ids are not read by the threshold constants. `FROZEN_FUSION_THRESHOLDS` is copied from `fusion.js`. `SHADOW_MIN_MARGIN` is `0.15` and is documented as a shadow gate, not a fitted weight.
+
+Before any abstain gate or score, `prepareLabCases` groups records by `article_id` + `span_id` and assigns the group to one split. Holdout is kept only when every record in the group declared holdout. Otherwise the group takes the first present of `calibration`, `adversarial`, then `historical`. The span-abstain gate then runs inside each assigned split, not across a mixed calibration and holdout population. A calibration record cannot change a holdout score. The production historical replay is a separate list and is not an input to that gate.
+
+A suppressed sibling is an abstention: `abstained` is true and `selected_option` is null. `splitMetrics` also treats `suppressed_by_span_abstain` as abstention, so a leftover selected option cannot count as a scored decision.
+
+## Metrics
+
+Per split:
+
+- abstention count and rate (`abstained === true`)
+- exact selected-option matches among non-abstentions
+- disagreements with the fixture label
+- binary false positives and false negatives where the question defines `binary_positive`
+- fixture-declared latency sum/mean and call-count sum
+
+Per question that has cases:
+
+- confusion matrix, with an `abstain` column. If `abstain` is already an option, it is not duplicated
+- precision, recall, and F1 for the binary positive, excluding abstentions. A zero denominator is `n/a`, not zero precision
+- calibration bins on confidence: `[0,0.5)`, `[0.5,0.7)`, `[0.7,1]`. Rate is exact option match inside the bin. Abstentions are outside the bins
+
+Binary positives in this set: `loaded_moralized` and `present` (false dilemma). Authorial-vs-quotation and claim support are multi-class and do not get a single F1.
+
+Cost is unavailable. No price or rate limit is hardcoded.
+
+## Historical replay
+
+`replayHistoricalFixtures` reads answer JSON and expected graphs for:
+
+- `synthetic-01-quoted-vs-authorial`
+- `synthetic-02-syndicated-cluster`
+- `synthetic-03-no-timestamp`
+- `synthetic-04-injection`
+- `synthetic-05-paywall`
+
+For each answered span it projects the Choice through the frozen probability cutoffs and the marker fail-closed rule, then compares signal and strength with the graph’s Jev observation, or with “no observation”.
+
+The one disagreement in the current fixtures is `synthetic-05-paywall` / `span-2`. The graph abstains for insufficient text and paywall, so it has no Jev observation. The answer file still contains `vague_authority`. The projection is `candidate` because the marker flag is not stored. That is a pipeline-versus-answer-file difference.
+
+Noul rows recommend `authorial_to_uncertain` only when the pre-Jev role is `authorial` and noul is at least `0.70`. They do not write the role.
+
+## Regression checks
+
+Tests in `tests/media-lens-jev-usage-lab.test.js` lock:
+
+- provenance ids round-trip and span text does not
+- `0.55` maps to `candidate` and `0.86` maps to `observed`
+- claim support is not applied
+- unknown options and smuggled scores do not appear in the JSON
+- one-source independence abstains
+- two-source independence stays candidate, not observed
+- a span with `should_abstain` plus sibling questions is abstained, not scored
+- a shared article id and span id cannot sit in both calibration and holdout
+- cross-span batches split
+- `analyze()` on `synthetic-01-quoted-vs-authorial` still reports 6 fixture-mode logical calls
+- `worker/config.js` reads `MEDIA_LENS_JEV_SHADOW` as an exact `true` and leaves it off otherwise. `analyze()` still does not import the lab
+- the CLI does not ask `media-lens-narrow.v1` on the network. That path is `MEDIA_LENS_JEV_SHADOW_NARROW`, default off, in `docs/jev-usage-lab/10-narrow-shadow-execution.md`. The 2026-09-22 PT record stores 0.002 as an ESTIMATED planning constant only. The runtime env stays unset, so that network stays off
+- the committed report matches a fresh render
+
+## How to run
+
+```bash
+node scripts/jev-usage-lab.js
+MEDIA_LENS_JEV_SHADOW=true node scripts/jev-usage-lab.js
+MEDIA_LENS_JEV_SHADOW=true node scripts/jev-usage-lab.js --out /tmp/jev-usage-lab-report.md
+node --test tests/media-lens-jev-usage-lab.test.js
+```
+
+`--out` must not be under `docs/`. The committed fixture report is `docs/jev-usage-lab/09-accuracy-abstention-report.md`, generated by the renderer so the numbers cannot drift from the code without a test failure.
+
+Do not treat the report as model accuracy.

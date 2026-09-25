@@ -1,0 +1,146 @@
+{
+  "id": "cos-routing.v1",
+  "version": "1",
+  "status": "docs_and_stub",
+  "model_requested": "jev-1.13.0",
+  "authority": "none",
+  "replaces_production_question_set": false,
+  "prohibitions": [
+    "final_prose",
+    "overall_manipulation_score",
+    "outlet_rank",
+    "person_rank",
+    "unsupported_claim_applied",
+    "merge_authorization",
+    "deploy_authorization",
+    "spend_authorization",
+    "credential_authorization",
+    "live_flag_authorization"
+  ],
+  "questions": {
+    "task_category": {
+      "type": "choice",
+      "send_to_jev": true,
+      "policy": "standard",
+      "instructions": "Classify the task category from `state.routing` only. Do not authorize an action and do not write the task.",
+      "criteria": {
+        "code_change": "The task changes executable product code.",
+        "docs": "The task changes documentation only.",
+        "review": "The task is review or audit without a write.",
+        "ops": "The task changes runtime operations, flags, or deploy state.",
+        "research": "The task is research that does not write product state.",
+        "unknown": "The category is not clear from state."
+      },
+      "app_mapping": {
+        "code_change": "route_task_category",
+        "docs": "route_task_category",
+        "review": "route_task_category",
+        "ops": "route_task_category",
+        "research": "route_task_category",
+        "unknown": "route_task_category"
+      }
+    },
+    "repo_product": {
+      "type": "choice",
+      "send_to_jev": true,
+      "policy": "standard",
+      "instructions": "Classify which repo or product `state.routing` names. Do not open another repo and do not authorize work there.",
+      "criteria": {
+        "manipulation_score": "The task is in this Manipulation Score repo.",
+        "media_lens": "The task is Media Lens inside this repo.",
+        "clarity": "The task is the Clarity private analyzer.",
+        "other": "The task names some other product.",
+        "unknown": "The product is not clear from state."
+      },
+      "app_mapping": {
+        "manipulation_score": "route_repo_product",
+        "media_lens": "route_repo_product",
+        "clarity": "route_repo_product",
+        "other": "route_repo_product",
+        "unknown": "route_repo_product"
+      }
+    },
+    "external_write_required": {
+      "type": "choice",
+      "send_to_jev": true,
+      "policy": "standard",
+      "instructions": "Choose whether the task requires a write outside this process, such as a merge, deploy, flag change, credential change, or spend. Choosing yes does not perform that write.",
+      "criteria": {
+        "yes": "An external write would be required to finish the task.",
+        "no": "No external write is required.",
+        "unknown": "State does not show whether an external write is required."
+      },
+      "app_mapping": {
+        "yes": "route_external_write",
+        "no": "route_external_write",
+        "unknown": "route_external_write"
+      }
+    },
+    "reversible": {
+      "type": "choice",
+      "send_to_jev": true,
+      "policy": "standard",
+      "instructions": "Choose whether the task's effect can be undone without an external recovery action. Do not perform the action.",
+      "criteria": {
+        "reversible": "The effect can be undone locally.",
+        "irreversible": "The effect cannot be undone without an external recovery action.",
+        "unknown": "Reversibility is not clear from state."
+      },
+      "app_mapping": {
+        "reversible": "route_reversible",
+        "irreversible": "route_reversible",
+        "unknown": "route_reversible"
+      }
+    },
+    "bryant_approval_required": {
+      "type": "choice",
+      "send_to_jev": true,
+      "policy": "standard",
+      "instructions": "Choose whether Bryant Thornton's approval is required before any action. Do not grant that approval.",
+      "criteria": {
+        "required": "Bryant approval is required before action.",
+        "not_required": "Bryant approval is not required for this task.",
+        "unknown": "State does not show whether approval is required."
+      },
+      "app_mapping": {
+        "required": "route_approval",
+        "not_required": "route_approval",
+        "unknown": "route_approval"
+      }
+    },
+    "enough_context": {
+      "type": "choice",
+      "send_to_jev": true,
+      "policy": "standard",
+      "instructions": "Choose whether `state.routing` contains enough context to recommend a route. Do not fill missing context.",
+      "criteria": {
+        "enough": "The routing fields needed for a recommendation are present.",
+        "missing": "Required routing context is missing.",
+        "unknown": "It is unclear whether context is sufficient."
+      },
+      "app_mapping": {
+        "enough": "route_context",
+        "missing": "route_context",
+        "unknown": "route_context"
+      }
+    },
+    "route_decision": {
+      "type": "choice",
+      "send_to_jev": true,
+      "policy": "standard",
+      "instructions": "Recommend route, clarify, hold, or escalate from the other routing answers. This recommendation does not authorize a merge, deploy, spend, credential change, or live flag change.",
+      "criteria": {
+        "route": "The task can be recommended onward. This is not permission to act.",
+        "clarify": "Ask for missing context before any recommendation is followed.",
+        "hold": "Do not act. Wait.",
+        "escalate": "Send the task to a human gate. Do not act."
+      },
+      "app_mapping": {
+        "route": "route_recommendation",
+        "clarify": "route_recommendation",
+        "hold": "route_recommendation",
+        "escalate": "route_recommendation"
+      }
+    }
+  }
+}

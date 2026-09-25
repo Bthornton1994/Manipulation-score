@@ -26,7 +26,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-      - run: node --test tests/*.test.js
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned Trafilatura
+        run: |
+          python -m venv "$RUNNER_TEMP/trafilatura"
+          "$RUNNER_TEMP/trafilatura/bin/pip" install --disable-pip-version-check -r media-lens/worker/trafilatura/requirements.txt
+      - name: Test
+        run: |
+          export PATH="$RUNNER_TEMP/trafilatura/bin:$PATH"
+          node --test tests/*.test.js
 
   deploy:
     needs: test

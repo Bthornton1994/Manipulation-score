@@ -28,8 +28,8 @@
 
       <h2>September 25, 2026 | Media Lens preview disclosures</h2>
       <ul>
-        <li>Privacy, Limitations, Acceptable Use, and Methodology now describe the limited Jev-only Media Lens preview that runs on a separate operator host, ml-jev.manipulationscore.com. It analyzes one public https page at a time from a short operator allowlist. It is experimental and not production-ready, and the operator can pause it.</li>
-        <li>Privacy now states what that host receives, what it sends to TypeSafe AI's Jev service, what its audit lines and ESTIMATED spend record keep, and that its web server keeps a standard access log. The retention period of the host's logs is not yet documented.</li>
+        <li>Privacy, Limitations, Acceptable Use, and Methodology now describe the limited Jev-only Media Lens preview that runs on a separate operator host, ml-jev.manipulationscore.com. It analyzes one public page at a time from a short operator allowlist. The page sends only https addresses; the worker also accepts http addresses sent directly to its API, under the same allowlist and redirect rules. It is experimental and not production-ready, and the operator can pause it.</li>
+        <li>Privacy now states what that host receives, exactly what each request to TypeSafe AI's Jev service contains, which fields its audit lines and ESTIMATED spend record keep, that a page recognized as paywalled is analyzed from its visible excerpt only, and that its web server keeps a standard access log set in the host's own configuration. The retention period of the host's logs is not yet documented.</li>
         <li>Media Lens examples labeled as fixtures or samples are made up. Comparing coverage across outlets is not live. Live pasted-text analysis and classifier.dev stay off.</li>
         <li>Clarity's analyzer, scoring, safety logic, and on-device privacy behavior are unchanged. Service worker cache stays <code>clarity-v37</code>.</li>
         <li>The Unreleased entry below records the state before the operator preview started on September 21, 2026.</li>

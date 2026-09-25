@@ -4,16 +4,19 @@ import { readFile } from 'node:fs/promises';
 import http from 'node:http';
 import { createServer } from '../media-lens/worker/server.js';
 import { loadConfig } from '../media-lens/worker/config.js';
-import { JEV_MAX_CONTEXT_CHARS, JEV_MAX_SPAN_CHARS } from '../media-lens/worker/adapters/jev.js';
+import { JEV_MAX_CONTEXT_CHARS, JEV_MAX_SPAN_CHARS, createJevAdapter } from '../media-lens/worker/adapters/jev.js';
 import { redactAuditRecord } from '../media-lens/worker/audit.js';
 import { sanitizeBudgetStoreRecord } from '../media-lens/worker/typesafe-budget-store.js';
+import { parseArticleUrl } from '../media-lens/worker/address-policy.js';
+import { analyze } from '../media-lens/worker/analyze.js';
+import { createNewsjackAdapter } from '../media-lens/worker/adapters/newsjack.js';
 
 const CLARITY_PRIVACY_SUMMARY =
   'We do not operate accounts, servers that receive your pasted text, or analytics that track what you analyze.';
 const CLARITY_ON_DEVICE =
   'When you analyze a message, processing happens entirely in your browser using local JavaScript. Nothing is uploaded to Clarity or any third-party service for analysis.';
 const MEDIA_LENS_PRIVACY_DISCLOSURE =
-  'Media Lens is a separate, experimental preview for public articles, advertisements, speeches, and campaign material. It is not part of this Clarity site. A limited Jev-only Media Lens preview runs on a separate operator host, ml-jev.manipulationscore.com. It analyzes one public https page at a time, and only from a short list of hosts the operator allows. Live pasted-text analysis is off. The secondary classifier, classifier.dev, is off. Media Lens is not production-ready, and the operator can pause it at any time with a kill switch. Do not enter private messages or material you are not authorized to review. Clarity’s private analyzer remains governed by the on-device behavior described above.';
+  'Media Lens is a separate, experimental preview for public articles, advertisements, speeches, and campaign material. It is not part of this Clarity site. A limited Jev-only Media Lens preview runs on a separate operator host, ml-jev.manipulationscore.com. It analyzes one public web page at a time, and only from a short list of hosts the operator allows. The Media Lens page sends only https addresses. The worker on the operator host also accepts http addresses sent directly to its API, under the same host list, address checks, and redirect rules. Live pasted-text analysis is off. The secondary classifier, classifier.dev, is off. Media Lens is not production-ready, and the operator can pause it at any time with a kill switch. Do not enter private messages or material you are not authorized to review. Clarity’s private analyzer remains governed by the on-device behavior described above.';
 
 // Wording that described Media Lens before the 2026-09-21 operator preview.
 // Trust pages must not keep it once the preview runs on the operator host.
@@ -81,7 +84,10 @@ test('privacy.html describes the operator-host preview as limited, Jev-only, and
   const html = await readFile('privacy.html', 'utf8');
   assert.match(html, /<h2>Media Lens live URL analysis<\/h2>/);
   assert.match(html, /runs on a separate operator host, ml-jev\.manipulationscore\.com/);
-  assert.match(html, /one public https page at a time/);
+  assert.match(html, /one public web page at a time/);
+  assert.doesNotMatch(html, /one public https page at a time/);
+  assert.match(html, /The Media Lens page sends only https addresses\./);
+  assert.match(html, /also accepts http addresses sent directly to its API, under the same host list, address checks, and redirect rules\./);
   assert.match(html, /short list of hosts the operator allows/);
   assert.match(html, /not production-ready/);
   assert.match(html, /pause it at any time with a kill switch/);
@@ -120,22 +126,42 @@ test('privacy.html discloses per-analysis consent, the network steps, what the h
   assert.match(html, /The destination site and its content network see the operator host’s network address, not yours\./);
   assert.match(html, /The request carries no cookies from your browser\./);
   assert.match(html, /sends prepared public span text to TypeSafe AI’s Jev service/);
-  assert.match(html, /each span of text \(up to 1,200 characters\), and up to 400 characters of the text on each side of it/);
+  assert.match(html, /one request per span, repeated up to three more times after some errors\./);
+  assert.match(
+    html,
+    /Each request holds the page title, the kind of material \(for example, article\), the span’s id and role \(for example, quoted\), the span text \(up to 1,200 characters\), and the first 400 characters of the spans just before and after it\./
+  );
+  assert.match(html, /Spans marked as bylines or boilerplate are not sent, either on their own or as neighbouring text\./);
+  assert.match(html, /Each request also carries Media Lens’s fixed questions and the requested Jev model name\./);
+  assert.doesNotMatch(html, /up to 400 characters of the text on each side of it/);
   assert.match(html, /TypeSafe processes it under TypeSafe’s own policy\. TypeSafe does not fetch the URL, and Media Lens does not send the URL to TypeSafe\./);
   assert.match(html, /Media Lens does not keep the full article text after the analysis/);
   assert.match(html, /redacted audit lines to the host’s system log/);
-  assert.match(html, /Audit lines do not include the full URL, the page path or query, article text, span text, or your IP address\./);
+  assert.match(html, /They contain only fields from a fixed list: the time, the event type, the worker mode, the input mode/);
+  assert.match(html, /the abstention reason when a page could not be fetched/);
+  assert.match(html, /classifier\.dev counters and state/);
+  assert.match(html, /whether its host is a domain name or an IP address/);
+  assert.match(
+    html,
+    /Audit lines do not include the full URL, the page path or query, an IP address from the URL, article text, span text, or your IP address\./
+  );
   assert.match(html, /ESTIMATED TypeSafe spend record stores only the month, a count of Jev calls, an estimated token count, and whether a spend warning was issued\. It stores no text and no URLs\./);
   assert.match(html, /The operator host’s web server keeps a standard access log\./);
   assert.match(html, /request metadata such as your IP address, the time, the requested path, and browser details/);
   assert.match(html, /It does not record request bodies, so the URL you submit is not in that log\./);
+  assert.match(html, /The access log is set in the host’s web server configuration, which is not part of this repository\./);
   assert.match(html, /How long the operator host keeps its system log and access log is set on that host and is not yet documented here\./);
   assert.doesNotMatch(html, /Retention would be none/);
   assert.doesNotMatch(html, /(access|system) log[^<]*\b\d+\s*(days?|weeks?|months?)\b/i);
   assert.match(html, /does not claim that TypeSafe retains nothing, deletes on request, or offers zero data retention/);
   assert.match(html, /Do not submit private messages, passwords, medical or financial records, information about children/);
   assert.match(html, /Media Lens rejects URLs that contain a username or password\./);
-  assert.match(html, /recognizes as paywalled are left unanalyzed rather than bypassed/);
+  assert.match(html, /Media Lens does not bypass paywalls\./);
+  assert.match(
+    html,
+    /When it recognizes a page as paywalled, it analyzes only the visible excerpt in the page the operator host received, and prepared spans from that excerpt may be sent to TypeSafe as described above\. The result notes that the analysis is limited to the visible excerpt\./
+  );
+  assert.doesNotMatch(html, /paywalled are left unanalyzed/);
 });
 
 test('privacy.html data-flow details match the worker code', async () => {
@@ -182,6 +208,154 @@ test('privacy.html data-flow details match the worker code', async () => {
   );
 });
 
+function preparedForJevRequestCheck({ paywallDetected = false } = {}) {
+  const rows = [
+    ['headline', 'Harbor Bridge Synthetic'],
+    ['byline_meta', 'By A. Synthetic Reporter, staff writer'],
+    ['authorial', `The harbor authority said repairs continue. ${'A'.repeat(1300)}`],
+    ['boilerplate', 'Subscribe to our newsletter for daily updates and offers.'],
+    ['quoted', `We expect the deck repairs to finish soon. ${'Q'.repeat(700)}`],
+    ['authorial', 'Officials plan a public meeting next week to discuss the schedule.']
+  ];
+  let offset = 0;
+  const spans = rows.map(([role, text], index) => {
+    const span = {
+      id: `span-${index + 1}`,
+      start: offset,
+      end: offset + text.length,
+      text,
+      paragraph_index: index,
+      role,
+      role_basis: 'default',
+      attribution: { speaker: null, cue: null }
+    };
+    offset += text.length + 1;
+    return span;
+  });
+  const url = 'https://en.wikipedia.org/wiki/Harbor_Bridge_Synthetic?ref=privacy-check';
+  return {
+    preparedText: spans.map((span) => span.text).join('\n'),
+    textSha256: '0'.repeat(64),
+    textLengthChars: offset,
+    spans,
+    claimCandidates: [],
+    paywallDetected,
+    extraction: {
+      status: 'ok',
+      languageScope: 'article_html',
+      extractorVersion: '2.2.0',
+      languageDetectorVersion: 'test',
+      bodySha256: null,
+      contentType: 'text/html',
+      fetchStatus: '200',
+      fetchedAt: null
+    },
+    artifact: {
+      kind: 'article',
+      inputMode: 'url',
+      url,
+      canonicalUrl: url,
+      title: 'Harbor Bridge Synthetic',
+      byline: 'A. Synthetic Reporter',
+      publisherName: null,
+      publishedAt: null,
+      modifiedAt: null,
+      timestampPrecision: 'none',
+      language: 'en'
+    }
+  };
+}
+
+// Runs the real analyze() pipeline with a live-mode Jev adapter whose fetch
+// is captured in memory. No network request is made.
+async function captureJevRequests(prepared) {
+  const bodies = [];
+  const jevAdapter = createJevAdapter({
+    mode: 'live',
+    baseUrl: 'https://typesafe.invalid',
+    apiKey: 'test-key-not-used',
+    concurrency: 1,
+    fetchImpl: async (_url, init) => {
+      bodies.push(JSON.parse(init.body));
+      return { ok: false, status: 400, headers: new Headers() };
+    }
+  });
+  const graph = await analyze({
+    prepared,
+    config: loadConfig({}),
+    jevAdapter,
+    newsjackAdapter: createNewsjackAdapter({ mode: 'disabled' }),
+    userAssertedPublic: true,
+    consentAt: null
+  });
+  return { bodies, graph };
+}
+
+test('privacy.html: each TypeSafe request carries exactly the fields the page lists and no URL', async () => {
+  const prepared = preparedForJevRequestCheck();
+  const { bodies } = await captureJevRequests(prepared);
+  const eligible = prepared.spans.filter((span) => span.role !== 'boilerplate' && span.role !== 'byline_meta');
+  assert.equal(bodies.length, eligible.length, 'one request per Jev-eligible span (a 400 is not retried)');
+
+  bodies.forEach((body, index) => {
+    assert.deepEqual(Object.keys(body).sort(), ['model', 'questions', 'state']);
+    assert.equal(body.model, 'jev-1.13.0');
+    const { state } = body;
+    assert.deepEqual(Object.keys(state).sort(), ['artifact', 'context', 'span']);
+    assert.deepEqual(state.artifact, { kind: 'article', title: 'Harbor Bridge Synthetic' });
+    assert.deepEqual(Object.keys(state.span).sort(), ['id', 'role', 'text']);
+    assert.equal(state.span.id, eligible[index].id);
+    assert.equal(state.span.role, eligible[index].role);
+    assert.equal(state.span.text, eligible[index].text.slice(0, 1200));
+    assert.deepEqual(Object.keys(state.context).sort(), ['after', 'before']);
+    assert.equal(state.context.before, index > 0 ? eligible[index - 1].text.slice(0, 400) : null);
+    assert.equal(state.context.after, index < eligible.length - 1 ? eligible[index + 1].text.slice(0, 400) : null);
+
+    const serialized = JSON.stringify(body);
+    assert.doesNotMatch(serialized, /wikipedia|https?:\/\/|privacy-check/i, 'no URL reaches TypeSafe');
+    assert.doesNotMatch(serialized, /Synthetic Reporter/, 'bylines are not sent');
+    assert.doesNotMatch(serialized, /Subscribe to our newsletter/, 'boilerplate is not sent');
+  });
+});
+
+test('privacy.html: a page recognized as paywalled is analyzed from its visible excerpt, not left unanalyzed', async () => {
+  const { bodies, graph } = await captureJevRequests(preparedForJevRequestCheck({ paywallDetected: true }));
+  assert.ok(bodies.length > 0, 'prepared spans of the visible excerpt are still sent to TypeSafe');
+  assert.equal(graph.artifact.paywall_detected, true);
+  const note = graph.abstentions.find((entry) => entry.reason === 'paywall');
+  assert.ok(note, 'the result carries a paywall note');
+  assert.match(note.message, /does not bypass paywalls, so analysis is limited to the visible excerpt/);
+});
+
+test('trust-page scheme wording matches the page and the worker URL policy', async () => {
+  // The worker accepts http and https, and nothing else.
+  assert.equal(parseArticleUrl('http://en.wikipedia.org/wiki/Yes').parsed.protocol, 'http:');
+  assert.equal(parseArticleUrl('https://en.wikipedia.org/wiki/Yes').parsed.protocol, 'https:');
+  assert.throws(() => parseArticleUrl('ftp://en.wikipedia.org/wiki/Yes'), (err) => err.code === 'BAD_SCHEME');
+  // Every redirect hop is re-checked against the allowlist, and https may not
+  // redirect to http.
+  const fetchSrc = await readFile('media-lens/worker/safe-fetch.js', 'utf8');
+  assert.match(fetchSrc, /previousScheme === 'https:' && parsed\.protocol === 'http:'/);
+  assert.match(fetchSrc, /REDIRECT_DOWNGRADE/);
+  assert.match(fetchSrc, /hostIsAllowlisted\(parsed\.hostname, urlAllowlist\)/);
+  // The page itself refuses anything but https.
+  const pageSrc = await readFile('media-lens/media-lens.js', 'utf8');
+  assert.match(pageSrc, /parsedUrl\.protocol !== 'https:'/);
+
+  const privacy = await readFile('privacy.html', 'utf8');
+  const limitations = await readFile('limitations.html', 'utf8');
+  const changelog = await readFile('changelog.html', 'utf8');
+  for (const [name, html] of [
+    ['privacy.html', privacy],
+    ['limitations.html', limitations],
+    ['changelog.html', changelog]
+  ]) {
+    assert.doesNotMatch(html, /one public https page at a time/, `${name} must not say https only`);
+    assert.match(html, /sends only https addresses/, name);
+    assert.match(html, /also accepts http addresses sent directly to its API/, name);
+  }
+});
+
 test('privacy.html and limitations.html keep live pasted-text prohibited', async () => {
   const privacy = await readFile('privacy.html', 'utf8');
   const limitations = await readFile('limitations.html', 'utf8');
@@ -200,7 +374,8 @@ test('limitations.html and acceptable-use.html describe the operator preview wit
   assert.match(limitations, /always "not checked" in this preview/);
   assert.match(limitations, /A limited Jev-only live URL preview runs on a separate operator host, ml-jev\.manipulationscore\.com\./);
   assert.match(limitations, /It is experimental and not production-ready, and the operator can pause it at any time\./);
-  assert.match(limitations, /one public https page at a time from a short list of hosts the operator allows/);
+  assert.match(limitations, /one public page at a time from a short list of hosts the operator allows/);
+  assert.match(limitations, /On a page Media Lens recognizes as paywalled, only the visible excerpt is analyzed\./);
   assert.match(limitations, /TypeSafe's Jev classifier/);
   assert.match(limitations, /No accuracy claim is made for its output\./);
   assert.match(limitations, /comparing how different outlets covered the same story is not live/);

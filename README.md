@@ -77,11 +77,11 @@ GitHub provisions TLS for both `manipulationscore.com` and `www.manipulationscor
 
 Media Lens is a separate, experimental preview mode for public articles, advertisements, speeches, and campaign material — not for private messages. It is isolated from Clarity (no shared code, no shared network path) and is excluded from the GitHub Pages build, so it is **not deployed on manipulationscore.com**.
 
-A limited Jev-only live URL preview runs on one operator host, `https://ml-jev.manipulationscore.com/media-lens/`, activated by the owner on 2026-09-21 PT (Issue #118 stays open). A Caddy site (`media-lens/deploy/Caddyfile`) serves only the three UI files and shared assets there and proxies `/health` and `/analyze` to a loopback worker. It analyzes one public `https://` page at a time from an operator allowlist. It is not production-ready, and the operator can pause it with the kill switch.
+A limited Jev-only live URL preview runs on one operator host, `https://ml-jev.manipulationscore.com/media-lens/`, activated by the owner on 2026-09-21 PT (Issue #118 stays open). A Caddy site (`media-lens/deploy/Caddyfile`) serves only the three UI files and shared assets there and proxies `/health` and `/analyze` to a loopback worker. It analyzes one public page at a time from an operator allowlist. The page sends only `https://` URLs; the worker also accepts `http://` URLs sent directly to its API, under the same allowlist and redirect rules. It is not production-ready, and the operator can pause it with the kill switch.
 
 What is live and what is fixture-only:
 
-- Live on ml-jev: URL analysis with TypeSafe Jev only. Live pasted text, classifier.dev, fixture analysis, and Newsjack coverage are off there.
+- Live on ml-jev: URL analysis with TypeSafe Jev only. Live pasted text, classifier.dev, fixture analysis, and Newsjack coverage are off there. The worker rejects a `kind` that is not an `influence-graph.v1` artifact kind with `400 invalid_kind` before any fetch or provider call.
 - Fixture-only: the story explorer, the fixture story workspace, and `#story=` links run only in local preview. The landing page's static sample card appears on every host and is labeled as a made-up example.
 - Blocked: real story discovery, same-story clustering, and cross-outlet coverage comparison. The only coverage input the worker supports is operator-provided Newsjack run artifacts (`MEDIA_LENS_NEWSJACK_ARTIFACTS_DIR`), and none are approved for ml-jev. Producing those artifacts needs a Medialyst news-search login, an LLM agent runtime with web retrieval, a TypeSafe key for Newsjack's coarse filter, and a supply-chain and trademark review. The alternative is a new news API or RSS provider plus an owner data-rights decision about storing and showing third-party outlet URLs, titles, and timestamps. No such provider is approved, so Media Lens adds no provider, network call, or fixture substitute for live coverage.
 
@@ -94,7 +94,7 @@ MEDIA_LENS_MODE=fixture node media-lens/worker/server.js                        
 python3 -m http.server 4173                                                          # then open http://localhost:4173/media-lens/
 ```
 
-See `media-lens/README.md` for the module layout, modes, limits, and the worker fixes in this release (#146 `live_fixture_disabled`, #145 timeout call accounting, #149 fail-closed budget record), `docs/media-lens-frontend-deployment.md` for the ml-jev deploy procedure, `docs/media-lens-ops-runbook-v2.md` for kill switch / audit / rate limits and the current operator deployment, and `docs/media-lens-build-brief.md` / `docs/media-lens-influence-graph-plan.md` for the product decisions and implementation plan this feature follows.
+See `media-lens/README.md` for the module layout, modes, limits, and the worker fixes in this release (#146 `live_fixture_disabled`, #145 timeout call accounting, #149 fail-closed budget record, plus the release-review budget write and `invalid_kind` changes), `docs/media-lens-frontend-deployment.md` for the ml-jev deploy procedure, `docs/media-lens-ops-runbook-v2.md` for kill switch / audit / rate limits and the current operator deployment, and `docs/media-lens-build-brief.md` / `docs/media-lens-influence-graph-plan.md` for the product decisions and implementation plan this feature follows.
 
 ## Important
 

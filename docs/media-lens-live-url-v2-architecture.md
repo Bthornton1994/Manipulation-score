@@ -39,7 +39,7 @@ Section names refer to `VISION.md`.
 Residual tensions (not conflicts; already recorded in Phase 0):
 
 - **T1** — `VISION.md` "Who we serve" rejects spectator scoring of public figures. Media Lens may be pointed at speeches and campaign pages. Mitigation: artifact-level output only, no person field, banned UI phrases, no score. Owner should keep confirming this reading before any public live mode.
-- **T2** — acceptable-use permission to review. Public URLs are readable by design; paywalled bodies abstain. Consent checkbox records the user's assertion; it is not legal advice.
+- **T2** — acceptable-use permission to review. Public URLs are readable by design; for a paywalled page only the visible excerpt is analyzed, and the paywall is not bypassed. Consent checkbox records the user's assertion; it is not legal advice.
 - **C1** (Phase 0, still open) — `privacy.html` Summary / How analysis works sentences are written as universal Clarity facts. Live URL that sends prepared public text to TypeSafe would make those sentences false unless they are scoped to Clarity **before** any public live claim. This Phase 1 PR does not edit `privacy.html`. Live enablement remains blocked on that owner decision plus Issue #118's other gates.
 
 ---

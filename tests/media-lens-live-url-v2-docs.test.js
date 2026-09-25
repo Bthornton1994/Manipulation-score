@@ -8,9 +8,11 @@ import {
   isForbiddenSitePath,
   listSiteFiles
 } from '../scripts/build-pages-site.js';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DEFAULT_LIMITS } from '../media-lens/worker/config.js';
+import { sanitizeBudgetStoreRecord } from '../media-lens/worker/typesafe-budget-store.js';
 
 const ARCHITECTURE = 'docs/media-lens-live-url-v2-architecture.md';
 const PLAN = 'docs/media-lens-live-url-v2-implementation-plan.md';
@@ -120,4 +122,157 @@ test('Live URL v2 implementation plan maps Issue #118 gates and separates the se
   assert.match(plan, /MEDIA_LENS_KILL_SWITCH/);
   assert.match(plan, /media-lens-canary-drill-v1/);
   assert.match(plan, /DRILL_PACKET_ONLY|does \*\*not\*\* grant `READY_FOR_CANARY`/);
+});
+
+const FRONTEND_DEPLOYMENT = 'docs/media-lens-frontend-deployment.md';
+const CADDYFILE = 'media-lens/deploy/Caddyfile';
+
+// The exact blocker statement for live coverage. It must stay identical in
+// every place that explains why story discovery and coverage comparison are
+// not live, so a future edit cannot soften one copy.
+const COVERAGE_BLOCKER =
+  "The only coverage input the worker supports is operator-provided Newsjack run artifacts (`MEDIA_LENS_NEWSJACK_ARTIFACTS_DIR`), and none are approved for ml-jev. Producing those artifacts needs a Medialyst news-search login, an LLM agent runtime with web retrieval, a TypeSafe key for Newsjack's coarse filter, and a supply-chain and trademark review. The alternative is a new news API or RSS provider plus an owner data-rights decision about storing and showing third-party outlet URLs, titles, and timestamps. No such provider is approved, so Media Lens adds no provider, network call, or fixture substitute for live coverage.";
+
+function caddyServedPatterns(caddy) {
+  const patterns = [];
+  for (const name of ['api', 'media_lens_ui', 'shared_assets']) {
+    const line = caddy.split('\n').find((l) => l.trim().startsWith(`@${name} path `));
+    assert.ok(line, `Caddyfile is missing the @${name} matcher`);
+    patterns.push(...line.trim().split(/\s+/).slice(2));
+  }
+  return patterns;
+}
+
+function caddyPathMatches(pattern, path) {
+  return pattern.endsWith('*') ? path.startsWith(pattern.slice(0, -1)) : path === pattern;
+}
+
+test('frontend deployment doc is a worker-restart release procedure, not a frontend-only packet', async () => {
+  const doc = await readFile(FRONTEND_DEPLOYMENT, 'utf8');
+  assert.match(doc, /\*\*not frontend-only\*\*/);
+  assert.match(doc, /PR #146 `live_fixture_disabled`, PR #145 timeout call\s+accounting, PR #149 fail-closed budget record/);
+  assert.match(doc, /git -C \/opt\/media-lens\/app rev-parse HEAD/);
+  assert.match(doc, /sudo md5sum \/etc\/media-lens\/worker\.env/);
+  assert.match(doc, /systemctl cat media-lens-worker/);
+  assert.match(doc, /sudo systemctl restart media-lens-worker/);
+  assert.match(doc, /Python 3\.12 or newer and Trafilatura `2\.2\.0`/);
+  assert.match(doc, /No Caddy change is needed/);
+  assert.match(doc, /"error":"live_fixture_disabled"/);
+  assert.match(doc, /"error":"live_killed"/);
+  assert.match(doc, /`\/health` is public/);
+  assert.match(doc, /alert recipient email address/);
+  assert.match(doc, /GitHub Pages/);
+  assert.match(doc, /Vercel runs an automatic production build/);
+  assert.match(doc, /Neither one is an ml-jev deploy/);
+  assert.match(doc, /Issue #118 stays open/);
+  assert.doesNotMatch(doc, /curl -i https:\/\/ml-jev\.manipulationscore\.com\/worker\/server\.js/);
+  assert.doesNotMatch(doc, /\{"error":"not_found"\}/);
+  assert.doesNotMatch(doc, /sk-[A-Za-z0-9]{16,}/);
+});
+
+test('frontend deployment 404 probes name real repository paths that the Caddy site does not serve', async () => {
+  const doc = await readFile(FRONTEND_DEPLOYMENT, 'utf8');
+  const caddy = await readFile(CADDYFILE, 'utf8');
+  const loop = doc.slice(doc.indexOf('for p in '), doc.indexOf('; do', doc.indexOf('for p in ')));
+  const probes = loop
+    .replace('for p in ', '')
+    .split(/[\s\\]+/)
+    .filter(Boolean);
+  assert.deepEqual(probes, [
+    '/media-lens/worker/server.js',
+    '/media-lens/worker/config.js',
+    '/media-lens/README.md',
+    '/media-lens/fixtures/expected/synthetic-01-quoted-vs-authorial.graph.json',
+    '/media-lens/fixtures/articles/synthetic-01-quoted-vs-authorial.html',
+    '/docs/media-lens-ops-runbook-v2.md',
+    '/tests/media-lens-ui.test.js',
+    '/.git/HEAD',
+    '/.env',
+    '/package.json'
+  ]);
+  const served = caddyServedPatterns(caddy);
+  assert.match(caddy, /respond 404/);
+  for (const probe of probes) {
+    assert.equal(
+      served.some((pattern) => caddyPathMatches(pattern, probe)),
+      false,
+      `${probe} would be served by the Caddy site`
+    );
+    // Every probe except .env and .git (absent or a worktree pointer in some
+    // checkouts) is a real file, so a 404 shows the boundary holds.
+    if (probe !== '/.env' && probe !== '/.git/HEAD') await access(probe.slice(1));
+  }
+});
+
+test('frontend deployment budget checks mirror the budget store schema and lock timing', async () => {
+  const doc = await readFile(FRONTEND_DEPLOYMENT, 'utf8');
+  const keys = Object.keys(
+    sanitizeBudgetStoreRecord({ version: 1, month: '2026-09', calls: 0, estimatedTokens: 0, warnEmitted: false })
+  )
+    .sort()
+    .join(',');
+  assert.ok(doc.includes(`"${keys}"`), 'the doc validity check must list exactly the budget store keys');
+  const unreadableCopy = 'The TypeSafe ESTIMATED budget record could not be read, so no live Jev analysis was performed.';
+  const analyzeSrc = await readFile('media-lens/worker/analyze.js', 'utf8');
+  assert.ok(analyzeSrc.includes(unreadableCopy), 'analyze.js must still use the documented abstention copy');
+  assert.ok(doc.replace(/\s+/g, ' ').includes(unreadableCopy), 'the deploy doc must quote the abstention copy exactly');
+
+  const storeSrc = await readFile('media-lens/worker/typesafe-budget-store.js', 'utf8');
+  assert.match(storeSrc, /maxAttempts = 200, baseDelayMs = 2/);
+  assert.match(storeSrc, /sleepMs\(baseDelayMs \+ Math\.min\(attempt, 40\)\)/);
+  let totalMs = 0;
+  for (let attempt = 0; attempt < 200; attempt += 1) totalMs += 2 + Math.min(attempt, 40);
+  assert.equal(Math.round(totalMs / 100) / 10, 7.6);
+  assert.match(doc, /about 7\.6 s \(200\s+attempts\)/);
+});
+
+test('Media Lens docs state the worker/config.js limits, not the stale 10 per minute and 30 s values', async () => {
+  assert.equal(DEFAULT_LIMITS.maxAnalysesPerMinute, 5);
+  assert.equal(DEFAULT_LIMITS.perAnalysisTimeoutMs, 15000);
+  for (const path of [ARCHITECTURE, 'docs/media-lens-influence-graph-plan.md', RUNBOOK, 'media-lens/README.md']) {
+    const content = await readFile(path, 'utf8');
+    assert.doesNotMatch(content, /10 analyses (\/|per) minute/, path);
+    assert.doesNotMatch(content, /\b30\s?s (per )?analysis/, path);
+  }
+});
+
+test('the coverage blocker statement is identical wherever live coverage is explained', async () => {
+  for (const path of ['README.md', 'media-lens/README.md', 'docs/media-lens-story-workspace.md']) {
+    const content = await readFile(path, 'utf8');
+    assert.ok(content.includes(COVERAGE_BLOCKER), `${path} must carry the exact coverage blocker statement`);
+    assert.match(content, /real story discovery, same-story clustering, and cross-outlet coverage comparison/i, path);
+  }
+});
+
+test('media-lens/README.md quotes the worker copy for the #146 and #149 fixes exactly', async () => {
+  const readme = await readFile('media-lens/README.md', 'utf8');
+  const serverSrc = await readFile('media-lens/worker/server.js', 'utf8');
+  const analyzeSrc = await readFile('media-lens/worker/analyze.js', 'utf8');
+  const fixtureCopy =
+    'Fixture examples are disabled in live mode. Use URL mode for approved public sources, or run a fixture-only worker for local development.';
+  const budgetCopy = 'The TypeSafe ESTIMATED budget record could not be read, so no live Jev analysis was performed.';
+  assert.ok(serverSrc.includes(fixtureCopy));
+  assert.ok(analyzeSrc.includes(budgetCopy));
+  assert.ok(readme.includes(fixtureCopy));
+  assert.ok(readme.includes(budgetCopy));
+  assert.match(readme, /`400 live_fixture_disabled`/);
+  assert.match(readme, /This rejection writes no audit line/);
+});
+
+test('Media Lens docs and trust pages keep Issue #118 open', async () => {
+  const docs = (await readdir('docs')).filter((name) => name.startsWith('media-lens-') && name.endsWith('.md'));
+  const files = [
+    'README.md',
+    'media-lens/README.md',
+    ...docs.map((name) => `docs/${name}`),
+    'privacy.html',
+    'limitations.html',
+    'acceptable-use.html',
+    'methodology.html',
+    'changelog.html'
+  ];
+  for (const path of files) {
+    const content = await readFile(path, 'utf8');
+    assert.doesNotMatch(content, /\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\s*:?\s*#118\b/i, `${path} uses a closing keyword on #118`);
+  }
 });

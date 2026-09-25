@@ -322,7 +322,7 @@ test('missing coverage observations and abstentions use neutral accessible copy'
     'Coverage comparison was not run for this result. Media Lens does not yet have an approved source for finding other reports of this story, so this result says nothing about how other outlets covered it.'
   );
   assert.match(html, /<h4 id="ml-unattributed-heading">Quotes without a named speaker<\/h4>/);
-  assert.match(html, /no named speaker or attribution in the page\. It is flagged as a possible selective-context\s+candidate\. No other coverage was compared, so this does not show that anything was left out\./);
+  assert.match(html, /did not find a named speaker or attribution next to each quote below\. The check reads only the text right\s+around the quote, so it can miss attribution written another way\. Each quote is flagged as a possible\s+selective-context candidate\. No other coverage was compared, so this does not show that anything was left out\./);
   assert.match(html, /<h3 id="ml-abstention-heading">Analysis limitations<\/h3>/);
   assert.match(html, /aria-labelledby="ml-abstention-heading"/);
   const limitations = renderAbstentionList(graph);

@@ -13,13 +13,44 @@ const ALLOWED_UI_PHRASES = [
 ];
 const STRENGTH_DISPLAY_LABELS = ['Observed influence signal', 'Possible influence signal'];
 
-test('URL help names the approved-site limit and keeps the abstain and not-allowed notes', async () => {
+test('URL help names the approved example host precisely and keeps the abstain and not-allowed notes', async () => {
   const html = await readFile('media-lens/index.html', 'utf8');
   const help = html.match(/<p class="ml-form-note" id="article-url-help">([\s\S]*?)<\/p>/)[1].replace(/\s+/g, ' ');
-  assert.match(help, /accepts only public <code>https:\/\/<\/code> pages from a short list of sites the operator approves, for example English Wikipedia articles/);
+  assert.match(help, /accepts only public <code>https:\/\/<\/code> pages from a short list of sites the operator approves\./);
+  assert.match(help, /English Wikipedia article addresses on <code>en\.wikipedia\.org<\/code> are on the list\./);
+  assert.match(help, /Mobile links on <code>en\.m\.wikipedia\.org<\/code> are not\./);
   assert.match(help, /Long pages may abstain/);
   assert.match(help, /Private, paywalled, internal, and unauthorized material is not allowed/);
+  assert.doesNotMatch(help, /—/);
   assert.match(html, /<p class="ml-field-error" id="article-url-error" role="alert" hidden><\/p>/);
+  // The worker's allowlist is an exact host match, so the mobile host is a
+  // different site unless an operator adds it.
+  const hostKey = await readFile('media-lens/worker/host-key.js', 'utf8');
+  assert.match(hostKey, /return allowlist\.includes\(host\);/);
+});
+
+test('the error banner can take focus, and view changes do not use scroll anchoring', async () => {
+  const html = await readFile('media-lens/index.html', 'utf8');
+  assert.match(html, /<p class="ml-status ml-error-banner" id="analyze-error" data-state="error" role="alert" tabindex="-1" hidden><\/p>/);
+  const css = await readFile('media-lens/media-lens.css', 'utf8');
+  assert.match(css, /\.ml-main \{[^}]*overflow-anchor: none;/);
+});
+
+test('the consent dialog is described by the operator-host fetch notice', async () => {
+  const html = await readFile('media-lens/index.html', 'utf8');
+  const dialog = html.match(/<dialog\b[^>]*>/)[0];
+  assert.match(dialog, /aria-labelledby="consent-dialog-title"/);
+  assert.match(dialog, /aria-describedby="consent-fetch-notice"/);
+  const inside = html.slice(html.indexOf('<dialog'), html.indexOf('</dialog>'));
+  assert.match(inside, /<p id="consent-fetch-notice">/);
+});
+
+test('the sample card is named by its "Made-up example" label and its title, and notes that live analyses show no coverage counts', async () => {
+  const html = await readFile('media-lens/index.html', 'utf8');
+  assert.match(html, /<aside class="ml-sample-card" aria-labelledby="ml-sample-kicker ml-sample-heading">/);
+  assert.match(html, /<p class="ml-sample-kicker" id="ml-sample-kicker">Made-up example<\/p>/);
+  const note = html.match(/<p class="ml-sample-note">([\s\S]*?)<\/p>/)[1].replace(/\s+/g, ' ');
+  assert.match(note, /Live analyses do not show coverage counts\./);
 });
 
 test('heading levels never skip and the results view has a single top-level heading', async () => {
@@ -29,7 +60,22 @@ test('heading levels never skip and the results view has a single top-level head
     assert.ok(levels[i] <= levels[i - 1] + 1, `heading jumps from h${levels[i - 1]} to h${levels[i]}`);
   }
   const results = html.slice(html.indexOf('<div class="ml-results"'), html.indexOf('<p class="ml-footer-note">'));
-  assert.deepEqual([...results.matchAll(/<h2\b[^>]*>/g)].map((m) => m[0]), ['<h2 class="ml-result-title" id="result-title" tabindex="-1">']);
+  assert.deepEqual([...results.matchAll(/<h1\b[^>]*>/g)].map((m) => m[0]), ['<h1 class="ml-result-title" id="result-title" tabindex="-1">']);
+  const resultLevels = [...results.matchAll(/<h([1-6])\b/g)].map((m) => Number(m[1]));
+  assert.equal(resultLevels[0], 1);
+  assert.ok(resultLevels.slice(1).every((level) => level >= 2), 'every section heading sits below the result title');
+  for (let i = 1; i < resultLevels.length; i += 1) {
+    assert.ok(resultLevels[i] <= resultLevels[i - 1] + 1, `result heading jumps from h${resultLevels[i - 1]} to h${resultLevels[i]}`);
+  }
+  // The coverage-gap card the renderer adds sits under an h3 subsection.
+  const js = await readFile('media-lens/media-lens.js', 'utf8');
+  assert.match(js, /<article class="ml-gap-card"><h4>Coverage gap<\/h4>/);
+  assert.doesNotMatch(js, /<h5>/);
+  // The hero display size applies only to the hero, not to the result or loading titles.
+  const css = await readFile('media-lens/media-lens.css', 'utf8');
+  assert.doesNotMatch(css, /\.ml-main h1/);
+  assert.match(css, /\.ml-loading h1 \{/);
+  assert.match(css, /\.ml-dimension h2 \{/);
   assert.match(results, /<nav class="ml-workspace-nav" aria-label="Result sections">/);
   assert.doesNotMatch(results, /Story workspace|Back to stories/);
   assert.match(results, /id="analyze-another">Back to start</);
@@ -62,11 +108,22 @@ test('form controls use borders with at least 3:1 contrast and links keep a 24px
   assert.match(css, /\.ml-trust-links a,\s*\.media-lens-page \.legal-mini-nav a \{[^}]*min-height: 32px/);
 });
 
-test('index.html has a skip link and a single h1', async () => {
+test('index.html has a skip link and one h1 in each of its three views', async () => {
   const html = await readFile('media-lens/index.html', 'utf8');
   assert.match(html, /class="skip-link"/);
-  const h1Matches = html.match(/<h1[\s>]/g) || [];
-  assert.equal(h1Matches.length, 1, 'expected exactly one <h1>');
+  const landing = html.slice(html.indexOf('<div id="landing-view">'), html.indexOf('<section class="ml-loading"'));
+  const loading = html.slice(html.indexOf('<section class="ml-loading"'), html.indexOf('<div class="ml-results"'));
+  const results = html.slice(html.indexOf('<div class="ml-results"'), html.indexOf('<p class="ml-footer-note">'));
+  for (const [name, view] of [['landing', landing], ['loading', loading], ['results', results]]) {
+    assert.equal((view.match(/<h1[\s>]/g) || []).length, 1, `expected exactly one <h1> in the ${name} view`);
+  }
+  assert.equal((html.match(/<h1[\s>]/g) || []).length, 3, 'no <h1> outside the three views');
+  assert.match(loading, /<h1 id="ml-loading-heading">Analyzing the article<\/h1>/);
+  // Only one view is shown at a time.
+  assert.match(loading, /<section class="ml-loading" id="loading-panel" hidden/);
+  assert.match(results, /<div class="ml-results" id="results" hidden>/);
+  const js = await readFile('media-lens/media-lens.js', 'utf8');
+  assert.match(js, /landing\.hidden = view !== 'landing';\s*loading\.hidden = view !== 'loading';\s*results\.hidden = view !== 'results';/);
 });
 
 test('index.html has four labelled sections for Language, Claims, Coverage, and Source context', async () => {
@@ -78,7 +135,7 @@ test('index.html has four labelled sections for Language, Claims, Coverage, and 
     { id: 'ml-source-context-heading', label: 'Source context' }
   ];
   for (const { id, label } of requiredSections) {
-    const sectionPattern = new RegExp(`<section aria-labelledby="${id}"[^>]*>[\\s\\S]*?<h3 id="${id}">${label}</h3>`);
+    const sectionPattern = new RegExp(`<section aria-labelledby="${id}"[^>]*>[\\s\\S]*?<h2 id="${id}">${label}</h2>`);
     assert.match(html, sectionPattern, `missing labelled section for ${label}`);
   }
 });
@@ -321,7 +378,7 @@ test('public landing leads with URL analysis, describes only what works, and kee
   assert.ok(coverageContext > urlEntry && explorer > coverageContext);
   assert.match(html, /<h2 id="coverage-context-heading">Coverage context<\/h2>/);
   assert.match(html, /Not live yet\. Media Lens has no approved source for finding other reports of the same story/);
-  assert.match(html, /<p class="ml-sample-kicker">Made-up example<\/p>/);
+  assert.match(html, /<p class="ml-sample-kicker" id="ml-sample-kicker">Made-up example<\/p>/);
   assert.match(html, /<h3 id="ml-sample-heading">Council approves downtown drainage upgrade<\/h3>/);
   assert.match(html, /Analyze a public article URL/);
   assert.match(html, /Council approves downtown drainage upgrade/);

@@ -11,7 +11,7 @@
 // data contracts only; no Go code or skills prose is copied. See
 // docs/NEWSJACK-LICENSE.md.
 
-import { readFile, readdir } from 'node:fs/promises';
+import { lstat, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { abortableDelay, throwIfAborted } from '../abort-utils.js';
 import { mapNewsjackEvidenceToStoryDiscovery, sanitizeWindow } from '../discovery/newsjack-discovery.js';
@@ -114,8 +114,8 @@ export function createNewsjackAdapter({ mode, fixtureId = null, fixtureDir = nul
         providerMode: 'fixture',
         freshnessGrade: 'fixture',
         query,
-        hits: [],
-        dataOrigin: 'fixture'
+        dataOrigin: 'fixture',
+        artifactRead: { ok: false, reason: 'not_live', error: 'discovery_disabled' }
       });
     }
     if (mode === 'fixture') {
@@ -124,8 +124,8 @@ export function createNewsjackAdapter({ mode, fixtureId = null, fixtureDir = nul
           retrievedAt,
           window,
           query,
-          hits: [],
-          dataOrigin: 'fixture'
+          dataOrigin: 'fixture',
+          artifactRead: { ok: false, reason: 'not_live', error: 'fixture_not_configured' }
         });
       }
       const read = await readJsonArtifact(join(fixtureDir, `${fixtureId}.json`), `${fixtureId}.json`, signal, { allowArray: false });
@@ -194,11 +194,14 @@ function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-// Returns the cluster groups, or null when the shape is not usable (a group
-// that is not an object, or members that are not an array). Callers treat
-// null as an invalid artifact instead of guessing.
+// Returns the cluster groups, or null when the shape is not usable: no
+// clusters, members, or cluster key, more than one of them, a group that is
+// not an object, or a group without a members array. Callers treat null as
+// an invalid artifact instead of guessing.
 function discoveryClusters(parsed) {
   const has = (key) => Boolean(parsed) && Object.prototype.hasOwnProperty.call(parsed, key);
+  // More than one cluster key is ambiguous, so it is refused.
+  if (['clusters', 'members', 'cluster'].filter(has).length > 1) return null;
   let groups;
   if (has('clusters')) {
     if (!Array.isArray(parsed.clusters)) return null;
@@ -211,24 +214,32 @@ function discoveryClusters(parsed) {
     else if (isPlainObject(cluster)) groups = [cluster];
     else return null;
   } else {
-    return [];
+    return null;
   }
   const out = [];
   for (const item of groups) {
-    if (!isPlainObject(item)) return null;
-    const members = item.members === undefined ? [] : item.members;
-    if (!Array.isArray(members)) return null;
-    out.push({ cluster_id: typeof item.cluster_id === 'string' ? item.cluster_id : null, members });
+    // A group must carry a members array. A bare member record or a group
+    // using another key would otherwise be read as empty.
+    if (!isPlainObject(item) || !Array.isArray(item.members)) return null;
+    out.push({ cluster_id: typeof item.cluster_id === 'string' ? item.cluster_id : null, members: item.members });
   }
   return out;
 }
 
+const MAX_ARTIFACT_BYTES = 10 * 1024 * 1024;
+
 // Read and parse one JSON artifact. Never throws for file or JSON problems:
-// a read error, malformed JSON, or an unexpected top-level type becomes a
-// fail-closed result the mapper turns into an abstention. Aborts still throw.
+// a read error, a path that is not a regular file (a directory, symlink, or
+// FIFO), an oversized file, malformed JSON, or an unexpected top-level type
+// becomes a fail-closed result the mapper turns into an abstention. Aborts
+// still throw.
 async function readJsonArtifact(path, file, signal, { allowArray }) {
   let text;
   try {
+    throwIfAborted(signal);
+    const info = await lstat(path);
+    if (!info.isFile()) return { ok: false, reason: 'invalid', error: 'artifact_not_regular_file', file };
+    if (info.size > MAX_ARTIFACT_BYTES) return { ok: false, reason: 'invalid', error: 'artifact_too_large', file };
     text = await readFile(path, { encoding: 'utf8', signal });
   } catch (err) {
     if (err?.name === 'AbortError') throw err;

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chmod, mkdtemp, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { chmod, mkdir, mkdtemp, symlink, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNewsjackAdapter } from '../media-lens/worker/adapters/newsjack.js';
@@ -818,4 +819,233 @@ test('shared wire and aggregator hosts do not merge distinct outlets, and an out
     { origin }
   );
   assert.equal(ownSite.clusters[0].independent_reporting.length, 0, 'an Alpha Post record on the Beta Herald site ties them together');
+});
+
+const A_URL = 'https://alpha-post.example/fare-a';
+const B_URL = 'https://beta-herald.example/fare-b';
+
+test('placeholder, invisible, and punctuation-only outlet names never supply an independent outlet', () => {
+  const origin = sameStoryOrigin([A_URL, B_URL]);
+  for (const name of ['n/a', 'N/A', 'Unknown.', '(unknown)', 'Unknown source', 'undefined', 'None']) {
+    const document = mapHits([datedHit('Alpha Post', A_URL), datedHit(name, B_URL, 'same_story')], { origin });
+    assert.equal(document.clusters[0].independent_outlet_count, 0, name);
+    assert.equal(document.clusters[0].members.length, 2, `${name} is shown as given`);
+  }
+  for (const name of ['​', '​‍', '—', '?', ' - ']) {
+    const document = mapHits([datedHit('Alpha Post', A_URL), datedHit(name, B_URL, 'same_story')], { origin });
+    assert.equal(document.clusters[0].independent_outlet_count, 0, JSON.stringify(name));
+    assert.equal(document.sources_checked[0].rejected_incomplete, 1, JSON.stringify(name));
+  }
+  const shown = mapHits([datedHit('\u200bAlpha\u200d Post\u2060', A_URL)]);
+  assert.equal(shown.clusters[0].members[0].outlet, 'Alpha Post', 'invisible characters are removed from the shown name');
+  // Two placeholder records on two outlets' sites do not merge those outlets.
+  const separate = mapHits(
+    [
+      datedHit('Alpha Post', A_URL),
+      datedHit('Beta Herald', B_URL, 'same_story'),
+      datedHit('unknown', 'https://alpha-post.example/other', 'syndicated'),
+      datedHit('Unknown', 'https://beta-herald.example/other', 'syndicated')
+    ],
+    { origin }
+  );
+  assert.deepEqual(independentOutlets(separate), ['Alpha Post', 'Beta Herald']);
+});
+
+test('independence needs a dated same-story origin URL for each outlet', () => {
+  const hits = [datedHit('Alpha Post', A_URL), datedHit('Beta Herald', B_URL, 'same_story')];
+  assert.deepEqual(independentOutlets(mapHits(hits, { origin: sameStoryOrigin([A_URL, B_URL]) })), ['Alpha Post', 'Beta Herald']);
+  assert.equal(mapHits(hits).clusters[0].independent_outlet_count, 0, 'no origin');
+  const undated = { same_story_assessment: 'same_story', timestamp_evidence: [A_URL, B_URL].map((url) => ({ url_key: url, published_at: null })) };
+  assert.equal(mapHits(hits, { origin: undated }).clusters[0].independent_outlet_count, 0, 'undated evidence');
+  assert.equal(mapHits(hits, { origin: sameStoryOrigin([A_URL]) }).clusters[0].independent_outlet_count, 0, 'one dated URL');
+  const unclear = { ...sameStoryOrigin([A_URL, B_URL]), same_story_assessment: 'unclear' };
+  assert.equal(mapHits(hits, { origin: unclear }).clusters[0].independent_outlet_count, 0, 'unclear assessment');
+});
+
+test('dropped records still link outlet identity, and conflicting duplicate URLs do not depend on order', () => {
+  const urls = ['https://fictional-daily.example/a', 'https://fd-metro.example/b', 'https://fd-metro.example/c'];
+  const linked = mapHits(
+    [
+      datedHit('Fictional Daily', urls[0]),
+      datedHit('Fictional Daily', urls[1], 'different_story'),
+      datedHit('FD Metro Desk', urls[2], 'same_story')
+    ],
+    { origin: sameStoryOrigin([urls[0], urls[2]]) }
+  );
+  assert.equal(linked.clusters[0].independent_outlet_count, 0, 'a dropped record ties the two names together');
+  assert.equal(linked.sources_checked[0].rejected_different_story, 1);
+
+  const origin = sameStoryOrigin([A_URL, B_URL]);
+  const forward = [datedHit('Alpha Post', A_URL, 'syndicated'), datedHit('Alpha Post', A_URL), datedHit('Beta Herald', B_URL)];
+  for (const hits of [forward, [...forward].reverse()]) {
+    assert.equal(mapHits(hits, { origin }).clusters[0].independent_outlet_count, 0);
+  }
+  const withDifferent = [datedHit('Alpha Post', A_URL, 'different_story'), datedHit('Alpha Post', A_URL), datedHit('Beta Herald', B_URL)];
+  for (const hits of [withDifferent, [...withDifferent].reverse()]) {
+    assert.equal(mapHits(hits, { origin }).clusters[0].independent_outlet_count, 0);
+  }
+});
+
+test('URL-like outlet, source_id, and cluster_id text is not kept', () => {
+  for (const outlet of ['//169.254.169.254/latest/meta-data', 'http:169.254.169.254', 'https:metadata.google.internal', 'mailto:x@y.z', 'HTTPS://a.example']) {
+    const document = mapHits([datedHit(outlet, A_URL)]);
+    assert.equal(document.clusters.length, 0, outlet);
+    assert.equal(document.sources_checked[0].rejected_incomplete, 1, outlet);
+    assert.equal(document.sources_checked[0].rejected_members[0].outlet, null, outlet);
+  }
+  for (const sourceId of ['https:169.254.169.254', 'javascript:alert.call', 'data:x']) {
+    const document = mapHits([{ ...datedHit('Alpha Post', A_URL), source_id: sourceId }]);
+    assert.equal(document.clusters[0].members[0].source_id, 'newsjack:alpha-post', sourceId);
+  }
+  const document = mapHits(null, { clusters: [{ cluster_id: 'https://169.254.169.254/latest', members: [datedHit('Alpha Post', A_URL)] }] });
+  assert.match(document.clusters[0].cluster_id, /^[0-9a-f]{16}$/);
+  const kept = mapHits(null, { clusters: [{ cluster_id: 'nj:cluster-7', members: [datedHit('Alpha Post', A_URL)] }] });
+  assert.equal(kept.clusters[0].cluster_id, 'nj:cluster-7');
+});
+
+test('non-Latin and spacing variants of one outlet name are one outlet', () => {
+  const urls = ['https://one.example/a', 'https://two.example/b'];
+  const origin = sameStoryOrigin(urls);
+  for (const [first, second] of [['新华社', '新华 社'], ['BBC News', 'BBC-News'], ['BBC News', 'ＢＢＣ News']]) {
+    const document = mapHits([datedHit(first, urls[0]), datedHit(second, urls[1], 'same_story')], { origin });
+    assert.equal(document.clusters[0].independent_outlet_count, 0, `${first} / ${second}`);
+  }
+});
+
+test('impossible dates and inverted windows are refused, not rolled over', () => {
+  const document = mapHits([{ ...datedHit('Alpha Post', A_URL), published_at: '2026-02-30T12:00:00Z' }]);
+  assert.equal(document.clusters[0].members[0].published_at, null);
+  assert.equal(sanitizeWindow({ start: RETRIEVED_AT, end: WINDOW.start, hours: 24 }), null);
+  assert.equal(sanitizeWindow({ start: '2026-02-30T00:00:00Z', end: RETRIEVED_AT, hours: 24 }), null);
+  assert.equal(mapHits([datedHit('Alpha Post', A_URL)], { window: { start: RETRIEVED_AT, end: WINDOW.start, hours: 24 } }).reason, 'window_missing');
+  assert.equal(mapHits([datedHit('Alpha Post', A_URL)], { retrievedAt: '2026-09-31T00:00:00Z' }).reason, 'retrieved_at_missing');
+});
+
+test('provider ids are limited to the adapter\'s own values', () => {
+  for (const providerId of ['newsjack:medialyst', 'fixture:host_web_search', 'newsjack:rss_atom', 'fixture:Newsjack']) {
+    assert.throws(() => mapHits([], { providerId }), (err) => err.code === 'INVALID_DISCOVERY_LABEL' && err.field === 'provider_id', providerId);
+  }
+});
+
+test('a disabled or unconfigured adapter reports not_live, not a fixture check', async () => {
+  const disabled = await createNewsjackAdapter({ mode: 'disabled' }).discoverStoryDocument({ retrievedAt: RETRIEVED_AT, window: WINDOW });
+  assert.equal(disabled.status, 'not_live');
+  assert.equal(disabled.reason, 'discovery_disabled');
+  assert.equal(disabled.sources_checked[0].outcome, 'not_checked');
+  assert.equal(disabled.sources_checked[0].error, 'discovery_disabled');
+  assert.match(disabled.message, /disabled\. Nothing was read or checked/);
+  assert.equal(validateStoryDiscovery(disabled).ok, true);
+
+  const unconfigured = await createNewsjackAdapter({ mode: 'fixture' }).discoverStoryDocument({ retrievedAt: RETRIEVED_AT, window: WINDOW });
+  assert.equal(unconfigured.status, 'not_live');
+  assert.equal(unconfigured.reason, 'fixture_not_configured');
+  assert.equal(unconfigured.sources_checked[0].outcome, 'not_checked');
+  assert.match(unconfigured.message, /No Newsjack fixture is configured/);
+  assert.equal(validateStoryDiscovery(unconfigured).ok, true);
+
+  const missing = await createNewsjackAdapter({ mode: 'fixture', fixtureId: 'absent', fixtureDir: await mkdtemp(join(tmpdir(), 'newsjack-discovery-nofix-')) })
+    .discoverStoryDocument({ retrievedAt: RETRIEVED_AT, window: WINDOW });
+  assert.equal(missing.reason, 'artifacts_unavailable');
+  assert.match(missing.message, /^The Newsjack fixture file was not read\./);
+
+  const empty = mapHits([]);
+  assert.match(empty.message, /^No usable story members were present\. Dropped records were not filled in; the sources_checked row counts them by reason\./);
+});
+
+test('unrecognized artifact shapes and non-regular files are invalid, not empty reads', async () => {
+  const member = datedHit('Alpha Post', A_URL);
+  const bodies = [
+    JSON.stringify([member]),
+    JSON.stringify({ clusters: [], members: [member] }),
+    JSON.stringify({ members: [], cluster: { members: [member] } }),
+    JSON.stringify({ items: [member] }),
+    JSON.stringify({ clusters: [{ items: [member] }] })
+  ];
+  for (const body of bodies) {
+    const dir = await mkdtemp(join(tmpdir(), 'newsjack-discovery-unrecognized-'));
+    await writeFile(join(dir, 'clustered_candidates.json'), body);
+    const document = await artifactAdapter(dir);
+    assert.equal(document.reason, 'artifacts_invalid', body);
+    assert.equal(document.sources_checked[0].error, 'artifact_shape_invalid', body);
+  }
+
+  const keylessFixture = await mkdtemp(join(tmpdir(), 'newsjack-discovery-keyless-fixture-'));
+  await writeFile(join(keylessFixture, 'keyless.json'), JSON.stringify({ story_origin: sameStoryOrigin([A_URL]), hits: [member] }));
+  const keyless = await createNewsjackAdapter({ mode: 'fixture', fixtureId: 'keyless', fixtureDir: keylessFixture }).discoverStoryDocument({ retrievedAt: RETRIEVED_AT, window: WINDOW });
+  assert.equal(keyless.reason, 'artifacts_invalid');
+  assert.equal(keyless.sources_checked[0].error, 'artifact_shape_invalid');
+
+  const asDirectory = await mkdtemp(join(tmpdir(), 'newsjack-discovery-dirfile-'));
+  await mkdir(join(asDirectory, 'cluster.json'));
+  assert.equal((await artifactAdapter(asDirectory)).sources_checked[0].error, 'artifact_not_regular_file');
+
+  const linked = await mkdtemp(join(tmpdir(), 'newsjack-discovery-symlink-'));
+  await writeFile(join(linked, 'real.json'), JSON.stringify({ members: [member] }));
+  await symlink(join(linked, 'real.json'), join(linked, 'cluster.json'));
+  assert.equal((await artifactAdapter(linked)).sources_checked[0].error, 'artifact_not_regular_file');
+
+  const large = await mkdtemp(join(tmpdir(), 'newsjack-discovery-large-'));
+  await writeFile(join(large, 'cluster.json'), '{}');
+  await truncate(join(large, 'cluster.json'), 10 * 1024 * 1024 + 1);
+  assert.equal((await artifactAdapter(large)).sources_checked[0].error, 'artifact_too_large');
+
+  const fifo = await mkdtemp(join(tmpdir(), 'newsjack-discovery-fifo-'));
+  let made = false;
+  try {
+    execFileSync('mkfifo', [join(fifo, 'cluster.json')]);
+    made = true;
+  } catch {
+    made = false;
+  }
+  if (made) assert.equal((await artifactAdapter(fifo)).sources_checked[0].error, 'artifact_not_regular_file');
+});
+
+test('the mapper refuses malformed evidence shapes from direct callers', () => {
+  for (const extra of [{ clusters: { a: 1 } }, { clusters: [{ members: 'x' }] }, { clusters: [42] }, { clusters: [{}] }]) {
+    const document = mapHits([datedHit('Alpha Post', A_URL)], extra);
+    assert.equal(document.status, 'abstain', JSON.stringify(extra));
+    assert.equal(document.reason, 'artifacts_invalid', JSON.stringify(extra));
+    assert.equal(document.sources_checked[0].error, 'evidence_shape_invalid', JSON.stringify(extra));
+    assert.match(document.message, /did not have the expected shape/);
+  }
+  assert.equal(mapHits('x').reason, 'artifacts_invalid');
+});
+
+test('rejected_members is capped while counters keep every drop, and article_title is accepted', () => {
+  const drops = Array.from({ length: 250 }, (_, index) => ({ outlet: `Outlet ${index}`, url: `https://o${index}.example/x` }));
+  const document = mapHits(drops);
+  const row = document.sources_checked[0];
+  assert.equal(row.rejected_incomplete, 250);
+  assert.equal(row.rejected_total, 250);
+  assert.equal(row.rejected_members.length, 200);
+
+  const titled = mapHits([{ article_title: 'Fare vote', url: A_URL, outlet: 'Alpha Post' }]);
+  assert.equal(titled.clusters[0].members[0].article_title, 'Fare vote');
+});
+
+test('every non-public suffix has an explicit refused example', () => {
+  const examples = [
+    'https://instance-data.ec2.internal/', 'https://1.0.0.127.in-addr.arpa/', 'https://printer.home.arpa/', 'https://box.localdomain/',
+    'https://nas.lan/', 'https://wiki.intranet/', 'https://mail.corp/', 'https://db.private/', 'https://router.home/',
+    'https://kubernetes.default.svc/', 'https://x.alt/', 'https://site.test/', 'https://site.invalid/', 'https://abc.onion/',
+    'https://vault.service.consul/', 'https://kubernetes.default/', 'https://169.254.169.254.nip.io/', 'https://127.0.0.1.sslip.io/',
+    'https://10.0.0.1.xip.io/', 'https://app.localtest.me/', 'https://app.lvh.me/', 'https://10.0.0.1.traefik.me/',
+    'https://x.backname.io/', 'https://x.1u.ms/', 'https://x.rbndr.us/', 'https://x.vcap.me/', 'https://x.local.gd/',
+    'https://x.localhost.direct/', 'https://metadata.tencentyun.com/latest/meta-data/'
+  ];
+  for (const url of examples) assert.equal(classifySourceUrl(url).reason, 'non_public_url', url);
+  const covered = (suffix) => examples.some((url) => {
+    const host = new URL(url).hostname;
+    return host === suffix.slice(1) || host.endsWith(suffix);
+  });
+  assert.deepEqual(NON_PUBLIC_HOST_SUFFIXES.filter((suffix) => !covered(suffix)), []);
+  assert.equal(classifySourceUrl('https://fictional-daily.example/a').reason, null);
+});
+
+test('an invalid fixture-file window falls back to the caller window', async () => {
+  const fixtureDir = await mkdtemp(join(tmpdir(), 'newsjack-discovery-fixture-window-'));
+  await writeFile(join(fixtureDir, 'win.json'), JSON.stringify({ window: { start: 'x', end: 'y', hours: 24, url: 'https://10.0.0.1/' }, members: [datedHit('Alpha Post', A_URL)] }));
+  const document = await createNewsjackAdapter({ mode: 'fixture', fixtureId: 'win', fixtureDir }).discoverStoryDocument({ retrievedAt: RETRIEVED_AT, window: WINDOW });
+  assert.equal(document.status, 'ok');
+  assert.deepEqual(document.window, WINDOW);
 });

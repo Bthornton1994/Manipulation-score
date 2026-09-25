@@ -26,7 +26,8 @@ const MAX_REJECTED_MEMBERS_LISTED = 200;
 // the rest (for example instance-data.ec2.internal or printer.home.arpa).
 // .example stays allowed because it is documentation-only and the fixtures
 // use it. The last group is well-known wildcard DNS names that resolve to
-// loopback or private addresses. Other names that happen to resolve to a
+// loopback or private addresses, plus a cloud metadata hostname that
+// parseArticleUrl does not list. Other names that happen to resolve to a
 // private address cannot be detected without DNS; nothing here fetches them.
 export const NON_PUBLIC_HOST_SUFFIXES = Object.freeze([
   '.internal',
@@ -42,11 +43,21 @@ export const NON_PUBLIC_HOST_SUFFIXES = Object.freeze([
   '.test',
   '.invalid',
   '.onion',
+  '.consul',
+  '.default',
   '.nip.io',
   '.sslip.io',
   '.xip.io',
   '.localtest.me',
-  '.lvh.me'
+  '.lvh.me',
+  '.traefik.me',
+  '.backname.io',
+  '.1u.ms',
+  '.rbndr.us',
+  '.vcap.me',
+  '.local.gd',
+  '.localhost.direct',
+  '.metadata.tencentyun.com'
 ]);
 
 const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
@@ -59,7 +70,10 @@ function knownPublishedAt(value) {
   if (typeof value !== 'string' || !ISO_TIME.test(value)) return null;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toISOString();
+  const iso = parsed.toISOString();
+  // Date rolls impossible days forward (2026-02-30 becomes 2026-03-02).
+  // Refuse the value instead of copying a different date.
+  return iso.slice(0, 19) === value.slice(0, 19) ? iso : null;
 }
 
 function isNonPublicHostName(host) {
@@ -111,6 +125,30 @@ function outletDomain(url) {
 // A stated source_id is kept only when it is a short opaque token. Anything
 // URL-shaped or free-form is replaced by an id derived from the outlet name.
 const SAFE_SOURCE_ID = /^[A-Za-z0-9][A-Za-z0-9:_.-]{0,79}$/;
+const SAFE_CLUSTER_ID = /^[A-Za-z0-9][A-Za-z0-9:_.-]{0,119}$/;
+// Text that a URL parser or a browser would read as a link.
+const URL_SCHEME_TEXT = /^(?:https?|ftp|wss?|javascript|data|vbscript|file|mailto|blob):/i;
+
+function isUrlLikeText(value) {
+  return value.includes('://') || value.startsWith('//') || URL_SCHEME_TEXT.test(value);
+}
+
+// Placeholders that name no outlet. They can be shown as given, but they do
+// not identify an outlet and cannot grant independence.
+const PLACEHOLDER_OUTLETS = new Set([
+  'unknown',
+  'unknown outlet',
+  'unknown source',
+  'unknown publisher',
+  'n/a',
+  'na',
+  'none',
+  'null',
+  'undefined',
+  'anonymous',
+  'not available',
+  'not applicable'
+]);
 
 function outletSlug(outlet) {
   return String(outlet || '')
@@ -119,9 +157,21 @@ function outletSlug(outlet) {
     .replace(/^-|-$/g, '');
 }
 
+// Letters and digits only, after compatibility normalization, so spacing,
+// punctuation, invisible characters, and fullwidth forms do not split an
+// outlet. Works for non-Latin names too.
+function outletCompactKey(outlet) {
+  return String(outlet || '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
 function statedSourceId(hit) {
   const raw = typeof hit.source_id === 'string' ? hit.source_id.trim() : '';
-  return raw && SAFE_SOURCE_ID.test(raw) ? raw : null;
+  return raw && SAFE_SOURCE_ID.test(raw) && !isUrlLikeText(raw) ? raw : null;
+}
+
+function statedClusterId(group) {
+  const raw = typeof group?.cluster_id === 'string' ? group.cluster_id.trim() : '';
+  return raw && SAFE_CLUSTER_ID.test(raw) && !isUrlLikeText(raw) ? raw : null;
 }
 
 function sourceIdFor(hit, outlet) {
@@ -131,11 +181,13 @@ function sourceIdFor(hit, outlet) {
   return slug ? `newsjack:${slug}` : 'newsjack:unknown_outlet';
 }
 
-// Outlet names are display text. A URL-shaped value is not an outlet name.
+// Outlet names are display text. Invisible format characters are removed. A
+// value with no letter or digit, or one that reads as a URL, is not an
+// outlet name.
 function outletText(hit) {
   const raw = typeof hit.outlet === 'string' ? hit.outlet : typeof hit.source === 'string' ? hit.source : '';
-  const normalized = raw.trim().replace(/\s+/g, ' ');
-  if (!normalized || /:\/\//.test(normalized) || /^(?:javascript|data|vbscript|file):/i.test(normalized)) return '';
+  const normalized = raw.replace(/\p{Cf}/gu, '').trim().replace(/\s+/g, ' ');
+  if (!normalized || !/[\p{L}\p{N}]/u.test(normalized) || isUrlLikeText(normalized)) return '';
   return normalized.slice(0, 200);
 }
 
@@ -165,9 +217,11 @@ function baseDocument(extra) {
 
 function outletIdentity(value) {
   if (typeof value !== 'string') return null;
-  const normalized = value.trim().replace(/\s+/g, ' ');
-  if (!normalized || /^unknown$/i.test(normalized)) return null;
-  return normalized.toLowerCase();
+  const normalized = value.replace(/\p{Cf}/gu, '').trim().replace(/\s+/g, ' ').toLowerCase();
+  if (!normalized || !/[\p{L}\p{N}]/u.test(normalized)) return null;
+  const bare = normalized.replace(/^[\p{P}\s]+|[\p{P}\s]+$/gu, '');
+  if (PLACEHOLDER_OUTLETS.has(bare) || PLACEHOLDER_OUTLETS.has(normalized)) return null;
+  return normalized;
 }
 
 function datedSameStoryKeys(origin) {
@@ -182,18 +236,21 @@ function datedSameStoryKeys(origin) {
   return keys;
 }
 
-// Identity keys that tie records to one outlet: the normalized name, the name
-// slug, the registrable domain, and a stated source_id. Records sharing any
-// key are joined transitively (union-find), so an outlet that publishes on
-// two domains, or under two spellings, is still one outlet. Wire, press
+// Identity keys that tie records to one outlet: the normalized name, its
+// letters-and-digits form, the registrable domain, and a stated source_id.
+// Records sharing any key are joined transitively (union-find), so an outlet
+// that publishes on two domains, or under two spellings, is still one outlet.
+// A placeholder name contributes no name keys. Wire, press
 // release, and partner republication hosts carry many outlets' copy, so their
 // domain does not identify an outlet.
 function identityKeys(entry) {
   const keys = [];
   const name = outletIdentity(entry.outlet);
-  if (name) keys.push(`name:${name}`);
-  const slug = outletSlug(entry.outlet);
-  if (slug) keys.push(`slug:${slug}`);
+  if (name) {
+    keys.push(`name:${name}`);
+    const compact = outletCompactKey(entry.outlet);
+    if (compact) keys.push(`compact:${compact}`);
+  }
   const domain = sharedSyndicationHost(entry.url) ? null : outletDomain(entry.url);
   if (domain) keys.push(`domain:${domain}`);
   const stated = statedSourceId(entry.hit);
@@ -237,14 +294,37 @@ function recordRejection(rejected, reason, groupIndex, clusterId, outlet) {
   return null;
 }
 
+const CANDIDATE_RELATIONS = new Set(['surfaced', 'same_story']);
+
+function isCandidateRelation(relation) {
+  return relation == null || CANDIDATE_RELATIONS.has(relation);
+}
+
+function sourceUrlKey(hit) {
+  const classified = classifySourceUrl(hit.url || hit.canonical_url);
+  return classified.url ? normalizedURLKey(classified.url) : null;
+}
+
 // Decide every record's fate in one pass, then compute independence only from
 // members that will be shown and can be labeled independent. A record that is
 // dropped (incomplete, non-https, non-public, different_story) or whose
 // relation is never labeled independent cannot satisfy the two-outlet rule.
+// Dropped records still count as identity evidence: they can join outlets,
+// which only lowers the independent count.
 function clusterFromGroup(group, groupIndex, { retrievedAt, window, sourcesChecked, origin, originUncertain, rejected }) {
   const hits = Array.isArray(group?.members) ? group.members : [];
-  const statedId = typeof group?.cluster_id === 'string' && group.cluster_id.trim() ? group.cluster_id.trim() : null;
+  const statedId = statedClusterId(group);
   const eligible = datedSameStoryKeys(origin);
+  // A URL that any record in the group marks as syndicated, unclear,
+  // different_story, or another non-candidate relation cannot qualify, so the
+  // result does not depend on record order.
+  const blockedUrlKeys = new Set();
+  for (const hit of hits) {
+    if (!hit || typeof hit !== 'object' || Array.isArray(hit) || isCandidateRelation(hit.relation)) continue;
+    const key = sourceUrlKey(hit);
+    if (key) blockedUrlKeys.add(key);
+  }
+  const linkers = [];
   const groupRejections = [];
   const reject = (reason, outlet) => {
     const entry = recordRejection(rejected, reason, groupIndex, statedId, outlet);
@@ -261,18 +341,22 @@ function clusterFromGroup(group, groupIndex, { retrievedAt, window, sourcesCheck
     const outlet = outletText(hit);
     const title = titleText(hit);
     const classified = classifySourceUrl(hit.url || hit.canonical_url);
+    const drop = (reason) => {
+      reject(reason, outlet);
+      linkers.push({ hit, outlet, url: classified.url });
+    };
     if (!outlet || !title || classified.reason === 'incomplete') {
-      reject('incomplete', outlet);
+      drop('incomplete');
       continue;
     }
     if (!classified.url) {
-      reject(classified.reason, outlet);
+      drop(classified.reason);
       continue;
     }
     // A Newsjack different_story assessment wins over wire, partner, and
     // repeated-URL rules: that record is not coverage of this story.
     if (hit.relation === 'different_story') {
-      reject('different_story', outlet);
+      drop('different_story');
       continue;
     }
     const url = classified.url;
@@ -294,17 +378,18 @@ function clusterFromGroup(group, groupIndex, { retrievedAt, window, sourcesCheck
     const candidate =
       label.relation === 'same_story' &&
       label.labeling_basis !== 'newsjack_origin_uncertain' &&
-      (hit.relation === 'surfaced' || hit.relation === 'same_story' || hit.relation == null) &&
+      isCandidateRelation(hit.relation) &&
       Boolean(urlKey) &&
       eligible.has(urlKey) &&
+      !blockedUrlKeys.has(urlKey) &&
       Boolean(outletIdentity(outlet));
     if (urlKey) seenUrlKeys.add(urlKey);
     kept.push({ hit, outlet, title, url, urlKey, label, candidate });
   }
 
   // Independence: one row per distinct outlet among candidates, with outlet
-  // identity grouped transitively over every kept member.
-  const roots = groupOutlets(kept);
+  // identity grouped transitively over every kept and dropped record.
+  const roots = groupOutlets([...kept, ...linkers]).slice(0, kept.length);
   const candidateRoots = new Set(kept.flatMap((entry, index) => (entry.candidate ? [roots[index]] : [])));
   if (candidateRoots.size >= 2) {
     const chosenRoots = new Set();
@@ -362,16 +447,19 @@ function clusterFromGroup(group, groupIndex, { retrievedAt, window, sourcesCheck
 const MAX_WINDOW_HOURS = 24 * 366;
 const DATA_ORIGINS = new Set(['fixture', 'newsjack_artifacts']);
 const FRESHNESS_GRADES = new Set(['fixture', 'unknown']);
-const PROVIDER_ID = /^(?:fixture|newsjack):[a-z0-9_:-]{1,60}$/;
+// The adapter's own provider ids. A free-form tail could suggest a planned
+// source such as newsjack:medialyst.
+const PROVIDER_IDS = new Set(['fixture:newsjack_shaped', 'newsjack:artifacts', 'newsjack:disabled']);
 
-// Copy only a well-formed window: ISO UTC start and end, and a positive,
-// bounded hour count. Anything else is treated as no window.
+// Copy only a well-formed window: ISO UTC start no later than end, and a
+// positive, bounded hour count. Anything else is treated as no window.
 export function sanitizeWindow(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const start = knownPublishedAt(value.start);
   const end = knownPublishedAt(value.end);
   const hours = value.hours;
-  if (!start || !end || typeof hours !== 'number' || !Number.isFinite(hours) || hours <= 0 || hours > MAX_WINDOW_HOURS) return null;
+  if (!start || !end || start > end) return null;
+  if (typeof hours !== 'number' || !Number.isFinite(hours) || hours <= 0 || hours > MAX_WINDOW_HOURS) return null;
   return { start, end, hours };
 }
 
@@ -383,7 +471,17 @@ function assertDocumentLabels({ providerId, freshnessGrade, dataOrigin }) {
   };
   if (typeof dataOrigin !== 'string' || !DATA_ORIGINS.has(dataOrigin)) fail('data_origin', dataOrigin);
   if (typeof freshnessGrade !== 'string' || !FRESHNESS_GRADES.has(freshnessGrade)) fail('freshness_grade', freshnessGrade);
-  if (typeof providerId !== 'string' || !PROVIDER_ID.test(providerId)) fail('provider_id', providerId);
+  if (typeof providerId !== 'string' || !PROVIDER_IDS.has(providerId)) fail('provider_id', providerId);
+}
+
+// Direct callers pass arrays. A cluster list that is not an array of objects
+// with member arrays, or hits that are not an array, is refused rather than
+// read as empty.
+function evidenceShapeValid(hits, clusters) {
+  if (hits != null && !Array.isArray(hits)) return false;
+  if (clusters == null) return true;
+  if (!Array.isArray(clusters)) return false;
+  return clusters.every((group) => group && typeof group === 'object' && !Array.isArray(group) && Array.isArray(group.members));
 }
 
 export function mapNewsjackEvidenceToStoryDiscovery({
@@ -405,21 +503,52 @@ export function mapNewsjackEvidenceToStoryDiscovery({
   assertSearchProviderModeImplemented(providerMode);
   assertDocumentLabels({ providerId, freshnessGrade, dataOrigin });
   window = sanitizeWindow(window);
+  if (artifactRead === null && !evidenceShapeValid(hits, clusters)) {
+    artifactRead = { ok: false, reason: 'invalid', error: 'evidence_shape_invalid' };
+  }
   const readFailed = (dataOrigin === 'newsjack_artifacts' && artifactRead?.ok !== true) || artifactRead?.ok === false;
+  if (readFailed && artifactRead?.reason === 'not_live') {
+    const stamp = knownPublishedAt(retrievedAt);
+    return baseDocument({
+      status: 'not_live',
+      reason: artifactRead.error === 'discovery_disabled' ? 'discovery_disabled' : 'fixture_not_configured',
+      message: artifactRead.error === 'discovery_disabled'
+        ? 'Newsjack discovery is disabled. Nothing was read or checked. This is not a live provider result.'
+        : 'No Newsjack fixture is configured. Nothing was read or checked. This is not a live provider result.',
+      data_origin: dataOrigin,
+      fixture_labeled: dataOrigin === 'fixture',
+      retrieved_at: stamp,
+      window,
+      sources_checked: [{
+        source_id: providerId,
+        provider: providerId,
+        provider_mode: providerMode,
+        outlet: null,
+        query: query || null,
+        feed_url: null,
+        checked_at: stamp,
+        outcome: 'not_checked',
+        item_count: 0,
+        freshness_grade: freshnessGrade,
+        error: artifactRead.error
+      }]
+    });
+  }
   if (readFailed) {
     const stamp = knownPublishedAt(retrievedAt);
     const statedWindow = window;
     const invalid = artifactRead?.reason === 'invalid';
     const what = dataOrigin === 'fixture' ? 'fixture file' : 'artifact file';
+    const invalidMessage = artifactRead?.error === 'evidence_shape_invalid'
+      ? 'The Newsjack evidence did not have the expected shape. No story members were checked. This is not a live provider result.'
+      : `A Newsjack ${what} could not be parsed as the expected JSON shape. No story members were checked. This is not a live provider result.`;
     const unreadMessage = dataOrigin === 'fixture'
       ? 'The Newsjack fixture file was not read. No story members were checked. This is not a live provider result.'
       : 'The Newsjack artifact directory or file was not read. No story members were checked. This is not a live provider result.';
     return baseDocument({
       status: 'abstain',
       reason: invalid ? 'artifacts_invalid' : 'artifacts_unavailable',
-      message: invalid
-        ? `A Newsjack ${what} could not be parsed as the expected JSON shape. No story members were checked. This is not a live provider result.`
-        : unreadMessage,
+      message: invalid ? invalidMessage : unreadMessage,
       data_origin: dataOrigin,
       fixture_labeled: dataOrigin === 'fixture',
       retrieved_at: stamp,

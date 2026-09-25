@@ -10,7 +10,7 @@ The page leads with article URL entry. In local preview it also offers a labeled
 
 Live on the operator host (`ml-jev.manipulationscore.com`, per Issue #118 records):
 
-- URL analysis of one public `https://` page per request, from the operator URL allowlist (last recorded value: `en.wikipedia.org`). The worker runs `MEDIA_LENS_MODE=live`, `MEDIA_LENS_ENABLE_LIVE=true`, and `MEDIA_LENS_ENABLE_LIVE_URL=true`. TypeSafe Jev (`jev-1.13.0`) is the only external classifier.
+- URL analysis of one public `https://` page per request, from the operator URL allowlist (last recorded value: `en.wikipedia.org`). The page accepts only `https://`; the worker's own URL policy also accepts `http://` from a direct API caller, still subject to the allowlist and address checks. The worker runs `MEDIA_LENS_MODE=live`, `MEDIA_LENS_ENABLE_LIVE=true`, and `MEDIA_LENS_ENABLE_LIVE_URL=true`. TypeSafe Jev (`jev-1.13.0`) is the only external classifier.
 - Off on that host: live pasted text (`400 live_pasted_text_disabled`), fixture analysis (`400 live_fixture_disabled`), classifier.dev, the Jev shadow flags, and Newsjack artifacts (no artifacts directory is set or approved as far as the records show).
 - Live results carry no coverage comparison. The page shows one plain coverage statement instead of empty comparison controls, and an abstention-only result says "No analysis was run".
 - The ESTIMATED TypeSafe budget (warn $20, hard stop $30) and the kill switch are active. Email budget alerts are waived by the owner on that host, so there is no email monitoring.

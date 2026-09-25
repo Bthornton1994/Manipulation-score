@@ -349,7 +349,7 @@ test('timeout after live Jev still exposes calls for ESTIMATED budget accounting
   const config = loadConfig({ MEDIA_LENS_MODE: 'live', MEDIA_LENS_ENABLE_LIVE: 'true', MEDIA_LENS_TYPESAFE_API_KEY: 'k' });
   config.limits = { ...config.limits, perAnalysisTimeoutMs: 40, maxJevCallsPerAnalysis: 160 };
 
-  const prepared = prepareFromPastedText({
+  const prepared = await prepareFromPastedText({
     text: 'A '.repeat(150) + 'long enough body for timeout budget undercount regression.'
   });
   const billedCalls = 4;
@@ -409,7 +409,7 @@ test('timeout while live Jev is in-flight still records calls once the adapter s
   const config = loadConfig({ MEDIA_LENS_MODE: 'live', MEDIA_LENS_ENABLE_LIVE: 'true', MEDIA_LENS_TYPESAFE_API_KEY: 'k' });
   config.limits = { ...config.limits, perAnalysisTimeoutMs: 30, maxJevCallsPerAnalysis: 160 };
 
-  const prepared = prepareFromPastedText({
+  const prepared = await prepareFromPastedText({
     text: 'A '.repeat(150) + 'long enough body for in-flight Jev timeout budget test.'
   });
   const budget = createTypesafeBudget({ estimatedUsdPerCall: 1, warnUsd: 100, stopUsd: 200 });
@@ -507,6 +507,43 @@ test('R2b: corrupt budget store fails closed instead of resetting the monthly st
   assert.equal(reloaded.isStopped(), true);
   assert.equal(reloaded.wouldExceed(1), true);
   assert.equal(reloaded.getSnapshot().storeUnavailable, true);
+});
+
+test('R2c: an unreadable budget store abstains with store copy and makes no provider call', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'media-lens-budget-unreadable-'));
+  const storePath = join(dir, 'typesafe-budget.json');
+  await writeFile(storePath, '{not-json', 'utf8');
+  const typesafeBudget = createTypesafeBudget({ estimatedUsdPerCall: 0.002, warnUsd: 20, stopUsd: 30, storePath });
+  assert.equal(typesafeBudget.isStoreUnavailable(), true);
+
+  const config = loadConfig({ MEDIA_LENS_MODE: 'live', MEDIA_LENS_ENABLE_LIVE: 'true' });
+  const prepared = await prepareFromPastedText({ text: 'The council voted on Tuesday to approve the drainage plan. '.repeat(8) });
+  prepared.artifact.inputMode = 'url';
+  let providerHits = 0;
+  const graph = await analyze({
+    prepared,
+    config,
+    jevAdapter: createJevAdapter({
+      mode: 'live',
+      baseUrl: 'http://127.0.0.1:9',
+      apiKey: 'test-key',
+      fetchImpl: async () => {
+        providerHits += 1;
+        throw new Error('must not call the provider when the budget store is unreadable');
+      }
+    }),
+    newsjackAdapter: createNewsjackAdapter({ mode: 'disabled' }),
+    typesafeBudget,
+    userAssertedPublic: true,
+    consentAt: '2026-09-25T00:00:00.000Z'
+  });
+
+  assert.equal(providerHits, 0);
+  assert.equal(graph.engine.jev.calls, 0);
+  const abstention = graph.abstentions.find((a) => a.reason === 'engine_unavailable');
+  assert.ok(abstention);
+  assert.equal(abstention.message, 'The TypeSafe ESTIMATED budget record could not be read, so no live Jev analysis was performed.');
+  assert.doesNotMatch(abstention.message, /reached the configured stop threshold/);
 });
 
 test('Fix 4: concurrent budget ledger warns at $20 and hard-stops at $30', async () => {

@@ -216,6 +216,16 @@ export async function analyze({
       consentAt
     });
   }
+  if (jevAdapter.mode === 'live' && typesafeBudget?.isStoreUnavailable?.()) {
+    return buildAbstentionOnlyGraph({
+      prepared,
+      reason: 'engine_unavailable',
+      message: 'The TypeSafe ESTIMATED budget record could not be read, so no live Jev analysis was performed.',
+      config,
+      userAssertedPublic,
+      consentAt
+    });
+  }
   if (jevAdapter.mode === 'live' && typesafeBudget?.isStopped?.()) {
     return buildAbstentionOnlyGraph({
       prepared,

@@ -158,6 +158,12 @@ export function createTypesafeBudget({
         }
       };
     },
+    // Fail-closed state for an unreadable or invalid persisted record. It is
+    // reported separately so callers do not claim spend reached the stop.
+    isStoreUnavailable() {
+      if (!storeUnavailable) refreshFromStore();
+      return storeUnavailable;
+    },
     isStopped() {
       if (storeUnavailable) return true;
       refreshFromStore();

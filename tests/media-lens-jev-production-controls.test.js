@@ -377,6 +377,30 @@ test('R2: ESTIMATED budget store persists across process restart within the same
   assert.equal(DEFAULT_TYPESAFE_BUDGET_STORE_FILE, '/var/lib/media-lens/typesafe-budget.json');
 });
 
+test('tryReserveCalls blocks concurrent live analyses from overspending past stopUsd', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'media-lens-budget-reserve-'));
+  const storePath = join(dir, 'typesafe-budget.json');
+  const fixedNow = () => Date.UTC(2026, 8, 21, 12, 0, 0);
+  const opts = { estimatedUsdPerCall: 1, warnUsd: 20, stopUsd: 30, storePath, now: fixedNow };
+
+  const seed = createTypesafeBudget(opts);
+  seed.recordCalls(29);
+
+  async function simulateReservedAnalyze() {
+    const budget = createTypesafeBudget(opts);
+    const reservation = budget.tryReserveCalls(1);
+    if (!reservation.ok) return 'blocked';
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    budget.finalizeReservedCalls(reservation.reserved, 1);
+    return 'ran';
+  }
+
+  const [a, b] = await Promise.all([simulateReservedAnalyze(), simulateReservedAnalyze()]);
+  const final = createTypesafeBudget(opts).getSnapshot();
+  assert.equal([a, b].filter((outcome) => outcome === 'ran').length, 1);
+  assert.equal(final.calls, 30);
+});
+
 test('Fix 4: concurrent budget ledger warns at $20 and hard-stops at $30', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'media-lens-budget-concurrent-'));
   const storePath = join(dir, 'typesafe-budget.json');

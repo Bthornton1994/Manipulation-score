@@ -451,6 +451,10 @@ test('owner limits, cap, rate, cost, timeout, and provider failure stay non-auth
   });
   assert.equal(ledger.tryReserve().ok, true);
   assert.equal(ledger.tryReserve().reason, 'monthly_cost_ceiling');
+  const releaseLedger = createNarrowCostLedger({ ceilingUsd: 1, estimatedUsdPerCall: 0.25 });
+  assert.equal(releaseLedger.tryReserve().ok, true);
+  releaseLedger.unreserve();
+  assert.equal(releaseLedger.tryReserve().ok, true);
   let ticks = 0;
   const nextMonth = createNarrowCostLedger({
     ceilingUsd: 1,
@@ -492,6 +496,7 @@ test('owner limits, cap, rate, cost, timeout, and provider failure stay non-auth
   assert.equal(timed.acted, false);
   assert.doesNotMatch(JSON.stringify(timed), /SENTINEL_SPAN_TEXT/);
 
+  const failingLedger = createNarrowCostLedger({ ceilingUsd: 0.5, estimatedUsdPerCall: 0.25 });
   const failing = await buildNarrowShadowReport({
     enabled: true,
     graph: syntheticGraph(),
@@ -502,10 +507,12 @@ test('owner limits, cap, rate, cost, timeout, and provider failure stay non-auth
       }
     },
     providerKind: 'injected_mock',
-    limits: { ...TEST_LIMITS, maxCallsPerAnalysis: 1 },
+    limits: { ...TEST_LIMITS, maxCallsPerAnalysis: 2, estimatedUsdPerCall: 0.25, monthlyCostCeilingUsd: 0.5 },
+    costLedger: failingLedger,
     recordedAt: RECORDED_AT
   });
   assert.equal(failing.span_results[0].provider_error, 'provider_failed');
+  assert.equal(failingLedger.snapshot().estimated_usd, 0);
   assert.equal(failing.authorizes.merge, false);
   assert.equal(failing.authorizes.spending, false);
   assert.doesNotMatch(JSON.stringify(failing), /SENTINEL_SPAN_TEXT|sk-/);

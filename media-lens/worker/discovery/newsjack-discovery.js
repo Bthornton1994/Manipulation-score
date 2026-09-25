@@ -150,6 +150,14 @@ const PLACEHOLDER_OUTLETS = new Set([
   'not applicable'
 ]);
 
+// Letters and digits of each listed placeholder, so fullwidth forms, symbol
+// wrappers, and internal punctuation or spacing still match. `N.A.` and
+// `n / a` share `na` with `n/a`. `not-available` shares `notavailable` with
+// `not available`.
+const PLACEHOLDER_COMPACT = new Set(
+  [...PLACEHOLDER_OUTLETS].map((name) => name.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ''))
+);
+
 function outletSlug(outlet) {
   return String(outlet || '')
     .toLowerCase()
@@ -217,10 +225,11 @@ function baseDocument(extra) {
 
 function outletIdentity(value) {
   if (typeof value !== 'string') return null;
-  const normalized = value.replace(/\p{Cf}/gu, '').trim().replace(/\s+/g, ' ').toLowerCase();
+  const normalized = value.normalize('NFKC').replace(/\p{Cf}/gu, '').trim().replace(/\s+/g, ' ').toLowerCase();
   if (!normalized || !/[\p{L}\p{N}]/u.test(normalized)) return null;
-  const bare = normalized.replace(/^[\p{P}\s]+|[\p{P}\s]+$/gu, '');
-  if (PLACEHOLDER_OUTLETS.has(bare) || PLACEHOLDER_OUTLETS.has(normalized)) return null;
+  const bare = normalized.replace(/^[\p{P}\p{S}\s]+|[\p{P}\p{S}\s]+$/gu, '');
+  const compact = bare.replace(/[^\p{L}\p{N}]+/gu, '');
+  if (!compact || PLACEHOLDER_OUTLETS.has(bare) || PLACEHOLDER_OUTLETS.has(normalized) || PLACEHOLDER_COMPACT.has(compact)) return null;
   return normalized;
 }
 

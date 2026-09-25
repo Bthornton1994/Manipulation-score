@@ -824,6 +824,19 @@ test('shared wire and aggregator hosts do not merge distinct outlets, and an out
 const A_URL = 'https://alpha-post.example/fare-a';
 const B_URL = 'https://beta-herald.example/fare-b';
 
+test('placeholder-shaped outlet names do not grant independence beside one real outlet', () => {
+  const origin = sameStoryOrigin([A_URL, B_URL]);
+  const shaped = ['ＵＮＫＮＯＷＮ', '<unknown>', 'N.A.', 'n.a', 'not-available', 'n / a'];
+  const exact = ['(unknown)', 'unknown.', 'n/a', 'N/A', 'none', 'unknown', 'UNKNOWN'];
+  for (const name of [...shaped, ...exact]) {
+    const document = mapHits([datedHit('Alpha Post', A_URL), datedHit(name, B_URL, 'same_story')], { origin });
+    assert.equal(document.clusters[0].independent_outlet_count, 0, name);
+    assert.equal(document.clusters[0].members.some((member) => member.outlet === name && member.independent_reporting), false, name);
+  }
+  const real = mapHits([datedHit('Alpha Post', A_URL), datedHit('Beta Herald', B_URL, 'same_story')], { origin });
+  assert.equal(real.clusters[0].independent_outlet_count, 2);
+});
+
 test('placeholder, invisible, and punctuation-only outlet names never supply an independent outlet', () => {
   const origin = sameStoryOrigin([A_URL, B_URL]);
   for (const name of ['n/a', 'N/A', 'Unknown.', '(unknown)', 'Unknown source', 'undefined', 'None']) {

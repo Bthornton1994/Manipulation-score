@@ -4,7 +4,6 @@ import { readdir, readFile } from 'node:fs/promises';
 import {
   ABSTENTION_EMPTY_COPY,
   COVERAGE_FRAMES_EMPTY_COPY,
-  COVERAGE_OBSERVATIONS_EMPTY_COPY,
   buildAnalysisOverview,
   consentDisclosure,
   liveUrlDisclosure,
@@ -13,8 +12,9 @@ import {
   renderAnalysisOverview,
   renderClusterMember,
   renderCoverageFrames,
-  renderCoverageObservationList,
   renderObservation,
+  renderOmissionCandidates,
+  renderUnattributedQuotes,
   safeHttpsUrl
 } from '../media-lens/media-lens.js';
 
@@ -37,7 +37,7 @@ test('analysis overview sits after the masthead and before Language', async () =
   const overview = html.indexOf('id="ml-overview-heading"');
   const language = html.indexOf('id="ml-language-heading"');
   assert.ok(masthead >= 0 && overview > masthead && language > overview);
-  assert.match(html, /<h2 id="ml-overview-heading">Analysis overview<\/h2>/);
+  assert.match(html, /<h3 id="ml-overview-heading">Analysis overview<\/h3>/);
   assert.match(html, /id="overview-list"/);
   assert.match(html, /not a score for the article, a person, or an outlet/);
 });
@@ -86,14 +86,24 @@ test('missing provenance and short excerpts use abstention reasons already on th
   const missing = buildAnalysisOverview(await fixture('synthetic-03-no-timestamp'));
   assert.equal(stateFor(missing, 'Language').state, 'Not observed');
   assert.equal(stateFor(missing, 'Claims').state, 'Not observed');
-  assert.equal(stateFor(missing, 'Coverage').state, 'Insufficient evidence');
+  // No cluster and no story origin: other coverage was not checked.
+  assert.equal(stateFor(missing, 'Coverage').state, 'Abstained');
+  assert.equal(stateFor(missing, 'Coverage').detail, 'Other coverage not checked');
 
+  // synthetic-06 is an abstention-only graph: no analysis was run.
   const shortGraph = await fixture('synthetic-06-short-excerpt');
   const short = buildAnalysisOverview(shortGraph);
-  assert.equal(stateFor(short, 'Language').state, 'Insufficient evidence');
-  assert.equal(stateFor(short, 'Claims').state, 'Insufficient evidence');
-  assert.equal(stateFor(short, 'Coverage').state, 'Not available');
+  assert.equal(stateFor(short, 'Language').state, 'Abstained');
+  assert.equal(stateFor(short, 'Language').detail, 'No analysis was run');
+  assert.equal(stateFor(short, 'Claims').state, 'Abstained');
+  assert.equal(stateFor(short, 'Coverage').state, 'Abstained');
   assert.equal(stateFor(short, 'Source context').state, 'Observed');
+  assert.match(stateFor(short, 'Source context').detail, /^From the recorded URL · fictional-daily\.example$/);
+
+  const allowed = new Set(['Observed', 'Possible', 'Not observed', 'Insufficient evidence', 'Abstained', 'Not available']);
+  for (const name of ['synthetic-01-quoted-vs-authorial', 'synthetic-02-syndicated-cluster', 'synthetic-03-no-timestamp', 'synthetic-04-injection', 'synthetic-05-paywall', 'synthetic-06-short-excerpt']) {
+    for (const item of buildAnalysisOverview(await fixture(name))) assert.ok(allowed.has(item.state), `${name} ${item.label} ${item.state}`);
+  }
 });
 
 test('coverage frames public copy does not describe schema or fusion internals', async () => {
@@ -299,13 +309,21 @@ test('missing coverage observations and abstentions use neutral accessible copy'
   const html = await readFile('media-lens/index.html', 'utf8');
   const graph = await fixture('synthetic-01-quoted-vs-authorial');
   assert.equal(graph.observations.filter((obs) => obs.dimension === 'coverage').length, 0);
-  const coverage = renderCoverageObservationList(graph);
-  assert.equal(COVERAGE_OBSERVATIONS_EMPTY_COPY, 'No coverage observations were recorded for this analysis.');
-  assert.match(coverage, /No coverage observations were recorded for this analysis\./);
+  assert.equal(renderUnattributedQuotes(graph), '');
   assert.equal(renderCoverageFrames(graph.coverage), 'No coverage-frame comparison was available for this analysis.');
+  const coverage = renderOmissionCandidates(graph);
   assert.doesNotMatch(coverage, SCORE_LANGUAGE);
   assert.doesNotMatch(coverage, FORBIDDEN_PUBLIC_COPY);
-  assert.match(html, /<h2 id="ml-abstention-heading">Analysis limitations<\/h2>/);
+  // Coverage observations have one list: no separate coverage-list element.
+  assert.doesNotMatch(html, /id="coverage-list"/);
+  const notRun = html.match(/<p class="ml-coverage-status" id="coverage-not-run" hidden>([\s\S]*?)<\/p>/)[1].replace(/\s+/g, ' ').trim();
+  assert.equal(
+    notRun,
+    'Coverage comparison was not run for this result. Media Lens does not yet have an approved source for finding other reports of this story, so this result says nothing about how other outlets covered it.'
+  );
+  assert.match(html, /<h4 id="ml-unattributed-heading">Quotes without a named speaker<\/h4>/);
+  assert.match(html, /no named speaker or attribution in the page\. It is flagged as a possible selective-context\s+candidate\. No other coverage was compared, so this does not show that anything was left out\./);
+  assert.match(html, /<h3 id="ml-abstention-heading">Analysis limitations<\/h3>/);
   assert.match(html, /aria-labelledby="ml-abstention-heading"/);
   const limitations = renderAbstentionList(graph);
   assert.match(limitations, /The typed classifier did not return a usable answer/);
@@ -407,9 +425,11 @@ test('cancelled consent is not stored as a retryable analysis payload', async ()
 test('the fixture sample stays static and the local sample action is hidden until local preview', async () => {
   const html = await readFile('media-lens/index.html', 'utf8');
   const js = await readFile('media-lens/media-lens.js', 'utf8');
-  assert.match(html, /id="sample-analyze"[^>]*hidden/);
-  assert.match(html, /Static excerpt of the in-repo golden graph/);
-  assert.match(js, /if \(sampleAnalyze\) sampleAnalyze\.hidden = false/);
+  assert.match(html, /id="sample-analyze" data-local-only hidden/);
+  assert.match(html, /A fixed excerpt from a made-up test article that ships with this page/);
+  const reveal = js.slice(js.indexOf('function revealCatalogControls'), js.indexOf('function setupInputModeToggle'));
+  assert.match(reveal, /if \(!CATALOG_MODE\) return;/);
+  assert.match(reveal, /querySelectorAll\('\[data-local-only\]'\)/);
   assert.match(js, /fixtureRadio\.checked = true/);
   assert.doesNotMatch(js, /sample-analyze[\s\S]{0,240}value = 'url'|sample-analyze[\s\S]{0,240}mode = 'url'/);
 });

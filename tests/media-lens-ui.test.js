@@ -13,6 +13,55 @@ const ALLOWED_UI_PHRASES = [
 ];
 const STRENGTH_DISPLAY_LABELS = ['Observed influence signal', 'Possible influence signal'];
 
+test('URL help names the approved-site limit and keeps the abstain and not-allowed notes', async () => {
+  const html = await readFile('media-lens/index.html', 'utf8');
+  const help = html.match(/<p class="ml-form-note" id="article-url-help">([\s\S]*?)<\/p>/)[1].replace(/\s+/g, ' ');
+  assert.match(help, /accepts only public <code>https:\/\/<\/code> pages from a short list of sites the operator approves, for example English Wikipedia articles/);
+  assert.match(help, /Long pages may abstain/);
+  assert.match(help, /Private, paywalled, internal, and unauthorized material is not allowed/);
+  assert.match(html, /<p class="ml-field-error" id="article-url-error" role="alert" hidden><\/p>/);
+});
+
+test('heading levels never skip and the results view has a single top-level heading', async () => {
+  const html = await readFile('media-lens/index.html', 'utf8');
+  const levels = [...html.matchAll(/<h([1-6])\b/g)].map((m) => Number(m[1]));
+  for (let i = 1; i < levels.length; i += 1) {
+    assert.ok(levels[i] <= levels[i - 1] + 1, `heading jumps from h${levels[i - 1]} to h${levels[i]}`);
+  }
+  const results = html.slice(html.indexOf('<div class="ml-results"'), html.indexOf('<p class="ml-footer-note">'));
+  assert.deepEqual([...results.matchAll(/<h2\b[^>]*>/g)].map((m) => m[0]), ['<h2 class="ml-result-title" id="result-title" tabindex="-1">']);
+  assert.match(results, /<nav class="ml-workspace-nav" aria-label="Result sections">/);
+  assert.doesNotMatch(results, /Story workspace|Back to stories/);
+  assert.match(results, /id="analyze-another">Back to start</);
+  const footer = html.match(/<p class="ml-footer-note">([\s\S]*?)<\/p>/)[1].replace(/\s+/g, ' ');
+  assert.doesNotMatch(footer, /fixture-first coverage workspace/);
+  assert.match(footer, /limited Jev-only preview/);
+  assert.match(footer, /no overall score for an article, person, or outlet/);
+});
+
+test('form controls use borders with at least 3:1 contrast and links keep a 24px hit area', async () => {
+  const css = await readFile('media-lens/media-lens.css', 'utf8');
+  const shared = await readFile('styles.css', 'utf8');
+  assert.match(css, /--ml-control-border: var\(--text-faint\)/);
+  for (const selector of [".ml-entry input\\[type='search'\\]", '\\.ml-form select,', '\\.ml-lane,']) {
+    assert.match(css, new RegExp(`${selector}[^{]*\\{[^}]*border: 1px solid var\\(--ml-control-border\\)`), selector);
+  }
+  const hex = (name) => shared.match(new RegExp(`--${name}:(#[0-9a-f]{6})`))[1];
+  const luminance = (value) => {
+    const channels = [1, 3, 5].map((i) => parseInt(value.slice(i, i + 2), 16) / 255);
+    const [r, g, b] = channels.map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const ratio = (a, b) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+  for (const background of ['surface', 'ink-soft']) {
+    assert.ok(ratio(hex('text-faint'), hex(background)) >= 3, `control border vs --${background}`);
+  }
+  assert.match(css, /\.ml-trust-links a,\s*\.media-lens-page \.legal-mini-nav a \{[^}]*min-height: 32px/);
+});
+
 test('index.html has a skip link and a single h1', async () => {
   const html = await readFile('media-lens/index.html', 'utf8');
   assert.match(html, /class="skip-link"/);
@@ -29,7 +78,7 @@ test('index.html has four labelled sections for Language, Claims, Coverage, and 
     { id: 'ml-source-context-heading', label: 'Source context' }
   ];
   for (const { id, label } of requiredSections) {
-    const sectionPattern = new RegExp(`<section aria-labelledby="${id}"[^>]*>[\\s\\S]*?<h2 id="${id}">${label}</h2>`);
+    const sectionPattern = new RegExp(`<section aria-labelledby="${id}"[^>]*>[\\s\\S]*?<h3 id="${id}">${label}</h3>`);
     assert.match(html, sectionPattern, `missing labelled section for ${label}`);
   }
 });
@@ -242,12 +291,38 @@ test('index.html uses the v2 consent checkbox and keeps the full live-URL disclo
   assert.match(html, /Analyze an approved public URL/);
   assert.match(html, /id="article-url"[^>]*disabled/);
   assert.match(html, /Live pasted-text analysis stays disabled/);
+  // The inherited em dash is replaced with a period in both HTML and JS.
+  assert.match(notice[1], /Live pasted-text analysis stays disabled\. Use Clarity for private messages\./);
+  assert.doesNotMatch(html, /stays disabled \u2014/);
+  assert.doesNotMatch(liveUrlDisclosure('operator'), /\u2014/);
+  // The full disclosure is visible: no max-height scroll clipping.
+  const css = await readFile('media-lens/media-lens.css', 'utf8');
+  assert.doesNotMatch(css, /#ml-live-url-notice\s*\{/);
 });
 
-test('public landing uses the Media Lens product headline and a fixture sample card', async () => {
+test('public landing leads with URL analysis, describes only what works, and keeps a labeled sample card', async () => {
   const html = await readFile('media-lens/index.html', 'utf8');
-  assert.match(html, /<h1[^>]*>Coverage context for a public story<\/h1>/);
-  assert.match(html, /Explore a fixture story/);
+  assert.match(html, /<h1[^>]*>Analyze one public article<\/h1>/);
+  assert.match(html, /Limited Jev-only experimental preview/);
+  const lede = html.match(/<p class="ml-lede">([\s\S]*?)<\/p>/)[1].replace(/\s+/g, ' ');
+  assert.match(lede, /one public page from a short list of sites the operator approves/);
+  assert.match(lede, /language, claims, coverage, and source context separate/);
+  assert.match(lede, /no score for the article, a person, or an outlet/);
+  assert.doesNotMatch(html, /media-intelligence workspace|fixture-first/i);
+  const compare = html.match(/<ul class="ml-compare">([\s\S]*?)<\/ul>/)[1].replace(/\s+/g, ' ');
+  assert.match(compare, /does not yet find other reports of the same story or compare how outlets covered it/);
+  assert.match(compare, /Examples on this page are made up and labeled/);
+  assert.match(compare, /<strong>Clarity<\/strong> reviews a private message on your device\./);
+  // The URL entry comes first in the DOM, then the Coverage context section.
+  const urlEntry = html.indexOf('id="url-entry-heading"');
+  const coverageContext = html.indexOf('id="coverage-context-heading"');
+  const explorer = html.indexOf('id="fixture-explorer"');
+  assert.ok(urlEntry > html.indexOf('id="ml-hero-heading"'));
+  assert.ok(coverageContext > urlEntry && explorer > coverageContext);
+  assert.match(html, /<h2 id="coverage-context-heading">Coverage context<\/h2>/);
+  assert.match(html, /Not live yet\. Media Lens has no approved source for finding other reports of the same story/);
+  assert.match(html, /<p class="ml-sample-kicker">Made-up example<\/p>/);
+  assert.match(html, /<h3 id="ml-sample-heading">Council approves downtown drainage upgrade<\/h3>/);
   assert.match(html, /Analyze a public article URL/);
   assert.match(html, /Council approves downtown drainage upgrade/);
   assert.match(html, /synthetic-01-quoted-vs-authorial/);

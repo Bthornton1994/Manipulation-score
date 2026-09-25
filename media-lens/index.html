@@ -10,7 +10,7 @@
     <meta name="robots" content="noindex, nofollow" />
     <meta
       name="description"
-      content="Media Lens: a fixture-first media-intelligence workspace for language, claims, coverage, and source context. Live URL analysis stays a limited Jev-only preview."
+      content="Media Lens: a limited Jev-only preview that analyzes the language, claims, and source details of one public page from an operator-approved list. It gives no score for an article, person, or outlet."
     />
     <link rel="icon" href="../icon.svg" type="image/svg+xml" />
     <title>Media Lens | Manipulation Score</title>
@@ -38,7 +38,7 @@
     </header>
 
     <main id="main" class="ml-main" tabindex="-1">
-      <p class="ml-status ml-error-banner" id="analyze-error" data-state="error" role="alert" tabindex="-1" hidden></p>
+      <p class="ml-status ml-error-banner" id="analyze-error" data-state="error" role="alert" hidden></p>
       <div class="ml-error-actions" id="error-actions" hidden>
         <button class="button" type="button" id="analyze-retry">Retry</button>
         <button class="button button-secondary" type="button" id="analyze-reset">Start over</button>
@@ -51,15 +51,16 @@
         <section class="ml-hero" aria-labelledby="ml-hero-heading">
           <div class="ml-hero-copy">
             <p class="eyebrow"><span></span> Limited Jev-only experimental preview</p>
-            <h1 id="ml-hero-heading">Coverage context for a public story</h1>
+            <h1 id="ml-hero-heading">Analyze one public article</h1>
             <p class="ml-lede">
-              Media Lens is a media-intelligence workspace for public coverage. It keeps language, claims, coverage, and source
-              context separate, and it shows the evidence behind each one.
+              Media Lens analyzes one public page from a short list of sites the operator approves. It keeps language, claims,
+              coverage, and source context separate, and it links each finding to the text it came from. It gives no score for the
+              article, a person, or an outlet.
             </p>
             <ul class="ml-compare">
               <li>
-                <strong>Media Lens</strong> reads public stories and article URLs. Fixture stories on this page are labeled examples,
-                not a live coverage census.
+                <strong>Media Lens</strong> does not yet find other reports of the same story or compare how outlets covered it.
+                Examples on this page are made up and labeled as examples.
               </li>
               <li>
                 <strong>Clarity</strong> reviews a private message on your device.
@@ -70,43 +71,137 @@
         </section>
 
         <div class="ml-entries">
-          <section class="ml-entry" aria-labelledby="story-explore-heading">
-            <h2 id="story-explore-heading">Explore a fixture story</h2>
-            <p class="ml-dimension-note">
-              Story and topic search is a separate entry from article URL analysis. It matches labeled fixture stories shipped with
-              this page. It does not discover live coverage.
-            </p>
-            <div id="fixture-lanes" role="group" aria-label="Fixture interest lanes"></div>
-            <p class="ml-form-note" id="fixture-lanes-note">
-              Fixture lanes filter examples on this page. Nothing is saved, and a lane does not follow live coverage.
-            </p>
-            <form id="story-search-form" role="search">
-              <label class="ml-field-label" for="story-query">Story or topic</label>
-              <input
-                id="story-query"
-                name="story-query"
-                type="search"
-                placeholder="Try transit, paywall, or quoted"
-                autocomplete="off"
-                enterkeyhint="search"
-                aria-describedby="story-query-help"
-              />
-              <p class="ml-form-note" id="story-query-help">
-                Sample coverage only. A match is an in-repo fixture, not a live fact about publishers or events.
+          <div class="ml-entry-column">
+            <section class="ml-entry ml-url-entry" aria-labelledby="url-entry-heading">
+              <h2 id="url-entry-heading">Analyze a public article URL</h2>
+              <p class="ml-dimension-note">
+                On the approved operator host this runs a limited Jev-only live URL mode. The secondary classifier is disabled. Live URL
+                access is not production-ready for general use.
               </p>
-            </form>
-            <p class="ml-form-note" id="story-search-status" role="status"></p>
-            <ul class="ml-story-results" id="story-results"></ul>
+              <form class="ml-form" id="analyze-form">
+                <fieldset class="ml-input-mode-wrap" id="input-mode-fieldset" data-local-only hidden>
+                  <legend>Analyze an approved public URL</legend>
+                  <div class="ml-input-mode-row" role="radiogroup" aria-label="Input mode">
+                    <label>
+                      <input type="radio" name="input-mode" value="fixture" />
+                      <span>Try an example</span>
+                    </label>
+                    <label>
+                      <input type="radio" name="input-mode" value="pasted_text" />
+                      <span>Paste public text locally</span>
+                    </label>
+                    <label>
+                      <input type="radio" name="input-mode" value="url" checked />
+                      <span>Public article URL</span>
+                    </label>
+                  </div>
+                </fieldset>
+
+                <div id="fixture-field" hidden>
+                  <label class="ml-field-label" for="fixture-select">Example article</label>
+                  <select id="fixture-select" name="fixture_id">
+                    <option value="synthetic-01-quoted-vs-authorial">Quoted vs. authorial language</option>
+                    <option value="synthetic-02-syndicated-cluster">Syndicated coverage cluster</option>
+                    <option value="synthetic-03-no-timestamp">Missing publish timestamp</option>
+                    <option value="synthetic-04-injection">Embedded instruction-like text</option>
+                    <option value="synthetic-05-paywall">Paywalled excerpt</option>
+                    <option value="synthetic-06-short-excerpt">Very short excerpt</option>
+                  </select>
+                </div>
+
+                <div id="pasted-text-field" hidden>
+                  <label class="ml-field-label" for="pasted-text">Public text to analyze</label>
+                  <textarea id="pasted-text" name="text" maxlength="60000" placeholder="Paste public article text..."></textarea>
+                </div>
+
+                <div class="ml-analyze-bar">
+                  <div id="url-field">
+                    <label class="ml-field-label" for="article-url">Article URL</label>
+                    <input
+                      type="url"
+                      id="article-url"
+                      name="url"
+                      placeholder="https://en.wikipedia.org/wiki/Yes"
+                      aria-describedby="article-url-help"
+                      autocomplete="url"
+                      enterkeyhint="go"
+                      disabled
+                    />
+                  </div>
+                  <div class="ml-form-actions ml-primary-actions">
+                    <button class="button" type="button" id="analyze-continue">Analyze</button>
+                  </div>
+                </div>
+                <p class="ml-field-error" id="article-url-error" role="alert" hidden></p>
+                <p class="ml-form-note" id="article-url-help">
+                  Live analysis accepts only public <code>https://</code> pages from a short list of sites the operator approves, for
+                  example English Wikipedia articles. Long pages may abstain before Jev runs. Private, paywalled, internal, and
+                  unauthorized material is not allowed.
+                </p>
+                <p class="ml-form-note" id="analyze-continue-note">
+                  Analyze asks for consent next. Nothing is sent until you confirm.
+                </p>
+
+                <dialog class="ml-consent-dialog" id="consent-dialog" aria-labelledby="consent-dialog-title">
+                  <h2 id="consent-dialog-title">Confirm public-material consent</h2>
+                  <p id="consent-fetch-notice">
+                    In operator-hosted live mode, the approved operator host may request the URL you entered. Prepared public spans may be
+                    sent to TypeSafe AI’s Jev service. It will not score a person or outlet.
+                  </p>
+                  <div class="ml-consent-row">
+                    <input type="checkbox" id="consent-checkbox" required />
+                    <label for="consent-checkbox">I confirm this is public material I am allowed to analyze, and I understand that live URL mode may send prepared public spans to TypeSafe AI’s Jev service.</label>
+                  </div>
+                  <div class="ml-form-actions">
+                    <button class="button" type="submit" id="analyze-submit" disabled>Run analysis</button>
+                    <button class="button button-secondary" type="button" id="consent-cancel">Cancel</button>
+                  </div>
+                </dialog>
+              </form>
+
+              <p class="ml-status" id="worker-status" data-state="checking" role="status">
+                <span class="ml-status-dot" aria-hidden="true"></span>
+                <span id="worker-status-text">Checking the Media Lens service...</span>
+              </p>
+            </section>
+
+          <section class="ml-disclosure" aria-labelledby="ml-disclosure-heading">
+            <h2 id="ml-disclosure-heading">Before you analyze</h2>
+            <p>
+              Media Lens is for <strong>public material you are allowed to analyze</strong>, such as a published article, ad, speech, or
+              campaign page. It is not the place for private messages or conversations; use
+              <a href="https://manipulationscore.com/analyze.html">Clarity</a> for those instead. Clarity never sends your text anywhere.
+              On the approved operator host, it can run a limited <strong>Jev-only live URL mode</strong> for public hosts on an
+              operator allowlist. Live pasted-text analysis and the secondary classifier are disabled. Live URL access is limited, can
+              be turned off by the operator, and is not production-ready for general use.
+            </p>
+            <p id="ml-live-url-notice">
+              Before you analyze: in operator-hosted live mode, the approved operator host requests the public page at the URL you enter. The destination site (and its CDN) may see the operator host’s network address. Prepared public span text from that page may be sent to TypeSafe AI’s Jev service under TypeSafe’s own policy. TypeSafe does not fetch the URL. Full article text is not kept by Media Lens by default. Do not submit private messages, passwords, medical or financial records, information about children, paywalled content you are not authorized to fetch, or non-public/internal addresses. Live pasted-text analysis stays disabled. Use Clarity for private messages.
+            </p>
+          </section>
+          </div>
+
+          <section class="ml-entry ml-coverage-context" aria-labelledby="coverage-context-heading">
+            <h2 id="coverage-context-heading">Coverage context</h2>
+            <p class="ml-dimension-note">
+              Coverage context is meant to show where a story started, which reports did their own reporting and which repeat
+              another outlet's copy, and where coverage may have gaps.
+            </p>
+            <p class="ml-coverage-status" id="coverage-context-status">
+              Not live yet. Media Lens has no approved source for finding other reports of the same story, so an article analysis
+              does not compare coverage.
+            </p>
 
             <aside class="ml-sample-card" aria-labelledby="ml-sample-heading">
-              <p class="ml-sample-kicker">Fixture sample</p>
-              <h2 id="ml-sample-heading">Council approves downtown drainage upgrade</h2>
+              <p class="ml-sample-kicker">Made-up example</p>
+              <h3 id="ml-sample-heading">Council approves downtown drainage upgrade</h3>
               <p class="ml-sample-meta">
                 Jordan Reyes · fictional-daily.example · fixture
                 <code>synthetic-01-quoted-vs-authorial</code>
               </p>
               <p class="ml-sample-note">
-                Static excerpt of the in-repo golden graph. Not a live fetch and not an accuracy claim.
+                A fixed excerpt from a made-up test article that ships with this page. Nothing was fetched, and it is not evidence of
+                accuracy.
               </p>
               <ul class="ml-sample-findings">
                 <li data-observation-id="obs-jev-1">
@@ -142,121 +237,51 @@
               </dl>
               <p class="ml-sample-rationale">Synthetic fixture published outside the freshness window.</p>
               <div class="ml-form-actions">
-                <button class="button button-secondary" type="button" data-fixture-id="synthetic-01-quoted-vs-authorial">
-                  Open fixture workspace
+                <button
+                  class="button button-secondary"
+                  type="button"
+                  data-fixture-id="synthetic-01-quoted-vs-authorial"
+                  data-local-only
+                  hidden
+                >
+                  Open sample in fixture workspace
                 </button>
-                <button class="button button-secondary button-small" type="button" id="sample-analyze" hidden>
+                <button class="button button-secondary button-small" type="button" id="sample-analyze" data-local-only hidden>
                   Analyze this example locally
                 </button>
               </div>
             </aside>
-          </section>
 
-          <section class="ml-entry" aria-labelledby="url-entry-heading">
-            <h2 id="url-entry-heading">Analyze a public article URL</h2>
-            <p class="ml-dimension-note">
-              URL analysis is separate from fixture search. On the approved operator host it can run a limited Jev-only live URL mode.
-              The secondary classifier is disabled. Live URL access is not production-ready for general use.
-            </p>
-            <form class="ml-form" id="analyze-form">
-              <fieldset class="ml-input-mode-wrap">
-                <legend>Analyze an approved public URL</legend>
-                <div class="ml-input-mode-row" role="radiogroup" aria-label="Input mode">
-                  <label>
-                    <input type="radio" name="input-mode" value="fixture" />
-                    <span>Try an example</span>
-                  </label>
-                  <label data-local-only="pasted-text">
-                    <input type="radio" name="input-mode" value="pasted_text" />
-                    <span>Paste public text locally</span>
-                  </label>
-                  <label>
-                    <input type="radio" name="input-mode" value="url" checked />
-                    <span>Public article URL</span>
-                  </label>
-                </div>
-              </fieldset>
-
-              <div id="fixture-field" hidden>
-                <label class="ml-field-label" for="fixture-select">Example article</label>
-                <select id="fixture-select" name="fixture_id">
-                  <option value="synthetic-01-quoted-vs-authorial">Quoted vs. authorial language</option>
-                  <option value="synthetic-02-syndicated-cluster">Syndicated coverage cluster</option>
-                  <option value="synthetic-03-no-timestamp">Missing publish timestamp</option>
-                  <option value="synthetic-04-injection">Embedded instruction-like text</option>
-                  <option value="synthetic-05-paywall">Paywalled excerpt</option>
-                  <option value="synthetic-06-short-excerpt">Very short excerpt</option>
-                </select>
-              </div>
-
-              <div id="pasted-text-field" hidden>
-                <label class="ml-field-label" for="pasted-text">Public text to analyze</label>
-                <textarea id="pasted-text" name="text" maxlength="60000" placeholder="Paste public article text..."></textarea>
-              </div>
-
-              <div class="ml-analyze-bar">
-                <div id="url-field">
-                  <label class="ml-field-label" for="article-url">Article URL</label>
-                  <input
-                    type="url"
-                    id="article-url"
-                    name="url"
-                    placeholder="https://en.wikipedia.org/wiki/Yes"
-                    aria-describedby="article-url-help"
-                    autocomplete="url"
-                    disabled
-                  />
-                </div>
-                <div class="ml-form-actions ml-primary-actions">
-                  <button class="button" type="button" id="analyze-continue">Analyze</button>
-                </div>
-              </div>
-              <p class="ml-form-note" id="article-url-help">
-                Use a public <code>https://</code> URL from the operator allowlist. Long pages may abstain before Jev runs. Private,
-                paywalled, internal, and unauthorized material is not allowed.
+            <div class="ml-fixture-explorer" id="fixture-explorer" data-local-only hidden>
+              <h3 id="story-explore-heading">Made-up example stories</h3>
+              <p class="ml-dimension-note">
+                Local preview only. These fixture stories ship with this page and are made up. Search matches these examples only. It
+                does not discover live coverage.
               </p>
-              <p class="ml-form-note" id="analyze-continue-note">
-                Analyze asks for consent next. Nothing is sent until you confirm.
+              <div id="fixture-lanes" role="group" aria-label="Fixture interest lanes"></div>
+              <p class="ml-form-note" id="fixture-lanes-note">
+                Fixture lanes filter examples on this page. Nothing is saved, and a lane does not follow live coverage.
               </p>
-
-              <dialog class="ml-consent-dialog" id="consent-dialog" aria-labelledby="consent-dialog-title">
-                <h2 id="consent-dialog-title">Confirm public-material consent</h2>
-                <p id="consent-fetch-notice">
-                  In operator-hosted live mode, the approved operator host may request the URL you entered. Prepared public spans may be
-                  sent to TypeSafe AI’s Jev service. It will not score a person or outlet.
+              <form id="story-search-form" role="search">
+                <label class="ml-field-label" for="story-query">Story or topic</label>
+                <input
+                  id="story-query"
+                  name="story-query"
+                  type="search"
+                  placeholder="Try transit, paywall, or quoted"
+                  autocomplete="off"
+                  enterkeyhint="search"
+                  aria-describedby="story-query-help"
+                />
+                <p class="ml-form-note" id="story-query-help">
+                  Sample coverage only. A match is an in-repo fixture, not a live fact about publishers or events.
                 </p>
-                <div class="ml-consent-row">
-                  <input type="checkbox" id="consent-checkbox" required />
-                  <label for="consent-checkbox">I confirm this is public material I am allowed to analyze, and I understand that live URL mode may send prepared public spans to TypeSafe AI’s Jev service.</label>
-                </div>
-                <div class="ml-form-actions">
-                  <button class="button" type="submit" id="analyze-submit" disabled>Run analysis</button>
-                  <button class="button button-secondary" type="button" id="consent-cancel">Cancel</button>
-                </div>
-              </dialog>
-            </form>
-
-            <p class="ml-status" id="worker-status" data-state="checking" role="status">
-              <span class="ml-status-dot" aria-hidden="true"></span>
-              <span id="worker-status-text">Checking the Media Lens service...</span>
-            </p>
+              </form>
+              <p class="ml-form-note" id="story-search-status" role="status"></p>
+              <ul class="ml-story-results" id="story-results"></ul>
+            </div>
           </section>
         </div>
-
-        <section class="ml-disclosure" aria-labelledby="ml-disclosure-heading">
-          <h2 id="ml-disclosure-heading">Before you analyze</h2>
-          <p>
-            Media Lens is for <strong>public material you are allowed to analyze</strong>, such as a published article, ad, speech, or
-            campaign page. It is not the place for private messages or conversations; use
-            <a href="https://manipulationscore.com/analyze.html">Clarity</a> for those instead. Clarity never sends your text anywhere.
-            On the approved operator host, it can run a limited <strong>Jev-only live URL mode</strong> for public hosts on an
-            operator allowlist. Live pasted-text analysis and the secondary classifier are disabled. Live URL access is limited, can
-            be turned off by the operator, and is not production-ready for general use.
-          </p>
-          <p id="ml-live-url-notice">
-            Before you analyze: in operator-hosted live mode, the approved operator host requests the public page at the URL you enter. The destination site (and its CDN) may see the operator host’s network address. Prepared public span text from that page may be sent to TypeSafe AI’s Jev service under TypeSafe’s own policy. TypeSafe does not fetch the URL. Full article text is not kept by Media Lens by default. Do not submit private messages, passwords, medical or financial records, information about children, paywalled content you are not authorized to fetch, or non-public/internal addresses. Live pasted-text analysis stays disabled — use Clarity for private messages.
-          </p>
-        </section>
 
         <nav class="ml-trust-links" aria-label="Trust and companion pages">
           <a href="https://manipulationscore.com/methodology.html">Methodology</a>
@@ -283,9 +308,9 @@
 
       <div class="ml-results" id="results" hidden>
         <header class="ml-result-masthead">
-          <p class="ml-sample-kicker" id="result-kicker">Story workspace</p>
+          <p class="ml-sample-kicker" id="result-kicker">Public page analysis</p>
           <p class="ml-fixture-preview-marker" id="result-fixture-badge" hidden>Fixture example. Not live coverage.</p>
-          <h2 class="ml-result-title" id="result-title"></h2>
+          <h2 class="ml-result-title" id="result-title" tabindex="-1"></h2>
           <p class="ml-result-overview" id="result-overview"></p>
           <p class="ml-result-meta" id="result-meta"></p>
           <p class="ml-result-meta" id="result-updated"></p>
@@ -300,7 +325,7 @@
           </p>
         </header>
 
-        <nav class="ml-workspace-nav" aria-label="Story workspace">
+        <nav class="ml-workspace-nav" aria-label="Result sections">
           <a href="#analysis-overview">Overview</a>
           <a href="#retrieval-panel">Source and retrieval</a>
           <a href="#ml-coverage-heading">Coverage</a>
@@ -312,7 +337,7 @@
         </nav>
 
         <section aria-labelledby="ml-overview-heading" class="ml-dimension ml-overview" id="analysis-overview">
-          <h2 id="ml-overview-heading">Analysis overview</h2>
+          <h3 id="ml-overview-heading">Analysis overview</h3>
           <p class="ml-dimension-note">
             Each state names what this result contains for that section. It is not a score for the article, a person, or an outlet.
           </p>
@@ -320,72 +345,88 @@
         </section>
 
         <section aria-labelledby="ml-retrieval-heading" class="ml-dimension" id="retrieval-panel">
-          <h2 id="ml-retrieval-heading">Source and retrieval</h2>
+          <h3 id="ml-retrieval-heading">Source and retrieval</h3>
           <p class="ml-dimension-note">Where this record says it came from. Missing fields stay empty.</p>
           <div id="retrieval-metadata"></div>
         </section>
 
         <section aria-labelledby="ml-coverage-heading" class="ml-dimension">
-          <h2 id="ml-coverage-heading">Coverage</h2>
-          <p class="ml-dimension-note">Origin, independent reporting, and duplication, when provenance data is available.</p>
-
-          <h3 id="ml-origin-heading">Story origin and canonical source</h3>
-          <p class="ml-dimension-note">Canonical-source status is recorded metadata. A missing canonical source is not a verdict.</p>
-          <div id="coverage-origin"></div>
-
-          <h3 id="ml-cluster-heading">Related sources</h3>
-          <p class="ml-dimension-note">Same-story cluster members recorded with this result. Summary and metadata stay above this list.</p>
-          <div class="ml-compare-controls" role="group" aria-label="Compare recorded sources">
-            <button type="button" data-compare="all" aria-pressed="true">All recorded</button>
-            <button type="button" data-compare="independent" aria-pressed="false">Independent reporting</button>
-            <button type="button" data-compare="syndicated" aria-pressed="false">Syndicated repetition</button>
-            <button type="button" data-compare="same_story" aria-pressed="false">Same story</button>
-            <button type="button" data-compare="frames" aria-pressed="false">Represented frames</button>
-          </div>
-          <p class="ml-dimension-note" id="compare-status"></p>
-          <ul class="ml-cluster-list" id="coverage-cluster"></ul>
-
-          <h3 id="ml-reporting-split-heading">Independent reporting and syndicated repetition</h3>
-          <div id="reporting-split"></div>
-
-          <h3 id="ml-distribution-heading">Coverage distribution and represented frames</h3>
-          <div id="coverage-distribution"></div>
-          <p class="ml-dimension-note" id="coverage-frames"></p>
-          <div id="coverage-frame-list"></div>
-
-          <h3 id="ml-omission-heading">Coverage gaps and omission candidates</h3>
-          <p class="ml-dimension-note">
-            An omission candidate is a possible gap. It does not establish that a fact was concealed.
+          <h3 id="ml-coverage-heading">Coverage</h3>
+          <p class="ml-dimension-note" id="coverage-note">
+            Origin, independent reporting, and duplication, when a coverage comparison was recorded.
           </p>
-          <div id="coverage-gap"></div>
-          <ul class="ml-observation-list" id="omission-list"></ul>
 
-          <dl class="ml-coverage-grid" id="coverage-stats"></dl>
-          <p class="ml-dimension-note" id="coverage-freshness-rationale"></p>
-          <ul class="ml-observation-list" id="coverage-list"></ul>
+          <p class="ml-coverage-status" id="coverage-not-run" hidden>
+            Coverage comparison was not run for this result. Media Lens does not yet have an approved source for finding other
+            reports of this story, so this result says nothing about how other outlets covered it.
+          </p>
+
+          <div id="unattributed-quotes" hidden>
+            <h4 id="ml-unattributed-heading">Quotes without a named speaker</h4>
+            <p class="ml-dimension-note">
+              Each quote below has no named speaker or attribution in the page. It is flagged as a possible selective-context
+              candidate. No other coverage was compared, so this does not show that anything was left out.
+            </p>
+            <ul class="ml-observation-list" id="unattributed-list"></ul>
+          </div>
+
+          <div id="coverage-comparison">
+            <h4 id="ml-origin-heading">Story origin and canonical source</h4>
+            <p class="ml-dimension-note">Canonical-source status is recorded metadata. A missing canonical source is not a verdict.</p>
+            <div id="coverage-origin"></div>
+
+            <h4 id="ml-cluster-heading">Related sources</h4>
+            <p class="ml-dimension-note">Same-story cluster members recorded with this result. Summary and metadata stay above this list.</p>
+            <div class="ml-compare-controls" role="group" aria-label="Compare recorded sources">
+              <button type="button" data-compare="all" aria-pressed="true">All recorded</button>
+              <button type="button" data-compare="independent" aria-pressed="false">Independent reporting</button>
+              <button type="button" data-compare="syndicated" aria-pressed="false">Syndicated repetition</button>
+              <button type="button" data-compare="same_story" aria-pressed="false">Same story</button>
+            </div>
+            <p class="ml-dimension-note" id="compare-status"></p>
+            <ul class="ml-cluster-list" id="coverage-cluster"></ul>
+
+            <h4 id="ml-reporting-split-heading">Independent reporting and syndicated repetition</h4>
+            <div id="reporting-split"></div>
+
+            <h4 id="ml-distribution-heading">Coverage distribution and represented frames</h4>
+            <div id="coverage-distribution"></div>
+            <p class="ml-dimension-note" id="coverage-frames"></p>
+            <div id="coverage-frame-list"></div>
+
+            <h4 id="ml-omission-heading">Coverage gaps and omission candidates</h4>
+            <p class="ml-dimension-note">
+              An omission candidate is a possible gap. It does not establish that a fact was concealed.
+            </p>
+            <div id="coverage-gap"></div>
+            <ul class="ml-observation-list" id="omission-list"></ul>
+
+            <dl class="ml-coverage-grid" id="coverage-stats"></dl>
+            <p class="ml-dimension-note" id="coverage-freshness-rationale"></p>
+          </div>
         </section>
 
         <section aria-labelledby="ml-language-heading" class="ml-dimension">
-          <h2 id="ml-language-heading">Language</h2>
+          <h3 id="ml-language-heading">Language</h3>
           <p class="ml-dimension-note">Span-tied observations of influence language, with evidence you can inspect.</p>
           <ul class="ml-observation-list" id="language-list"></ul>
         </section>
 
         <section aria-labelledby="ml-claims-heading" class="ml-dimension">
-          <h2 id="ml-claims-heading">Claims</h2>
+          <h3 id="ml-claims-heading">Claims</h3>
           <p class="ml-dimension-note">Claim ledger of checkable-looking statements found in the text. Support is always "not checked" in this preview.</p>
           <ul class="ml-claim-list" id="claims-list"></ul>
         </section>
 
         <section aria-labelledby="ml-source-context-heading" class="ml-dimension">
-          <h2 id="ml-source-context-heading">Source context</h2>
+          <h3 id="ml-source-context-heading">Source context</h3>
           <p class="ml-dimension-note">Source context is metadata, not a manipulation judgment.</p>
           <dl class="ml-coverage-grid" id="source-context-stats"></dl>
           <p class="ml-dimension-note" id="source-context-note"></p>
         </section>
 
         <section class="ml-dimension" id="influence-profile" aria-labelledby="ml-influence-profile-heading">
-          <h2 id="ml-influence-profile-heading">Influence Profile</h2>
+          <h3 id="ml-influence-profile-heading">Influence Profile</h3>
           <p class="ml-dimension-note">
             Structured summary of observable evidence in this result. Not an overall score for the article, a person, or an outlet.
           </p>
@@ -393,12 +434,12 @@
         </section>
 
         <section class="ml-dimension" id="analysis-limitations" aria-labelledby="ml-abstention-heading">
-          <h2 id="ml-abstention-heading">Analysis limitations</h2>
+          <h3 id="ml-abstention-heading">Analysis limitations</h3>
           <p class="ml-form-note" id="question-reading-destination" hidden>
             This preview does not send feedback and does not store a correction. The limitations section lists what this record abstained from.
           </p>
           <ul class="ml-abstention-list" id="abstention-list"></ul>
-          <h3 id="ml-alternative-readings-heading">Alternative readings</h3>
+          <h4 id="ml-alternative-readings-heading">Alternative readings</h4>
           <p class="ml-dimension-note" id="alternative-readings"></p>
         </section>
 
@@ -409,13 +450,14 @@
 
         <div class="ml-export-row">
           <button class="button button-secondary" type="button" id="export-json-btn">Export evidence-only JSON</button>
-          <button class="button" type="button" id="analyze-another">Back to stories</button>
+          <button class="button" type="button" id="analyze-another">Back to start</button>
           <span class="ml-form-note">Export omits the text of any span not tied to a shown observation or claim.</span>
         </div>
       </div>
 
       <p class="ml-footer-note">
-        Media Lens is a limited Jev-only preview and a fixture-first coverage workspace. It produces no overall score for an article, person, or outlet. See
+        Media Lens is a limited Jev-only preview. It analyzes one public page at a time from an operator-approved list, and it
+        produces no overall score for an article, person, or outlet. See
         <a href="https://manipulationscore.com/methodology.html">Methodology</a>,
         <a href="https://manipulationscore.com/limitations.html">Limitations</a>, and
         <a href="https://manipulationscore.com/acceptable-use.html">Acceptable Use</a> for how this differs from Clarity.

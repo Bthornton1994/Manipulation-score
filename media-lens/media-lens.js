@@ -3,13 +3,26 @@
 // loopback worker during local fixture development. This file never reads
 // Node-style environment variables, never writes to localStorage,
 // sessionStorage, or indexedDB, and never persists full article text.
+//
+// Host modes. "Catalog mode" is a local preview (file:, localhost,
+// 127.0.0.1, [::1]) or a page carrying the fixture-preview meta. Only
+// catalog mode reveals the [data-local-only] controls and requests the
+// in-repo fixture graphs. Every other origin, including the live operator
+// host, keeps those controls hidden and never requests a fixture path: the
+// live host serves only the three Media Lens files, and the owner has not
+// approved fixture workspaces in production.
 
 const LOCAL_WORKER_BASE_URL = 'http://127.0.0.1:8787';
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
 const LIVE_SCOPE_MESSAGE = 'Live URL is experimental and not production-ready for general use.';
 const OVERSIZED_INPUT_MESSAGE =
   'This public page is too long for Media Lens live analysis. No manipulation analysis or score was generated. Try a shorter public article.';
-const CANCELLED_MESSAGE = 'Analysis cancelled. Nothing was stored.';
+const CANCELLED_MESSAGE =
+  'Analysis cancelled in this browser. The server may still finish the request. Media Lens does not keep the full article text.';
+const CREDENTIALS_URL_MESSAGE = 'Remove the username or password from the URL.';
+const NO_ANALYSIS_TITLE = 'No analysis was run';
+const NO_ANALYSIS_ANNOUNCEMENT = 'No analysis was run.';
+const COVERAGE_NOT_CHECKED_DETAIL = 'Other coverage not checked';
 const LOADING_STAGES = [
   'Requesting article',
   'Preparing evidence',
@@ -178,16 +191,32 @@ let activeLane = 'all';
 let compareMode = 'all';
 let liveUrlReady = false;
 let isSubmitting = false;
-let lastPayload = null;
 let pendingPayload = null;
+// The one action the Retry button runs for the error on screen, or null
+// when that error has no retry (validation errors). It holds the payload
+// of the analysis it re-runs, so returning to the landing view clears it.
+let retryAction = null;
 let analyzeAbort = null;
 let stageTimer = null;
+let currentStageIndex = -1;
 let consentCheckedAt = null;
 let consentTrigger = null;
 
+function isLocalLocation(location) {
+  if (!location) return false;
+  return location.protocol === 'file:' || LOCAL_HOSTNAMES.has(location.hostname);
+}
+
+// Pure host-mode decision, exported for tests. Catalog mode is a local
+// preview or an explicit fixture-preview page. Everything else is treated
+// like the live operator host.
+function isCatalogMode({ location, fixturePreview = false } = {}) {
+  return fixturePreview === true || isLocalLocation(location);
+}
+
 function isLocalPreviewPage() {
   if (typeof window === 'undefined') return false;
-  return window.location.protocol === 'file:' || LOCAL_HOSTNAMES.has(window.location.hostname);
+  return isLocalLocation(window.location);
 }
 
 function isFixturePreviewPage() {
@@ -218,6 +247,7 @@ function resolveWorkerBaseUrl() {
 
 const IS_LOCAL_PREVIEW = isLocalPreviewPage();
 const IS_FIXTURE_PREVIEW = isFixturePreviewPage();
+const CATALOG_MODE = IS_LOCAL_PREVIEW || IS_FIXTURE_PREVIEW;
 const WORKER_BASE_URL = resolveWorkerBaseUrl();
 
 function byId(id) {
@@ -255,6 +285,15 @@ function updateSubmitEnabled() {
   if (!consent.checked) consentCheckedAt = null;
 }
 
+// Local-only controls ship hidden in the static HTML so nothing flashes on
+// the live host before this module runs. Only catalog mode reveals them.
+function revealCatalogControls() {
+  if (!CATALOG_MODE) return;
+  document.querySelectorAll('[data-local-only]').forEach((el) => {
+    el.hidden = false;
+  });
+}
+
 function setupInputModeToggle() {
   const radios = document.querySelectorAll('input[name="input-mode"]');
   const fixtureField = byId('fixture-field');
@@ -266,26 +305,21 @@ function setupInputModeToggle() {
   const articleUrl = byId('article-url');
   const sampleAnalyze = byId('sample-analyze');
 
+  revealCatalogControls();
   if (IS_FIXTURE_PREVIEW) {
     pastedRadio.disabled = true;
     pastedRadio.closest('label').hidden = true;
     urlRadio.disabled = true;
     fixtureRadio.checked = true;
-    if (sampleAnalyze) {
-      sampleAnalyze.hidden = false;
-      sampleAnalyze.textContent = 'Analyze this example';
-    }
+    if (sampleAnalyze) sampleAnalyze.textContent = 'Analyze this example';
     const marker = byId('fixture-preview-marker');
     if (marker) marker.hidden = false;
-  } else if (!IS_LOCAL_PREVIEW) {
+  } else if (!CATALOG_MODE) {
+    // Defense in depth: the fieldset stays hidden, and fixture or pasted
+    // text can never be selected on a non-local host.
     fixtureRadio.disabled = true;
     pastedRadio.disabled = true;
-    fixtureRadio.closest('label').hidden = true;
-    pastedRadio.closest('label').hidden = true;
-    fixtureRadio.closest('fieldset').hidden = true;
     urlRadio.checked = true;
-  } else {
-    if (sampleAnalyze) sampleAnalyze.hidden = false;
   }
 
   function apply() {
@@ -301,6 +335,14 @@ function setupInputModeToggle() {
 
   radios.forEach((radio) => radio.addEventListener('change', apply));
   articleUrl.addEventListener('input', updateSubmitEnabled);
+  // A disabled submit button inside the closed dialog blocks implicit form
+  // submission, so Enter in the URL field starts the consent step here.
+  articleUrl.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' || event.isComposing) return;
+    event.preventDefault();
+    if (isSubmitting || byId('consent-dialog').open) return;
+    requestConsentThenAnalyze();
+  });
   apply();
 }
 
@@ -394,10 +436,13 @@ function observationDisplayLabel(obs) {
   return stored || 'Insufficient context';
 }
 
-function renderObservation(graph, obs) {
+// options.explanation replaces the taxonomy explanation for one context
+// (an empty string omits it). The signal label and id are never changed.
+function renderObservation(graph, obs, options = {}) {
   const uiPhrase = observationDisplayLabel(obs);
   const spanText = obs.localization === 'span' ? findSpanText(graph, obs.span_ids) : null;
   const taxonomy = formatSignal(obs.signal);
+  const explanation = typeof options.explanation === 'string' ? options.explanation : taxonomy.explanation;
   const attribution = obs.authorial_attribution ? obs.authorial_attribution.replace(/_/g, ' ') : '';
   return `
     <li class="ml-observation">
@@ -407,7 +452,7 @@ function renderObservation(graph, obs) {
         ${chip(taxonomy.label)}
       </div>
       ${spanText ? `<p class="ml-observation-quote">&ldquo;${escapeHtml(spanText)}&rdquo;</p>` : ''}
-      ${taxonomy.explanation ? `<p class="ml-observation-explain">${escapeHtml(taxonomy.explanation)}</p>` : ''}
+      ${explanation ? `<p class="ml-observation-explain">${escapeHtml(explanation)}</p>` : ''}
       <p class="ml-observation-explain">Signal: ${escapeHtml(obs.signal.replace(/_/g, ' '))}${
         attribution ? ` · Attribution: ${escapeHtml(attribution)}` : ''
       }${obs.evidence?.engine ? ` · Evidence engine: ${escapeHtml(obs.evidence.engine)}` : ''}</p>
@@ -473,10 +518,9 @@ function renderCoverageOrigin(coverage) {
 }
 
 const COVERAGE_FRAMES_EMPTY_COPY = 'No coverage-frame comparison was available for this analysis.';
-const COVERAGE_OBSERVATIONS_EMPTY_COPY = 'No coverage observations were recorded for this analysis.';
 const ABSTENTION_EMPTY_COPY = 'No abstentions were recorded for this analysis.';
 const SHARED_PRIVACY_LIMITS =
-  'Full article text is not kept by Media Lens by default. Do not submit private messages, passwords, medical or financial records, information about children, paywalled content you are not authorized to fetch, or non-public/internal addresses. Live pasted-text analysis stays disabled — use Clarity for private messages.';
+  'Full article text is not kept by Media Lens by default. Do not submit private messages, passwords, medical or financial records, information about children, paywalled content you are not authorized to fetch, or non-public/internal addresses. Live pasted-text analysis stays disabled. Use Clarity for private messages.';
 const SERVICE_CLAUSE =
   'Prepared public span text from that page may be sent to TypeSafe AI\u2019s Jev service under TypeSafe\u2019s own policy. TypeSafe does not fetch the URL.';
 const OPERATOR_LIVE_URL_NOTICE = `Before you analyze: in operator-hosted live mode, the approved operator host requests the public page at the URL you enter. The destination site (and its CDN) may see the operator host\u2019s network address. ${SERVICE_CLAUSE} ${SHARED_PRIVACY_LIMITS}`;
@@ -610,13 +654,54 @@ function renderCoverageFrames(coverage) {
   return `${frames.length} coverage-frame records are included in this result.`;
 }
 
-function renderCoverageObservationList(graph) {
-  const observations = Array.isArray(graph?.observations) ? graph.observations : [];
-  const coverageObservations = observations.filter((obs) => obs && obs.dimension === 'coverage');
-  if (coverageObservations.length === 0) {
-    return `<li class="ml-empty-state">${escapeHtml(COVERAGE_OBSERVATIONS_EMPTY_COPY)}</li>`;
-  }
-  return coverageObservations.map((obs) => renderObservation(graph, obs)).join('');
+// When no coverage comparison was recorded, each coverage observation is
+// shown as a quote without a named speaker. The worker has one deterministic
+// coverage rule: an unattributed quote yields selective_context_candidate in
+// the coverage dimension (a test pins this contract). The section note says
+// nothing else was compared, so the generic "missing from another account"
+// explanation is omitted here. The signal label stays as in the taxonomy.
+function renderUnattributedQuotes(graph) {
+  return omissionCandidates(graph)
+    .map((obs) => renderObservation(graph, obs, { explanation: '' }))
+    .join('');
+}
+
+// A coverage comparison is recorded only when the graph carries cluster
+// members or a story-origin record. The normal live result has neither
+// (coverage.provenance "none"), because Media Lens has no approved source
+// for finding other reports of the same story.
+function coverageComparisonRecorded(coverage) {
+  if (!coverage || typeof coverage !== 'object') return false;
+  const members = coverage.cluster?.members;
+  return (Array.isArray(members) && members.length > 0) || Boolean(coverage.story_origin);
+}
+
+// worker/analyze.js buildAbstentionOnlyGraph returns no spans, no
+// observations, no claims, and a graph-level abstention that says why
+// nothing was analyzed (engine_unavailable, engine_failure, oversized_input,
+// insufficient_text, unsupported_language, ...). assembleGraph may append
+// graph-level no_timestamp or paywall notes. A pipeline result that ran
+// always has prepared spans, so an empty span list is the reliable marker.
+const SUPPLEMENTARY_GRAPH_REASONS = new Set(['no_timestamp', 'paywall']);
+
+function isNoAnalysisGraph(graph) {
+  if (!graph || typeof graph !== 'object') return false;
+  const isEmpty = (value) => Array.isArray(value) && value.length === 0;
+  if (!isEmpty(graph.spans) || !isEmpty(graph.observations) || !isEmpty(graph.claims)) return false;
+  return graphAbstentions(graph).length > 0;
+}
+
+function primaryNoAnalysisAbstention(graph) {
+  const items = graphAbstentions(graph);
+  return items.find((item) => !SUPPLEMENTARY_GRAPH_REASONS.has(item.reason)) || items[0] || null;
+}
+
+function sourceUrlHost(graph) {
+  return safeHttpsUrl(graph?.artifact?.url)?.hostname || '';
+}
+
+function sourceUrlLabel(graph) {
+  return isFixtureResult(graph) ? 'recorded URL' : 'entered URL';
 }
 
 function renderAbstentionList(graph) {
@@ -651,6 +736,7 @@ function stateFromAbstentions(items) {
 function languageOverview(graph) {
   const item = { label: 'Language', href: '#ml-language-heading' };
   if (!Array.isArray(graph?.observations)) return { ...item, state: 'Not available', detail: '' };
+  if (isNoAnalysisGraph(graph)) return { ...item, state: 'Abstained', detail: NO_ANALYSIS_TITLE };
   const language = graph.observations.filter((obs) => obs && obs.dimension === 'language');
   const observed = language.filter((obs) => obs.strength === 'observed').length;
   const possible = language.filter((obs) => obs.strength === 'candidate').length;
@@ -671,6 +757,7 @@ function languageOverview(graph) {
 function claimsOverview(graph) {
   const item = { label: 'Claims', href: '#ml-claims-heading' };
   if (!Array.isArray(graph?.claims)) return { ...item, state: 'Not available', detail: '' };
+  if (isNoAnalysisGraph(graph)) return { ...item, state: 'Abstained', detail: NO_ANALYSIS_TITLE };
   if (graph.claims.length === 0) {
     const blockingGraph = graphAbstentions(graph).filter((entry) => entry.reason === 'insufficient_text');
     const fromAbstention = stateFromAbstentions([...abstentionsFor(graph, 'claims'), ...blockingGraph]);
@@ -704,6 +791,14 @@ function coverageOverview(graph) {
   const item = { label: 'Coverage', href: '#ml-coverage-heading' };
   const coverage = graph?.coverage;
   if (!coverage || typeof coverage !== 'object') return { ...item, state: 'Not available', detail: '' };
+  if (!coverageComparisonRecorded(coverage)) {
+    const quotes = omissionCandidates(graph).length;
+    const detail =
+      quotes > 0
+        ? `${COVERAGE_NOT_CHECKED_DETAIL} · ${countPhrase(quotes, 'quote without a named speaker', 'quotes without a named speaker')}`
+        : COVERAGE_NOT_CHECKED_DETAIL;
+    return { ...item, state: 'Abstained', detail };
+  }
   if (coverage.status === 'not_requested') return { ...item, state: 'Not available', detail: '' };
   if (coverage.status === 'insufficient') {
     const fromAbstention = stateFromAbstentions(abstentionsFor(graph, 'coverage'));
@@ -728,6 +823,11 @@ function sourceContextOverview(graph) {
   const item = { label: 'Source context', href: '#ml-source-context-heading' };
   const source = graph?.source_context;
   if (!source || typeof source !== 'object') return { ...item, state: 'Not available', detail: '' };
+  if (isNoAnalysisGraph(graph)) {
+    const host = sourceUrlHost(graph);
+    if (!host) return { ...item, state: 'Not observed', detail: 'No source identifiers' };
+    return { ...item, state: 'Observed', detail: `From the ${sourceUrlLabel(graph)} · ${host}` };
+  }
   const domain = [source.canonical_domain, source.publisher?.name, source.publisher?.domain].find(
     (value) => typeof value === 'string' && value.trim()
   );
@@ -758,6 +858,16 @@ function renderAnalysisOverview(graph) {
     </li>`
     )
     .join('');
+}
+
+const NO_ANALYSIS_SOURCE_NOTE =
+  'No analysis was run, so byline, publish time, and canonical-link checks are not shown. The domain comes from the URL, not from reading the page.';
+
+// In the no-analysis state the page may never have been read, so only the
+// domain of the URL is shown, labeled as coming from that URL.
+function renderNoAnalysisSourceContext(graph) {
+  const label = sourceUrlLabel(graph);
+  return statRow(`Domain (from the ${label})`, sourceUrlHost(graph) || NOT_RECORDED);
 }
 
 function renderSourceContextStats(sourceContext) {
@@ -876,11 +986,13 @@ function renderStoryCard(story) {
   const gap = !story.coverageCount;
   return `<li class="ml-story-card${gap ? ' ml-gap-card' : ''}">
     <p class="ml-sample-kicker">${gap ? 'Coverage gap' : 'Fixture story'}</p>
-    <h3>${escapeHtml(story.title)}</h3>
+    <h4>${escapeHtml(story.title)}</h4>
     <p>${escapeHtml(story.domain)} · <code>${escapeHtml(story.id)}</code></p>
     <p>${escapeHtml(story.fixtureNote)}</p>
     ${renderCoverageCountIndicator(story.coverageCount)}
-    <button class="button button-secondary" type="button" data-fixture-id="${escapeHtml(story.id)}">Open fixture workspace</button>
+    <button class="button button-secondary" type="button" data-fixture-id="${escapeHtml(story.id)}" aria-label="${escapeHtml(
+      `Open fixture workspace for ${story.title}`
+    )}">Open fixture workspace</button>
   </li>`;
 }
 
@@ -951,9 +1063,10 @@ function renderRetrievalMetadata(graph) {
     ['Newsjack mode', engine.newsjack?.mode || NOT_RECORDED],
     ['Generated', formatTimestamp(graph?.generated_at, 'time') || NOT_RECORDED]
   ];
+  const urlLabel = isFixtureResult(graph) ? 'Recorded URL' : 'Entered URL';
   const link = url
-    ? `<p class="ml-dimension-note">Recorded URL: <a class="ml-cluster-link" href="${escapeHtml(url.href)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(url.hostname)}</a></p>`
-    : `<p class="ml-dimension-note">Recorded URL: ${artifact.url ? 'Not shown. The stored value is not a safe https URL.' : NOT_RECORDED}</p>`;
+    ? `<p class="ml-dimension-note">${urlLabel}: <a class="ml-cluster-link" href="${escapeHtml(url.href)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(url.hostname)}</a></p>`
+    : `<p class="ml-dimension-note">${urlLabel}: ${artifact.url ? 'Not shown. The stored value is not a safe https URL.' : NOT_RECORDED}</p>`;
   const fixtureNote = isFixtureResult(graph)
     ? '<p class="ml-dimension-note">Retrieval fields describe this fixture record. They are not a live fetch.</p>'
     : '';
@@ -1011,7 +1124,7 @@ function renderCoverageGap(coverage) {
   let reason = 'No related-source cluster was recorded.';
   if (coverage?.status === 'not_requested') reason = 'Coverage was not requested for this record.';
   else if (coverage?.status === 'insufficient') reason = 'Coverage evidence in this record is insufficient.';
-  return `<article class="ml-gap-card"><h3>Coverage gap</h3><p>${escapeHtml(reason)} This describes an absence in the record. It is not proof a fact was left out.</p></article>`;
+  return `<article class="ml-gap-card"><h5>Coverage gap</h5><p>${escapeHtml(reason)} This describes an absence in the record. It is not proof a fact was left out.</p></article>`;
 }
 
 // URL markers already used to compute independent_sources_estimate. They only
@@ -1085,13 +1198,15 @@ function recordedIndependentMembers(coverage) {
   });
 }
 
+// Frame comparison is deferred by the owner until a backend contract exists,
+// so there is no frames mode. An unknown mode lists nothing.
 function membersForCompare(coverage, mode) {
   const members = Array.isArray(coverage?.cluster?.members) ? coverage.cluster.members : [];
-  if (mode === 'frames') return [];
+  if (mode === 'all') return members.slice();
   if (mode === 'syndicated') return members.filter((member) => member?.relation === 'syndicated');
   if (mode === 'same_story') return members.filter((member) => member?.relation === 'same_story');
   if (mode === 'independent') return recordedIndependentMembers(coverage);
-  return members.slice();
+  return [];
 }
 
 function graphTimestampCopy(graph) {
@@ -1109,33 +1224,26 @@ function applyCompare(graph) {
   const status = byId('compare-status');
   const list = byId('coverage-cluster');
   if (!list) return;
-  if (compareMode === 'frames') {
-    const frames = renderFrameList(coverage);
-    list.innerHTML = frames || '<li class="ml-empty-state">No represented frames were recorded for this result.</li>';
-    if (status) {
-      status.textContent = frames
-        ? 'Showing represented frames recorded with this result.'
-        : 'No represented frames were recorded, so this comparison list is empty.';
-    }
-    return;
-  }
   const members = membersForCompare(coverage, compareMode);
   const total = Array.isArray(coverage?.cluster?.members) ? coverage.cluster.members.length : 0;
   const html = members.map((member) => renderClusterMember(member)).join('');
   list.innerHTML = html || '<li class="ml-empty-state">No recorded sources match this comparison.</li>';
-  if (status) status.textContent = compareStatusCopy(coverage, compareMode, members.length, total);
+  if (status) status.textContent = compareStatusCopy(coverage, compareMode, members.length, total, isFixtureResult(graph));
 }
 
-function compareStatusCopy(coverage, mode, shown, total) {
+// "Fixture comparison only." is appended only for a fixture result, so a
+// future artifact-backed comparison is not mislabeled as a fixture.
+function compareStatusCopy(coverage, mode, shown, total, fixture = coverage?.provenance === 'fixture') {
+  const suffix = fixture ? ' Fixture comparison only.' : '';
   if (mode !== 'independent') {
-    return `Showing ${shown} of ${total} recorded cluster members. Fixture comparison only.`;
+    return `Showing ${shown} of ${total} recorded cluster members.${suffix}`;
   }
   const estimate = coverage?.cluster?.independent_sources_estimate;
   const estimateText = Number.isFinite(estimate) ? ` Independent-source estimate recorded separately: ${estimate}.` : '';
   if (shown === 0) {
-    return `No recorded story-origin evidence identifies an independent-reporting member.${estimateText} This list is not inferred from the estimate or from a same-story relation. Fixture comparison only.`;
+    return `No recorded story-origin evidence identifies an independent-reporting member.${estimateText} This list is not inferred from the estimate or from a same-story relation.${suffix}`;
   }
-  return `Showing ${shown} of ${total} recorded cluster members named in story-origin evidence and not identified as syndicated, wire, or press-release copy.${estimateText} A same-story relation alone is not independent reporting. Fixture comparison only.`;
+  return `Showing ${shown} of ${total} recorded cluster members named in story-origin evidence and not identified as syndicated, wire, or press-release copy.${estimateText} A same-story relation alone is not independent reporting.${suffix}`;
 }
 
 function renderFrameList(coverage) {
@@ -1175,73 +1283,177 @@ function renderInfluenceProfile(graph) {
     .join('');
 }
 
-function renderGraph(graph, source = 'analysis') {
-  currentGraph = graph;
+function setText(id, value) {
+  const el = byId(id);
+  if (el) el.textContent = value;
+}
 
-  const languageObservations = graph.observations.filter((o) => o.dimension === 'language');
+function setHtml(id, value) {
+  const el = byId(id);
+  if (el) el.innerHTML = value;
+}
+
+function setHidden(id, hidden) {
+  const el = byId(id);
+  if (el) el.hidden = hidden;
+}
+
+function renderMasthead(graph, { fixture, noAnalysis }) {
   const artifact = graph.artifact || {};
-  const fixture = isFixtureResult(graph);
-
-  byId('result-kicker').textContent = fixture ? 'Fixture story workspace' : 'Story workspace';
+  // Fixture graphs keep the fixture workspace label. A live result is one
+  // public page, not a story workspace.
+  setText('result-kicker', fixture ? 'Fixture story workspace' : 'Public page analysis');
   const badge = byId('result-fixture-badge');
   if (badge) {
     badge.hidden = !fixture;
     badge.textContent = fixture ? 'Fixture example. Not live coverage.' : '';
   }
-  byId('result-title').textContent = artifact.title || 'Untitled public article';
-  byId('result-overview').textContent = storyOverviewCopy(graph);
-  byId('result-meta').textContent = formatArtifactMeta(artifact);
-  const updated = byId('result-updated');
-  if (updated) updated.textContent = graphTimestampCopy(graph);
-  const questionNote = byId('question-reading-note');
-  if (questionNote) questionNote.hidden = true;
-  const questionDestination = byId('question-reading-destination');
-  if (questionDestination) questionDestination.hidden = true;
-  byId('result-limits').textContent = fixture
-    ? 'Fixture example. Evidence is inspectable. This is not live coverage, not a truth detector, and not a person or outlet score.'
-    : 'Experimental Jev-only preview. Evidence is inspectable. This is not a truth detector and not a person or outlet score.';
-  byId('overview-list').innerHTML = renderAnalysisOverview(graph);
-  byId('retrieval-metadata').innerHTML = renderRetrievalMetadata(graph);
+  if (noAnalysis) {
+    const primary = primaryNoAnalysisAbstention(graph);
+    const host = sourceUrlHost(graph);
+    const label = fixture ? 'Recorded URL' : 'Entered URL';
+    const meta = [host ? `${label}: ${host}` : '', artifact.title ? `Page title: ${artifact.title}` : ''].filter(Boolean);
+    setText('result-title', NO_ANALYSIS_TITLE);
+    setText('result-overview', primary?.message || 'The service did not return a reason.');
+    setText('result-meta', meta.join(' · '));
+  } else {
+    setText('result-title', artifact.title || 'Untitled public article');
+    setText('result-overview', storyOverviewCopy(graph));
+    setText('result-meta', formatArtifactMeta(artifact));
+  }
+  setText('result-updated', graphTimestampCopy(graph));
+  setHidden('question-reading-note', true);
+  setHidden('question-reading-destination', true);
+  let limits = 'Experimental Jev-only preview. Evidence is inspectable. This is not a truth detector and not a person or outlet score.';
+  if (fixture) {
+    limits = 'Fixture example. Evidence is inspectable. This is not live coverage, not a truth detector, and not a person or outlet score.';
+  } else if (noAnalysis) {
+    limits = 'Experimental Jev-only preview. No manipulation analysis or score was generated for this page.';
+  }
+  setText('result-limits', limits);
+}
 
-  byId('language-list').innerHTML =
-    languageObservations.map((o) => renderObservation(graph, o)).join('') ||
-    '<li class="ml-empty-state">No language signals reached the reporting threshold for this text.</li>';
-
-  byId('claims-list').innerHTML =
-    graph.claims.map((c) => renderClaim(graph, c)).join('') || '<li class="ml-empty-state">No checkable-looking claims were found.</li>';
-
-  byId('coverage-stats').innerHTML = renderCoverageStats(graph.coverage);
-  byId('coverage-freshness-rationale').textContent = graph.coverage.freshness_gate?.rationale || '';
-  byId('coverage-origin').innerHTML = renderCoverageOrigin(graph.coverage);
+function renderCoverageSection(graph) {
+  const coverage = graph.coverage || {};
+  const comparisonRun = coverageComparisonRecorded(coverage);
+  setHidden('coverage-comparison', !comparisonRun);
+  setHidden('coverage-note', !comparisonRun);
+  setHidden('coverage-not-run', comparisonRun);
+  if (!comparisonRun) {
+    // One plain statement replaces the comparison blocks. Coverage
+    // observations render once, as quotes without a named speaker.
+    const quotes = renderUnattributedQuotes(graph);
+    setHtml('unattributed-list', quotes);
+    setHidden('unattributed-quotes', !quotes);
+    for (const id of ['coverage-origin', 'coverage-cluster', 'reporting-split', 'coverage-distribution', 'coverage-frame-list', 'coverage-gap', 'omission-list', 'coverage-stats']) {
+      setHtml(id, '');
+    }
+    for (const id of ['compare-status', 'coverage-frames', 'coverage-freshness-rationale']) setText(id, '');
+    return;
+  }
+  setHtml('unattributed-list', '');
+  setHidden('unattributed-quotes', true);
+  setHtml('coverage-stats', renderCoverageStats(coverage));
+  setText('coverage-freshness-rationale', coverage.freshness_gate?.rationale || '');
+  setHtml('coverage-origin', renderCoverageOrigin(coverage));
   compareMode = 'all';
   applyCompare(graph);
-  byId('reporting-split').innerHTML = renderReportingSplit(graph.coverage);
-  byId('coverage-distribution').innerHTML = renderCoverageDistribution(graph.coverage);
-  byId('coverage-frames').textContent = renderCoverageFrames(graph.coverage);
-  byId('coverage-frame-list').innerHTML = renderFrameList(graph.coverage);
-  const gapHost = byId('coverage-gap');
-  if (gapHost) gapHost.innerHTML = renderCoverageGap(graph.coverage);
-  byId('omission-list').innerHTML = renderOmissionCandidates(graph);
-  byId('coverage-list').innerHTML = renderCoverageObservationList(graph);
+  setHtml('reporting-split', renderReportingSplit(coverage));
+  setHtml('coverage-distribution', renderCoverageDistribution(coverage));
+  setText('coverage-frames', renderCoverageFrames(coverage));
+  setHtml('coverage-frame-list', renderFrameList(coverage));
+  setHtml('coverage-gap', renderCoverageGap(coverage));
+  setHtml('omission-list', renderOmissionCandidates(graph));
+}
 
-  byId('source-context-stats').innerHTML = renderSourceContextStats(graph.source_context);
-  byId('source-context-note').textContent = graph.source_context?.note || '';
-  byId('influence-profile-list').innerHTML = renderInfluenceProfile(graph);
+function renderGraph(graph, source = 'analysis') {
+  currentGraph = graph;
 
-  byId('abstention-list').innerHTML = renderAbstentionList(graph);
-  byId('alternative-readings').textContent = ALTERNATIVE_READINGS_EMPTY;
-  byId('engine-stats').innerHTML = renderEngineStats(graph);
+  const languageObservations = graph.observations.filter((o) => o.dimension === 'language');
+  const fixture = isFixtureResult(graph);
+  const noAnalysis = isNoAnalysisGraph(graph);
+
+  renderMasthead(graph, { fixture, noAnalysis });
+  setHtml('overview-list', renderAnalysisOverview(graph));
+  setHtml('retrieval-metadata', renderRetrievalMetadata(graph));
+
+  setHtml(
+    'language-list',
+    languageObservations.map((o) => renderObservation(graph, o)).join('') ||
+      `<li class="ml-empty-state">${
+        noAnalysis
+          ? 'No analysis was run, so no language observations are shown.'
+          : 'No language signals reached the reporting threshold for this text.'
+      }</li>`
+  );
+
+  setHtml(
+    'claims-list',
+    graph.claims.map((c) => renderClaim(graph, c)).join('') ||
+      `<li class="ml-empty-state">${
+        noAnalysis ? 'No analysis was run, so no claims are listed.' : 'No checkable-looking claims were found.'
+      }</li>`
+  );
+
+  renderCoverageSection(graph);
+
+  if (noAnalysis) {
+    setHtml('source-context-stats', renderNoAnalysisSourceContext(graph));
+    setText('source-context-note', NO_ANALYSIS_SOURCE_NOTE);
+  } else {
+    setHtml('source-context-stats', renderSourceContextStats(graph.source_context));
+    setText('source-context-note', graph.source_context?.note || '');
+  }
+  setHtml('influence-profile-list', renderInfluenceProfile(graph));
+
+  setHtml('abstention-list', renderAbstentionList(graph));
+  setText('alternative-readings', ALTERNATIVE_READINGS_EMPTY);
+  setHtml('engine-stats', renderEngineStats(graph));
 
   showView('results');
-  byId('results')?.focus();
+  byId('result-title')?.focus();
 
   if (source === 'fixture-file') {
-    announceStatus('Fixture story opened. This is an in-repo example, not live coverage.');
+    announceStatus(
+      `Fixture story opened. This is an in-repo example, not live coverage.${noAnalysis ? ` ${NO_ANALYSIS_ANNOUNCEMENT}` : ''}`
+    );
+    return;
+  }
+  if (noAnalysis) {
+    announceStatus(NO_ANALYSIS_ANNOUNCEMENT);
     return;
   }
   announceStatus(
     `Analysis complete: ${languageObservations.length} language observation${languageObservations.length === 1 ? '' : 's'}, ${graph.claims.length} claim${graph.claims.length === 1 ? '' : 's'} found.`
   );
+}
+
+// Clears the rendered result so the hidden results view does not keep the
+// previous page's spans after returning to the landing view.
+function clearResults() {
+  currentGraph = null;
+  for (const id of [
+    'overview-list',
+    'retrieval-metadata',
+    'language-list',
+    'claims-list',
+    'unattributed-list',
+    'coverage-origin',
+    'coverage-cluster',
+    'reporting-split',
+    'coverage-distribution',
+    'coverage-frame-list',
+    'coverage-gap',
+    'omission-list',
+    'coverage-stats',
+    'source-context-stats',
+    'influence-profile-list',
+    'abstention-list',
+    'engine-stats'
+  ]) {
+    setHtml(id, '');
+  }
+  for (const id of ['result-title', 'result-overview', 'result-meta', 'result-updated']) setText(id, '');
 }
 
 function announceStatus(message) {
@@ -1283,39 +1495,76 @@ function showView(view) {
   const landing = byId('landing-view');
   const loading = byId('loading-panel');
   const results = byId('results');
-  const errorActions = byId('error-actions');
   landing.hidden = view !== 'landing';
   loading.hidden = view !== 'loading';
   results.hidden = view !== 'results';
-  if (view !== 'error') {
-    errorActions.hidden = true;
-  }
-  if (view === 'results') {
-    results.hidden = false;
-    landing.hidden = true;
-    loading.hidden = true;
-  }
+  if (view !== 'landing') setHidden('error-actions', true);
 }
 
-function showError(message) {
+// Errors use exactly one announcement channel: the role="alert" banner or
+// the role="alert" field error. Neither is also written to the polite
+// status line. options.retry is the action the Retry button runs; without
+// it the error has no Retry and no Start over.
+function showError(message, options = {}) {
+  const retry = typeof options.retry === 'function' ? options.retry : null;
+  retryAction = retry;
   const el = byId('analyze-error');
-  el.hidden = false;
   el.textContent = message;
-  byId('error-actions').hidden = false;
-  announceStatus(message);
-  byId('analyze-error')?.focus();
+  el.hidden = false;
+  byId('error-actions').hidden = !retry;
+  // Moving focus to Retry keeps keyboard users next to the recovery
+  // action. The alert reads the message; focus reads only the button.
+  if (retry) byId('analyze-retry')?.focus();
+}
+
+function showFieldError(message) {
+  const articleUrl = byId('article-url');
+  const error = byId('article-url-error');
+  retryAction = null;
+  error.textContent = message;
+  error.hidden = false;
+  articleUrl.setAttribute('aria-invalid', 'true');
+  articleUrl.setAttribute('aria-describedby', 'article-url-help article-url-error');
 }
 
 function clearError() {
-  byId('analyze-error').hidden = true;
+  retryAction = null;
+  const banner = byId('analyze-error');
+  banner.hidden = true;
+  banner.textContent = '';
   byId('error-actions').hidden = true;
-  byId('article-url').setAttribute('aria-invalid', 'false');
+  const fieldError = byId('article-url-error');
+  if (fieldError) {
+    fieldError.hidden = true;
+    fieldError.textContent = '';
+  }
+  const articleUrl = byId('article-url');
+  articleUrl.setAttribute('aria-invalid', 'false');
+  articleUrl.setAttribute('aria-describedby', 'article-url-help');
 }
 
-function setUrlError(message) {
-  byId('article-url').setAttribute('aria-invalid', 'true');
-  byId('article-url').setAttribute('aria-describedby', 'article-url-help analyze-error');
-  showError(message);
+function showBuildError(built) {
+  if (built.urlError) showFieldError(built.error);
+  else showError(built.error);
+}
+
+// Errors where running the same analysis again can succeed. Validation
+// errors (not approved, bad URL, consent, oversized input, disabled modes)
+// would fail the same way, so they get no Retry.
+const RETRYABLE_API_ERRORS = new Set([
+  'rate_limited',
+  'TIMEOUT',
+  'timeout',
+  'FETCH_ERROR',
+  'TOO_MANY_REDIRECTS',
+  'internal_error',
+  'live_killed'
+]);
+
+function isRetryableApiError(body, status) {
+  if (RETRYABLE_API_ERRORS.has(body?.error)) return true;
+  if (typeof body?.error === 'string' && body.error) return status >= 500;
+  return status >= 500 || status === 429;
 }
 
 function apiErrorMessage(body, status) {
@@ -1343,6 +1592,8 @@ function apiErrorMessage(body, status) {
       return 'Confirm public-material consent before analyzing.';
     case 'live_pasted_text_disabled':
       return 'Live pasted-text analysis stays disabled. Use Clarity for private messages, or a fixture example locally.';
+    case 'live_fixture_disabled':
+      return 'Fixture examples are not available on this host. No analysis was run.';
     case 'internal_error':
       return 'The Media Lens service could not complete this analysis. No partial result was shown. You can retry.';
     default:
@@ -1355,11 +1606,17 @@ function closeConsentDialog() {
   if (dialog.open) dialog.close();
 }
 
+// Consent is given per analysis: every time the dialog opens, the checkbox
+// starts unchecked and the previous consent timestamp is dropped.
 function openConsentDialog() {
   const dialog = byId('consent-dialog');
+  const checkbox = byId('consent-checkbox');
+  checkbox.checked = false;
+  consentCheckedAt = null;
+  updateSubmitEnabled();
   if (typeof dialog.showModal === 'function') dialog.showModal();
   else dialog.setAttribute('open', '');
-  byId('consent-checkbox').focus();
+  checkbox.focus();
 }
 
 function buildPayload() {
@@ -1384,6 +1641,10 @@ function buildPayload() {
   } catch {
     return { error: 'Enter a complete https:// URL.', urlError: true };
   }
+  // Credentials never leave the browser, whatever the scheme or host.
+  if (parsedUrl.username || parsedUrl.password) {
+    return { error: CREDENTIALS_URL_MESSAGE, urlError: true };
+  }
   if (parsedUrl.protocol !== 'https:') {
     return { error: 'Use an https:// public URL.', urlError: true };
   }
@@ -1401,27 +1662,36 @@ function buildPayload() {
   return { payload };
 }
 
+// The stage text is announced only when the stage changes, not on every
+// timer tick.
 function setLoadingStage(index) {
+  const next = LOADING_STAGES[index] ? index : 0;
+  if (next === currentStageIndex) return;
+  currentStageIndex = next;
   const items = byId('loading-stages').querySelectorAll('li');
   items.forEach((item, i) => {
-    item.dataset.active = i === index ? 'true' : 'false';
-    item.dataset.done = i < index ? 'true' : 'false';
+    item.dataset.active = i === next ? 'true' : 'false';
+    item.dataset.done = i < next ? 'true' : 'false';
   });
-  byId('loading-stage-text').textContent = LOADING_STAGES[index] || LOADING_STAGES[0];
-  announceStatus(LOADING_STAGES[index] || LOADING_STAGES[0]);
+  byId('loading-stage-text').textContent = LOADING_STAGES[next];
+  announceStatus(LOADING_STAGES[next]);
+}
+
+function stageForElapsed(elapsed) {
+  let index = 0;
+  for (let i = 0; i < STAGE_DELAYS_MS.length; i += 1) {
+    if (elapsed >= STAGE_DELAYS_MS[i]) index = i;
+  }
+  return index;
 }
 
 function startLoadingStages() {
   stopLoadingStages();
+  currentStageIndex = -1;
   setLoadingStage(0);
   const started = Date.now();
   stageTimer = window.setInterval(() => {
-    const elapsed = Date.now() - started;
-    let index = 0;
-    for (let i = 0; i < STAGE_DELAYS_MS.length; i += 1) {
-      if (elapsed >= STAGE_DELAYS_MS[i]) index = i;
-    }
-    setLoadingStage(index);
+    setLoadingStage(stageForElapsed(Date.now() - started));
   }, 400);
 }
 
@@ -1440,6 +1710,10 @@ function clearStoryHash() {
 }
 
 async function loadFixtureGraph(id) {
+  // Fixture graphs are in-repo files that only a local preview serves. The
+  // live host returns 404 for them, so nothing is requested outside
+  // catalog mode.
+  if (!CATALOG_MODE) return;
   const url = fixtureGraphUrl(id);
   if (!url) {
     showError('That fixture story is not in the local catalog.');
@@ -1458,11 +1732,47 @@ async function loadFixtureGraph(id) {
     }
     renderGraph(graph, 'fixture-file');
   } catch {
-    showError('This fixture example could not be opened. No live coverage was requested.');
+    showError('This fixture example could not be opened. No live coverage was requested.', {
+      retry: () => loadFixtureGraph(id)
+    });
   }
 }
 
+// Result-view controls exist on every host: the compare buttons of a
+// recorded coverage comparison and "Question this reading".
+function setupResultControls() {
+  document.addEventListener('click', (event) => {
+    const el = event.target instanceof Element ? event.target : null;
+    if (!el) return;
+    const compare = el.closest('[data-compare]');
+    if (compare && currentGraph) {
+      compareMode = compare.getAttribute('data-compare') || 'all';
+      applyCompare(currentGraph);
+    }
+  });
+  const question = byId('question-reading');
+  if (question) {
+    question.addEventListener('click', () => {
+      setHidden('question-reading-note', false);
+      setHidden('question-reading-destination', false);
+      const limitations = byId('analysis-limitations');
+      if (limitations) {
+        limitations.tabIndex = -1;
+        limitations.focus({ preventScroll: true });
+        limitations.scrollIntoView({ block: 'start' });
+      }
+    });
+  }
+}
+
+// The fixture explorer, the sample-card open button, and the #story= deep
+// link work only in catalog mode. On any other host the deep link is
+// cleared without a request.
 function setupStoryExplorer() {
+  if (!CATALOG_MODE) {
+    clearStoryHash();
+    return;
+  }
   const form = byId('story-search-form');
   const query = byId('story-query');
   if (form) {
@@ -1480,54 +1790,44 @@ function setupStoryExplorer() {
       activateFixtureLane(lane.getAttribute('data-lane') || 'all');
       return;
     }
-    const compare = el.closest('[data-compare]');
-    if (compare && currentGraph) {
-      compareMode = compare.getAttribute('data-compare') || 'all';
-      applyCompare(currentGraph);
-      return;
-    }
     const target = el.closest('[data-fixture-id]');
     if (!target) return;
     const id = target.getAttribute('data-fixture-id');
     if (id) loadFixtureGraph(id);
   });
-  const question = byId('question-reading');
-  if (question) {
-    question.addEventListener('click', () => {
-      const note = byId('question-reading-note');
-      if (note) note.hidden = false;
-      const destination = byId('question-reading-destination');
-      if (destination) destination.hidden = false;
-      const limitations = byId('analysis-limitations');
-      if (limitations) {
-        limitations.tabIndex = -1;
-        limitations.focus({ preventScroll: true });
-        limitations.scrollIntoView({ block: 'start' });
-      }
-    });
-  }
   renderFixtureLanes();
   renderStoryCatalog('');
   const initial = storyIdFromHash();
   if (initial) loadFixtureGraph(initial);
 }
 
+function landingFocusTarget() {
+  if (CATALOG_MODE) return byId('story-query');
+  const articleUrl = byId('article-url');
+  if (articleUrl && !articleUrl.disabled) return articleUrl;
+  return byId('analyze-continue');
+}
+
+// Back to start (and Start over) returns to the landing view and drops the
+// previous payload and result, so nothing from that page is kept in memory
+// for a retry.
 function goToLanding() {
   stopLoadingStages();
   if (analyzeAbort) analyzeAbort.abort();
   isSubmitting = false;
+  pendingPayload = null;
   clearStoryHash();
+  clearResults();
   showView('landing');
   clearError();
   updateSubmitEnabled();
-  const returnFocus = byId('story-query') || byId('analyze-continue');
-  returnFocus?.focus();
+  landingFocusTarget()?.focus();
 }
 
 async function runAnalysis(payload) {
   clearError();
   closeConsentDialog();
-  lastPayload = payload;
+  const retry = () => runAnalysis(payload);
   isSubmitting = true;
   updateSubmitEnabled();
   showView('loading');
@@ -1536,34 +1836,37 @@ async function runAnalysis(payload) {
   startLoadingStages();
 
   if (analyzeAbort) analyzeAbort.abort();
-  analyzeAbort = new AbortController();
+  const controller = new AbortController();
+  analyzeAbort = controller;
 
   try {
     const res = await fetch(`${WORKER_BASE_URL}/analyze`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),
-      signal: analyzeAbort.signal
+      signal: controller.signal
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
       showView('landing');
-      showError(apiErrorMessage(body, res.status));
+      showError(apiErrorMessage(body, res.status), isRetryableApiError(body, res.status) ? { retry } : {});
       return;
     }
     renderGraph(body);
   } catch (err) {
     showView('landing');
     if (err?.name === 'AbortError') {
-      showError(CANCELLED_MESSAGE);
+      showError(CANCELLED_MESSAGE, { retry });
     } else {
       showError(
         IS_LOCAL_PREVIEW
           ? 'Could not reach the local worker. Confirm it is running and try again.'
-          : 'Could not reach the Media Lens service. Try again later.'
+          : 'Could not reach the Media Lens service. Try again later.',
+        { retry }
       );
     }
   } finally {
+    if (analyzeAbort === controller) analyzeAbort = null;
     stopLoadingStages();
     isSubmitting = false;
     byId('analyze-form').removeAttribute('aria-busy');
@@ -1576,8 +1879,7 @@ function requestConsentThenAnalyze() {
   const built = buildPayload();
   if (built.error) {
     pendingPayload = null;
-    if (built.urlError) setUrlError(built.error);
-    else showError(built.error);
+    showBuildError(built);
     return;
   }
   pendingPayload = built.payload;
@@ -1600,8 +1902,7 @@ async function handleSubmit(event) {
   const built = pendingPayload ? { payload: pendingPayload } : buildPayload();
   if (built.error) {
     closeConsentDialog();
-    if (built.urlError) setUrlError(built.error);
-    else showError(built.error);
+    showBuildError(built);
     return;
   }
   built.payload.consent_at = consentCheckedAt;
@@ -1611,6 +1912,7 @@ async function handleSubmit(event) {
 
 function setup() {
   setupInputModeToggle();
+  setupResultControls();
   setupStoryExplorer();
   byId('consent-checkbox').addEventListener('change', updateSubmitEnabled);
   byId('pasted-text').addEventListener('input', updateSubmitEnabled);
@@ -1627,12 +1929,13 @@ function setup() {
     if (analyzeAbort) analyzeAbort.abort();
   });
   byId('analyze-retry').addEventListener('click', () => {
-    if (lastPayload) runAnalysis({ ...lastPayload, consent_at: consentCheckedAt });
-    else requestConsentThenAnalyze();
+    const retry = retryAction;
+    if (retry) retry();
   });
   byId('analyze-reset').addEventListener('click', goToLanding);
   byId('analyze-another').addEventListener('click', goToLanding);
   byId('sample-analyze').addEventListener('click', () => {
+    if (!CATALOG_MODE) return;
     const fixtureRadio = document.querySelector('input[name="input-mode"][value="fixture"]');
     fixtureRadio.checked = true;
     fixtureRadio.dispatchEvent(new Event('change', { bubbles: true }));
@@ -1646,7 +1949,6 @@ function setup() {
     }
     downloadJson('influence-graph', toEvidenceOnlyExport(currentGraph));
   });
-  byId('results').setAttribute('tabindex', '-1');
   byId('loading-panel').setAttribute('tabindex', '-1');
   applyDisclosure();
   checkHealth();
@@ -1662,18 +1964,25 @@ if (typeof document !== 'undefined') {
 
 export {
   ALTERNATIVE_READINGS_EMPTY,
+  CANCELLED_MESSAGE,
   COVERAGE_FRAMES_EMPTY_COPY,
-  COVERAGE_OBSERVATIONS_EMPTY_COPY,
   ABSTENTION_EMPTY_COPY,
+  CREDENTIALS_URL_MESSAGE,
   FIXTURE_LANES,
   FIXTURE_STORIES,
+  NO_ANALYSIS_TITLE,
   OMISSION_EMPTY_COPY,
+  apiErrorMessage,
   buildAnalysisOverview,
   consentDisclosure,
   activateFixtureLane,
   compareStatusCopy,
+  coverageComparisonRecorded,
   filterFixtureStories,
   fixtureGraphUrl,
+  isCatalogMode,
+  isNoAnalysisGraph,
+  isRetryableApiError,
   liveUrlDisclosure,
   membersForCompare,
   observationDisplayLabel,
@@ -1686,10 +1995,11 @@ export {
   renderCoverageDistribution,
   renderCoverageFrames,
   renderCoverageGap,
-  renderCoverageObservationList,
   renderInfluenceProfile,
   renderObservation,
   renderOmissionCandidates,
+  renderUnattributedQuotes,
   safeHttpsUrl,
+  stageForElapsed,
   storiesForLane
 };

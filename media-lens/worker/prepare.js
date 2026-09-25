@@ -435,6 +435,11 @@ function normalizeMatchText(text) {
     .replace(/\u00a0/g, ' ');
 }
 
+/** Trafilatura prefixes list lines with "- "; HTML walkers do not. */
+function stripExtractedListMarker(text) {
+  return text.replace(/^[-*•]\s+/, '');
+}
+
 function matchParagraphs(text) {
   const paragraphs = new Set();
   for (const part of String(text || '').split(/\n+/)) {
@@ -444,10 +449,31 @@ function matchParagraphs(text) {
   return paragraphs;
 }
 
+/**
+ * True when a walked HTML block corresponds to one or more Trafilatura
+ * lines. Exact match is preferred; substring match covers <br>-joined
+ * paragraphs Trafilatura splits, and list-marker stripping covers <li>.
+ */
+function blockMatchesExtracted(normalizedBlock, paragraphs) {
+  if (!normalizedBlock) return false;
+  if (paragraphs.has(normalizedBlock)) return true;
+  for (const paragraph of paragraphs) {
+    const stripped = stripExtractedListMarker(paragraph);
+    if (
+      normalizedBlock === stripped ||
+      normalizedBlock.includes(paragraph) ||
+      normalizedBlock.includes(stripped) ||
+      paragraph.includes(normalizedBlock) ||
+      stripped.includes(normalizedBlock)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function keepExtractedBlock(block, paragraphs) {
-  const normalized = normalizeMatchText(block.text || '');
-  if (!normalized) return false;
-  return paragraphs.has(normalized);
+  return blockMatchesExtracted(normalizeMatchText(block.text || ''), paragraphs);
 }
 
 function contentBlocks(blocks) {
@@ -594,6 +620,9 @@ export async function prepareFromHtml({
   const articleRoot = findFirst(root, (n) => n.type === 'element' && n.tag === 'article') || root;
   const paragraphs = matchParagraphs(extracted.text);
   let rawBlocks = walkBlocks(articleRoot, {}).filter((block) => keepExtractedBlock(block, paragraphs));
+  // Full Trafilatura-line fallback only when the walker kept nothing eligible.
+  // Do not replace a partial walker match: Trafilatura may still emit hidden
+  // or newsletter lines the walker correctly excluded.
   if (contentBlocks(rawBlocks).length === 0) {
     rawBlocks = blocksFromExtractedText(extracted.text);
   }

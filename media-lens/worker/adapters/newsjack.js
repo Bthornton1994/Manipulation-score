@@ -128,7 +128,33 @@ export function createNewsjackAdapter({ mode, fixtureId = null, fixtureDir = nul
           dataOrigin: 'fixture'
         });
       }
-      const parsed = JSON.parse(await readFile(join(fixtureDir, `${fixtureId}.json`), { encoding: 'utf8', signal }));
+      const read = await readJsonArtifact(join(fixtureDir, `${fixtureId}.json`), `${fixtureId}.json`, signal, { allowArray: false });
+      if (!read.ok) {
+        return mapNewsjackEvidenceToStoryDiscovery({
+          retrievedAt,
+          window,
+          providerId: 'fixture:newsjack_shaped',
+          providerMode: 'fixture',
+          freshnessGrade: 'fixture',
+          query,
+          dataOrigin: 'fixture',
+          artifactRead: read
+        });
+      }
+      const parsed = read.value;
+      const fixtureClusters = discoveryClusters(parsed);
+      if (fixtureClusters === null) {
+        return mapNewsjackEvidenceToStoryDiscovery({
+          retrievedAt,
+          window,
+          providerId: 'fixture:newsjack_shaped',
+          providerMode: 'fixture',
+          freshnessGrade: 'fixture',
+          query,
+          dataOrigin: 'fixture',
+          artifactRead: { ok: false, reason: 'invalid', error: 'artifact_shape_invalid', file: `${fixtureId}.json` }
+        });
+      }
       return mapNewsjackEvidenceToStoryDiscovery({
         retrievedAt,
         window: parsed.window || window,
@@ -136,7 +162,7 @@ export function createNewsjackAdapter({ mode, fixtureId = null, fixtureDir = nul
         providerMode: 'fixture',
         freshnessGrade: 'fixture',
         query,
-        clusters: discoveryClusters(parsed),
+        clusters: fixtureClusters,
         origin: parsed.story_origin || parsed.origin_findings || null,
         dataOrigin: 'fixture'
       });
@@ -155,7 +181,7 @@ export function createNewsjackAdapter({ mode, fixtureId = null, fixtureDir = nul
         clusters: loaded.ok ? loaded.clusters : [],
         origin: loaded.ok ? loaded.origin : null,
         dataOrigin: 'newsjack_artifacts',
-        artifactRead: loaded.ok ? { ok: true } : { ok: false, error: loaded.error }
+        artifactRead: loaded.ok ? { ok: true } : { ok: false, reason: loaded.reason, error: loaded.error, file: loaded.file }
       });
     }
     throw new Error(`Unknown Newsjack adapter mode: ${mode}`);
@@ -164,18 +190,55 @@ export function createNewsjackAdapter({ mode, fixtureId = null, fixtureDir = nul
   return { mode, getStoryContext, discoverStoryDocument };
 }
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+// Returns the cluster groups, or null when the shape is not usable (a group
+// that is not an object, or members that are not an array). Callers treat
+// null as an invalid artifact instead of guessing.
 function discoveryClusters(parsed) {
-  if (Array.isArray(parsed?.clusters)) return parsed.clusters;
-  if (Array.isArray(parsed?.members)) {
-    return [{ cluster_id: parsed.cluster_id || null, members: parsed.members }];
+  let groups;
+  if (Array.isArray(parsed?.clusters)) {
+    groups = parsed.clusters;
+  } else if (parsed && Object.prototype.hasOwnProperty.call(parsed, 'members')) {
+    groups = [{ cluster_id: parsed.cluster_id || null, members: parsed.members }];
+  } else {
+    const cluster = parsed?.cluster;
+    if (cluster === undefined || cluster === null) return [];
+    groups = Array.isArray(cluster) ? cluster : [cluster];
   }
-  const cluster = parsed?.cluster;
-  if (!cluster) return [];
-  const list = Array.isArray(cluster) ? cluster : [cluster];
-  return list.map((item) => ({
-    cluster_id: item.cluster_id || null,
-    members: item.members || []
-  }));
+  const out = [];
+  for (const item of groups) {
+    if (!isPlainObject(item)) return null;
+    const members = item.members === undefined ? [] : item.members;
+    if (!Array.isArray(members)) return null;
+    out.push({ cluster_id: typeof item.cluster_id === 'string' ? item.cluster_id : null, members });
+  }
+  return out;
+}
+
+// Read and parse one JSON artifact. Never throws for file or JSON problems:
+// a read error, malformed JSON, or an unexpected top-level type becomes a
+// fail-closed result the mapper turns into an abstention. Aborts still throw.
+async function readJsonArtifact(path, file, signal, { allowArray }) {
+  let text;
+  try {
+    text = await readFile(path, { encoding: 'utf8', signal });
+  } catch (err) {
+    if (err?.name === 'AbortError') throw err;
+    return { ok: false, reason: 'unavailable', error: err?.code || 'artifact_unreadable', file };
+  }
+  let value;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return { ok: false, reason: 'invalid', error: 'artifact_json_invalid', file };
+  }
+  if (!(isPlainObject(value) || (allowArray && Array.isArray(value)))) {
+    return { ok: false, reason: 'invalid', error: 'artifact_shape_invalid', file };
+  }
+  return { ok: true, value };
 }
 
 async function readDiscoveryArtifacts(artifactsDir, signal) {
@@ -185,22 +248,28 @@ async function readDiscoveryArtifacts(artifactsDir, signal) {
     entries = await readdir(artifactsDir, { signal });
   } catch (err) {
     if (err?.name === 'AbortError') throw err;
-    return { ok: false, error: err?.code || 'artifacts_unreadable', clusters: [], origin: null, window: null };
+    return { ok: false, reason: 'unavailable', error: err?.code || 'artifacts_unreadable', clusters: [], origin: null, window: null };
   }
   const clusterName = ['clustered_candidates.json', 'cluster.json'].find((name) => entries.includes(name));
   const originName = ['origin_findings.json', 'story_origin.json'].find((name) => entries.includes(name));
   let clusters = [];
   let window = null;
   if (clusterName) {
-    const parsed = JSON.parse(await readFile(join(artifactsDir, clusterName), { encoding: 'utf8', signal }));
-    window = parsed?.window || null;
-    if (Array.isArray(parsed)) clusters = discoveryClusters({ cluster: parsed });
-    else clusters = discoveryClusters(parsed);
+    const read = await readJsonArtifact(join(artifactsDir, clusterName), clusterName, signal, { allowArray: true });
+    if (!read.ok) return { ...read, clusters: [], origin: null, window: null };
+    const parsed = read.value;
+    window = isPlainObject(parsed) ? parsed.window || null : null;
+    clusters = Array.isArray(parsed) ? discoveryClusters({ cluster: parsed }) : discoveryClusters(parsed);
+    if (clusters === null) {
+      return { ok: false, reason: 'invalid', error: 'artifact_shape_invalid', file: clusterName, clusters: [], origin: null, window: null };
+    }
   }
   let origin = null;
   if (originName) {
-    const parsed = JSON.parse(await readFile(join(artifactsDir, originName), { encoding: 'utf8', signal }));
-    origin = parsed.story_origin || parsed;
+    const read = await readJsonArtifact(join(artifactsDir, originName), originName, signal, { allowArray: false });
+    if (!read.ok) return { ...read, clusters: [], origin: null, window: null };
+    const candidate = isPlainObject(read.value.story_origin) ? read.value.story_origin : read.value;
+    origin = candidate;
   }
   return { ok: true, clusters, origin, window };
 }

@@ -3,14 +3,38 @@
 // coverage, or decide independence. Medialyst is a deferred seam only:
 // this module does not load an SDK, read credentials, or open a network.
 
-export const MEDIALYST_NOT_IMPLEMENTED = 'NOT_IMPLEMENTED';
+export const SEARCH_PROVIDER_NOT_IMPLEMENTED = 'NOT_IMPLEMENTED';
+export const MEDIALYST_NOT_IMPLEMENTED = SEARCH_PROVIDER_NOT_IMPLEMENTED;
 
-export const SEARCH_PROVIDER_MODES = Object.freeze([
-  'fixture',
-  'host_web_search',
-  'rss_atom',
-  'medialyst'
-]);
+// Only fixture search is implemented. The other modes are named so the hit
+// shape and labels can be reviewed before any provider exists; using them
+// fails with NOT_IMPLEMENTED. The separate default-off approved-feed client
+// in discover.js is not a search provider and is not covered by rss_atom.
+export const SEARCH_PROVIDER_MODE_STATUS = Object.freeze({
+  fixture: 'implemented',
+  host_web_search: 'planned_not_implemented',
+  rss_atom: 'planned_not_implemented',
+  medialyst: 'planned_not_implemented'
+});
+export const IMPLEMENTED_SEARCH_PROVIDER_MODES = Object.freeze(
+  Object.keys(SEARCH_PROVIDER_MODE_STATUS).filter((mode) => SEARCH_PROVIDER_MODE_STATUS[mode] === 'implemented')
+);
+export const PLANNED_SEARCH_PROVIDER_MODES = Object.freeze(
+  Object.keys(SEARCH_PROVIDER_MODE_STATUS).filter((mode) => SEARCH_PROVIDER_MODE_STATUS[mode] !== 'implemented')
+);
+
+function notImplemented(mode) {
+  return Object.assign(
+    new Error(`Search provider mode "${mode}" is planned and not implemented. No request was made.`),
+    { code: SEARCH_PROVIDER_NOT_IMPLEMENTED, mode }
+  );
+}
+
+export function assertSearchProviderModeImplemented(mode) {
+  if (SEARCH_PROVIDER_MODE_STATUS[mode] === 'implemented') return;
+  if (Object.prototype.hasOwnProperty.call(SEARCH_PROVIDER_MODE_STATUS, mode)) throw notImplemented(mode);
+  throw Object.assign(new Error(`Unknown search provider mode: ${String(mode)}`), { code: 'UNKNOWN_SEARCH_PROVIDER_MODE' });
+}
 
 /**
  * Hit shape shared by later Newsjack host-search and Medialyst results.
@@ -62,6 +86,21 @@ export function createFixtureSearchProvider({ providerId = 'fixture:newsjack_sha
   };
 }
 
+export function createHostWebSearchProvider() {
+  throw notImplemented('host_web_search');
+}
+
+export function createRssAtomSearchProvider() {
+  throw notImplemented('rss_atom');
+}
+
+export function createSearchProvider({ mode, ...options } = {}) {
+  if (mode === 'fixture') return createFixtureSearchProvider(options);
+  if (mode === 'medialyst') return createMedialystSearchProvider(options);
+  assertSearchProviderModeImplemented(mode);
+  throw notImplemented(mode);
+}
+
 export function createMedialystSearchProvider(options = {}) {
   assertNoLiveMedialystConfig(options);
   return {
@@ -72,7 +111,7 @@ export function createMedialystSearchProvider(options = {}) {
     async search() {
       throw Object.assign(
         new Error('Medialyst search is not implemented. Account, terms, credentials, and credit spend are deferred.'),
-        { code: MEDIALYST_NOT_IMPLEMENTED }
+        { code: MEDIALYST_NOT_IMPLEMENTED, mode: 'medialyst' }
       );
     }
   };

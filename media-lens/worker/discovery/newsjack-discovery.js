@@ -2,12 +2,42 @@
 // into story-discovery.v1. No network, no Medialyst, no Jev, no CLI.
 
 import { createHash } from 'node:crypto';
+import { parseArticleUrl } from '../address-policy.js';
 import { isPartnerRepublicationHost, isWireOrAdvocacyUrl } from '../fusion.js';
+import { registrableHostKey } from '../host-key.js';
 import { normalizedURLKey } from '../url-key.js';
 import { FRAME_NOTE, OMISSION_NOTE, SAME_STORY_NOT_INDEPENDENT } from './cluster.js';
+import { assertSearchProviderModeImplemented } from './search-provider.js';
 
 export const CLUSTER_BASIS = 'newsjack_cluster_same_public_event';
 export const INDEPENDENCE_BASIS = 'newsjack_origin_distinct_independent_outlets';
+export const SAME_OUTLET_ADDITIONAL_URL_BASIS = 'same_outlet_additional_url';
+
+// Reasons a Newsjack-shaped member is dropped before it can become a story
+// member. Every drop is counted on the sources_checked row and listed in
+// rejected_members, so nothing disappears silently.
+export const REJECTION_REASONS = Object.freeze(['incomplete', 'non_https_url', 'non_public_url', 'different_story']);
+const MAX_REJECTED_MEMBERS_LISTED = 200;
+
+// Names that point at private networks, metadata services, or special-use
+// namespaces. parseArticleUrl already refuses loopback and the exact
+// metadata hostnames, *.local, *.localhost, single-label hosts, and every
+// non-public IP literal (including exotic IPv4 forms). These suffixes cover
+// the rest (for example instance-data.ec2.internal or printer.home.arpa).
+// .example stays allowed because it is documentation-only and the fixtures
+// use it.
+const NON_PUBLIC_HOST_SUFFIXES = Object.freeze([
+  '.internal',
+  '.arpa',
+  '.localdomain',
+  '.lan',
+  '.intranet',
+  '.corp',
+  '.private',
+  '.test',
+  '.invalid',
+  '.onion'
+]);
 
 const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 
@@ -22,17 +52,43 @@ function knownPublishedAt(value) {
   return parsed.toISOString();
 }
 
-function httpsUrl(value) {
-  if (typeof value !== 'string' || value.trim() === '') return null;
-  let parsed;
+function isNonPublicHostName(host) {
+  return NON_PUBLIC_HOST_SUFFIXES.some((suffix) => host === suffix.slice(1) || host.endsWith(suffix));
+}
+
+// Classify a candidate canonical source link. Only public https URLs can
+// become user-facing links. Nothing here fetches the URL.
+export function classifySourceUrl(value) {
+  if (typeof value !== 'string' || value.trim() === '') return { url: null, reason: 'incomplete' };
+  let raw = value.trim();
+  let scheme;
   try {
-    parsed = new URL(value);
+    scheme = new URL(raw).protocol;
+  } catch {
+    return { url: null, reason: 'incomplete' };
+  }
+  if (scheme !== 'https:') return { url: null, reason: scheme === 'http:' ? 'non_https_url' : 'non_public_url' };
+  let checked;
+  try {
+    checked = parseArticleUrl(raw);
+  } catch {
+    return { url: null, reason: 'non_public_url' };
+  }
+  if (isNonPublicHostName(checked.bareHost)) return { url: null, reason: 'non_public_url' };
+  return { url: checked.parsed.toString(), reason: null };
+}
+
+function publicSourceUrl(value) {
+  return classifySourceUrl(value).url;
+}
+
+function outletDomain(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+    return registrableHostKey(host) || host;
   } catch {
     return null;
   }
-  if (parsed.protocol !== 'https:') return null;
-  if (parsed.username || parsed.password) return null;
-  return parsed.toString();
 }
 
 function sourceIdFor(hit, outlet) {
@@ -68,8 +124,8 @@ function outletIdentity(value) {
 
 function datedSameStoryKeys(origin) {
   const keys = new Set();
-  if (!origin || origin.same_story_assessment !== 'same_story') return keys;
-  for (const item of origin.timestamp_evidence || []) {
+  if (!origin || typeof origin !== 'object' || origin.same_story_assessment !== 'same_story') return keys;
+  for (const item of Array.isArray(origin.timestamp_evidence) ? origin.timestamp_evidence : []) {
     const key = normalizedURLKey(item?.url_key || item?.url);
     if (!key || !knownPublishedAt(item?.published_at)) continue;
     if (isWireOrAdvocacyUrl(key) || isPartnerRepublicationHost(key)) continue;
@@ -78,24 +134,41 @@ function datedSameStoryKeys(origin) {
   return keys;
 }
 
-function independentKeysForMembers(members, origin) {
+// Pick at most one qualifying URL per distinct outlet. Two candidates are the
+// same outlet when their normalized outlet names match or their URLs share a
+// registrable domain, so an extra URL (or an alias name on the same domain)
+// never counts as another independent outlet. Returns the chosen URL keys and
+// the keys of extra qualifying URLs from outlets already counted.
+function independenceSelection(members, origin) {
   const eligible = datedSameStoryKeys(origin);
-  const outletByUrl = new Map();
+  const counted = [];
+  const chosen = new Set();
+  const additional = new Set();
+  const processed = new Set();
   for (const hit of members || []) {
-    const url = httpsUrl(hit.url || hit.canonical_url);
+    if (!hit || typeof hit !== 'object') continue;
+    const url = publicSourceUrl(hit.url || hit.canonical_url);
     const urlKey = url ? normalizedURLKey(url) : null;
-    if (!urlKey || !eligible.has(urlKey)) continue;
+    if (!urlKey || processed.has(urlKey) || !eligible.has(urlKey)) continue;
+    processed.add(urlKey);
     if (hit.relation === 'syndicated' || hit.relation === 'different_story' || hit.relation === 'unclear') continue;
     if (isWireOrAdvocacyUrl(url) || isPartnerRepublicationHost(url)) continue;
-    const outlet = outletIdentity(hit.outlet || hit.source);
-    if (!outlet) continue;
-    if (!outletByUrl.has(urlKey)) outletByUrl.set(urlKey, outlet);
+    const name = outletIdentity(hit.outlet || hit.source);
+    if (!name) continue;
+    const domain = outletDomain(url);
+    const already = counted.some((outlet) => outlet.name === name || (domain && outlet.domain === domain));
+    if (already) {
+      additional.add(urlKey);
+      continue;
+    }
+    counted.push({ name, domain });
+    chosen.add(urlKey);
   }
-  if (new Set(outletByUrl.values()).size < 2) return new Set();
-  return new Set(outletByUrl.keys());
+  if (counted.length < 2) return { independentKeys: new Set(), sameOutletKeys: new Set(), distinctOutlets: 0 };
+  return { independentKeys: chosen, sameOutletKeys: additional, distinctOutlets: counted.length };
 }
 
-function labelMember(hit, url, seenUrlKeys, independentKeys, originUncertain) {
+function labelMember(hit, url, seenUrlKeys, { independentKeys, sameOutletKeys }, originUncertain) {
   const urlKey = normalizedURLKey(url);
   if (isWireOrAdvocacyUrl(url) || isPartnerRepublicationHost(url)) {
     return { relation: 'syndicated', labeling_basis: 'wire_press_release_or_partner_url', independent_reporting: false, keep: true };
@@ -112,6 +185,9 @@ function labelMember(hit, url, seenUrlKeys, independentKeys, originUncertain) {
   if (originUncertain || hit.relation === 'unclear') {
     return { relation: 'same_story', labeling_basis: 'newsjack_origin_uncertain', independent_reporting: false, keep: true };
   }
+  if (urlKey && sameOutletKeys.has(urlKey)) {
+    return { relation: 'same_story', labeling_basis: SAME_OUTLET_ADDITIONAL_URL_BASIS, independent_reporting: false, keep: true };
+  }
   if (urlKey && independentKeys.has(urlKey) && (hit.relation === 'surfaced' || hit.relation === 'same_story' || hit.relation == null)) {
     return {
       relation: 'independent_reporting',
@@ -126,21 +202,39 @@ function labelMember(hit, url, seenUrlKeys, independentKeys, originUncertain) {
   return { relation: 'same_story', labeling_basis: 'newsjack_relation_same_story', independent_reporting: false, keep: true };
 }
 
-function memberFromHit(hit, retrievedAt, seenUrlKeys, independentKeys, originUncertain, rejected) {
+function recordRejection(rejected, reason, clusterId, outlet) {
+  rejected[reason] += 1;
+  if (rejected.members.length < MAX_REJECTED_MEMBERS_LISTED) {
+    // No URL is listed: a rejected URL may be non-public, and it must not
+    // become a user-facing link through diagnostics either.
+    rejected.members.push({ cluster_id: clusterId, reason, outlet: outlet ? outlet.slice(0, 120) : null });
+  }
+}
+
+function memberFromHit(hit, retrievedAt, seenUrlKeys, selection, originUncertain, rejected, clusterId) {
+  if (!hit || typeof hit !== 'object' || Array.isArray(hit)) {
+    recordRejection(rejected, 'incomplete', clusterId, null);
+    return null;
+  }
   const outlet = typeof hit.outlet === 'string' ? hit.outlet.trim() : typeof hit.source === 'string' ? hit.source.trim() : '';
   const title = typeof hit.title === 'string' ? hit.title.trim() : typeof hit.article_title === 'string' ? hit.article_title.trim() : '';
-  const url = httpsUrl(hit.url || hit.canonical_url);
-  if (!outlet || !title || !url) {
-    rejected.count += 1;
+  const classified = classifySourceUrl(hit.url || hit.canonical_url);
+  if (!outlet || !title || classified.reason === 'incomplete') {
+    recordRejection(rejected, 'incomplete', clusterId, outlet);
     return null;
   }
-  const label = labelMember(hit, url, seenUrlKeys, independentKeys, originUncertain);
+  if (!classified.url) {
+    recordRejection(rejected, classified.reason, clusterId, outlet);
+    return null;
+  }
+  const url = classified.url;
+  const label = labelMember(hit, url, seenUrlKeys, selection, originUncertain);
+  if (!label.keep) {
+    recordRejection(rejected, 'different_story', clusterId, outlet);
+    return null;
+  }
   const urlKey = normalizedURLKey(url);
   if (urlKey) seenUrlKeys.add(urlKey);
-  if (!label.keep) {
-    rejected.different_story += 1;
-    return null;
-  }
   return {
     outlet,
     article_title: title.slice(0, 300),
@@ -154,35 +248,35 @@ function memberFromHit(hit, retrievedAt, seenUrlKeys, independentKeys, originUnc
   };
 }
 
-function clusterFromGroup(group, { retrievedAt, window, sourcesChecked, origin, originUncertain }) {
-  const independentKeys = independentKeysForMembers(group.members, origin);
+function clusterFromGroup(group, { retrievedAt, window, sourcesChecked, origin, originUncertain, rejected }) {
+  const hits = Array.isArray(group?.members) ? group.members : [];
+  const selection = independenceSelection(hits, origin);
   const seenUrlKeys = new Set();
-  const rejected = { count: 0, different_story: 0 };
   const members = [];
-  for (const hit of group.members || []) {
-    const member = memberFromHit(hit, retrievedAt, seenUrlKeys, independentKeys, originUncertain, rejected);
+  const statedId = typeof group?.cluster_id === 'string' && group.cluster_id.trim() ? group.cluster_id.trim() : null;
+  for (const hit of hits) {
+    const member = memberFromHit(hit, retrievedAt, seenUrlKeys, selection, originUncertain, rejected, statedId);
     if (member) members.push(member);
   }
-  if (members.length === 0) return { cluster: null, rejected };
+  if (members.length === 0) return { cluster: null };
   const independent = members.filter((member) => member.independent_reporting);
   const title = members[0].article_title;
-  const idKey = group.cluster_id || `${title}|${window.start}`;
+  const idKey = statedId || `${title}|${window.start}`;
   return {
-    rejected,
     cluster: {
-      cluster_id: typeof group.cluster_id === 'string' && group.cluster_id.trim()
-        ? group.cluster_id.trim()
-        : clusterIdFor(String(idKey)),
+      cluster_id: statedId || clusterIdFor(String(idKey)),
       title,
       cluster_basis: CLUSTER_BASIS,
       window,
       sources_checked: sourcesChecked.map((source) => source.source_id),
       members,
+      // One row per distinct qualifying outlet (see independenceSelection).
       independent_reporting: independent.map((member) => ({
         outlet: member.outlet,
         canonical_url: member.canonical_url,
         labeling_basis: member.labeling_basis
       })),
+      independent_outlet_count: independent.length,
       frames: [],
       frame_note: FRAME_NOTE,
       coverage_gap: null,
@@ -205,17 +299,25 @@ export function mapNewsjackEvidenceToStoryDiscovery({
   dataOrigin = 'fixture',
   artifactRead = null
 } = {}) {
-  if (dataOrigin === 'newsjack_artifacts' && artifactRead?.ok !== true) {
+  // Only fixture evidence is implemented. A caller cannot label mapped output
+  // as host web search, RSS/Atom, or Medialyst results.
+  assertSearchProviderModeImplemented(providerMode);
+  const readFailed = (dataOrigin === 'newsjack_artifacts' && artifactRead?.ok !== true) || artifactRead?.ok === false;
+  if (readFailed) {
     const stamp = knownPublishedAt(retrievedAt);
     const statedWindow = window && typeof window.start === 'string' && typeof window.end === 'string' && Number.isFinite(window.hours)
       ? window
       : null;
+    const invalid = artifactRead?.reason === 'invalid';
+    const what = dataOrigin === 'fixture' ? 'fixture file' : 'artifact file';
     return baseDocument({
       status: 'abstain',
-      reason: 'artifacts_unavailable',
-      message: 'The Newsjack artifact directory was not read. No story members were checked. This is not a live provider result.',
+      reason: invalid ? 'artifacts_invalid' : 'artifacts_unavailable',
+      message: invalid
+        ? `A Newsjack ${what} could not be parsed as the expected JSON shape. No story members were checked. This is not a live provider result.`
+        : 'The Newsjack artifact directory was not read. No story members were checked. This is not a live provider result.',
       data_origin: dataOrigin,
-      fixture_labeled: false,
+      fixture_labeled: dataOrigin === 'fixture',
       retrieved_at: stamp,
       window: statedWindow,
       sources_checked: [{
@@ -229,7 +331,8 @@ export function mapNewsjackEvidenceToStoryDiscovery({
         outcome: 'failed',
         item_count: 0,
         freshness_grade: freshnessGrade,
-        error: artifactRead?.error || 'artifacts_unreadable'
+        error: artifactRead?.error || 'artifacts_unreadable',
+        ...(artifactRead?.file ? { error_file: artifactRead.file } : {})
       }]
     });
   }
@@ -258,7 +361,7 @@ export function mapNewsjackEvidenceToStoryDiscovery({
     });
   }
 
-  const originUncertain = Boolean(origin) && origin.same_story_assessment !== 'same_story';
+  const originUncertain = Boolean(origin) && (typeof origin !== 'object' || origin.same_story_assessment !== 'same_story');
   const groups = Array.isArray(clusters) && clusters.length > 0
     ? clusters
     : [{ cluster_id: null, members: Array.isArray(hits) ? hits : [] }];
@@ -278,20 +381,25 @@ export function mapNewsjackEvidenceToStoryDiscovery({
   };
 
   const built = [];
-  let rejected = 0;
+  const rejected = { incomplete: 0, non_https_url: 0, non_public_url: 0, different_story: 0, members: [] };
   for (const group of groups) {
     const result = clusterFromGroup(group, {
       retrievedAt,
       window,
       sourcesChecked: [checked],
       origin,
-      originUncertain
+      originUncertain,
+      rejected
     });
-    rejected += result.rejected.count;
     if (result.cluster) built.push(result.cluster);
   }
   checked.item_count = built.reduce((sum, cluster) => sum + cluster.members.length, 0);
-  checked.rejected_incomplete = rejected;
+  checked.rejected_incomplete = rejected.incomplete;
+  checked.rejected_non_https_url = rejected.non_https_url;
+  checked.rejected_non_public_url = rejected.non_public_url;
+  checked.rejected_different_story = rejected.different_story;
+  checked.rejected_total = REJECTION_REASONS.reduce((sum, reason) => sum + rejected[reason], 0);
+  checked.rejected_members = rejected.members;
 
   const fixtureLabeled = dataOrigin === 'fixture';
   const freshnessNote = freshnessGrade === 'fixture'

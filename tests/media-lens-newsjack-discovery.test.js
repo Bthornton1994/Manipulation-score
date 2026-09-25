@@ -4,8 +4,25 @@ import { chmod, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNewsjackAdapter } from '../media-lens/worker/adapters/newsjack.js';
-import { mapNewsjackEvidenceToStoryDiscovery, CLUSTER_BASIS, INDEPENDENCE_BASIS } from '../media-lens/worker/discovery/newsjack-discovery.js';
-import { createFixtureSearchProvider, createMedialystSearchProvider, MEDIALYST_NOT_IMPLEMENTED } from '../media-lens/worker/discovery/search-provider.js';
+import {
+  mapNewsjackEvidenceToStoryDiscovery,
+  classifySourceUrl,
+  CLUSTER_BASIS,
+  INDEPENDENCE_BASIS,
+  SAME_OUTLET_ADDITIONAL_URL_BASIS
+} from '../media-lens/worker/discovery/newsjack-discovery.js';
+import {
+  createFixtureSearchProvider,
+  createHostWebSearchProvider,
+  createMedialystSearchProvider,
+  createRssAtomSearchProvider,
+  createSearchProvider,
+  IMPLEMENTED_SEARCH_PROVIDER_MODES,
+  MEDIALYST_NOT_IMPLEMENTED,
+  PLANNED_SEARCH_PROVIDER_MODES,
+  SEARCH_PROVIDER_MODE_STATUS,
+  SEARCH_PROVIDER_NOT_IMPLEMENTED
+} from '../media-lens/worker/discovery/search-provider.js';
 import { validateStoryDiscovery } from '../media-lens/schema/story-discovery.js';
 
 const RETRIEVED_AT = '2026-09-25T18:00:00.000Z';
@@ -434,4 +451,183 @@ test('independence requires distinct outlets and fails closed otherwise', () => 
   assert.equal(validateStoryDiscovery(corroborated).ok, true);
   assert.equal(corroborated.clusters[0].independent_reporting.length, 2);
   assert.ok(corroborated.clusters[0].members.every((member) => member.labeling_basis === INDEPENDENCE_BASIS));
+});
+
+const ORIGIN_AT = '2026-09-25T12:00:00.000Z';
+function sameStoryOrigin(urls) {
+  return {
+    same_story_assessment: 'same_story',
+    timestamp_evidence: urls.map((url) => ({ url_key: url, published_at: ORIGIN_AT }))
+  };
+}
+
+test('different_story members are counted and listed on the check row, not dropped silently', () => {
+  const document = mapHits([
+    datedHit('Fictional Daily', 'https://fictional-daily.example/articles/fare-a'),
+    datedHit('Unrelated Gazette', 'https://unrelated-gazette.example/news/other', 'different_story'),
+    datedHit('Other Times', 'https://other-times.example/news/other-2', 'different_story'),
+    { title: 'No outlet', url: 'https://third-outlet.example/news/x', relation: 'surfaced' }
+  ]);
+  const row = document.sources_checked[0];
+  assert.equal(row.rejected_different_story, 2);
+  assert.equal(row.rejected_incomplete, 1);
+  assert.equal(row.rejected_total, 3);
+  assert.deepEqual(
+    row.rejected_members.filter((item) => item.reason === 'different_story').map((item) => item.outlet),
+    ['Unrelated Gazette', 'Other Times']
+  );
+  assert.equal(document.clusters[0].members.length, 1);
+  assert.ok(!JSON.stringify(row.rejected_members).includes('https://'), 'diagnostics list no URLs');
+  assert.equal(validateStoryDiscovery(document).ok, true);
+});
+
+test('metadata-style and private or reserved addresses never become canonical source links', () => {
+  const unsafe = [
+    'https://169.254.169.254/latest/meta-data/',
+    'https://metadata.google.internal/computeMetadata/v1/',
+    'https://instance-data.ec2.internal/latest/',
+    'https://metadata/computeMetadata',
+    'https://10.0.0.5/story',
+    'https://192.168.1.10/story',
+    'https://[fd00::1]/story',
+    'https://[::ffff:127.0.0.1]/story',
+    'https://0x7f.0.0.1/story',
+    'https://localhost/story',
+    'https://printer.home.arpa/story',
+    'https://newsroom.corp/story',
+    'https://staging.test/story',
+    'javascript:alert(1)',
+    'data:text/html,hi'
+  ];
+  for (const url of unsafe) {
+    assert.equal(classifySourceUrl(url).url, null, url);
+    assert.equal(classifySourceUrl(url).reason, 'non_public_url', url);
+  }
+  assert.equal(classifySourceUrl('http://fictional-daily.example/a').reason, 'non_https_url');
+  assert.equal(classifySourceUrl('https://fictional-daily.example/a').url, 'https://fictional-daily.example/a');
+
+  const hits = unsafe.map((url, index) => datedHit(`Outlet ${index}`, url));
+  hits.push(datedHit('Fictional Daily', 'https://fictional-daily.example/articles/fare-a'));
+  hits.push(datedHit('Plain Http', 'http://plain-http.example/news/fare'));
+  const document = mapHits(hits, { origin: sameStoryOrigin([...unsafe, 'https://fictional-daily.example/articles/fare-a']) });
+  const serialized = JSON.stringify(document);
+  for (const marker of ['169.254', 'metadata', '.internal', '10.0.0.5', '192.168', 'fd00', '::ffff', '0x7f', 'localhost', 'home.arpa', '.corp', '.test/', 'javascript:', 'data:text']) {
+    assert.ok(!serialized.includes(marker), `document must not expose ${marker}`);
+  }
+  const row = document.sources_checked[0];
+  assert.equal(row.rejected_non_public_url, unsafe.length);
+  assert.equal(row.rejected_non_https_url, 1);
+  assert.equal(document.clusters[0].members.length, 1);
+  assert.equal(document.clusters[0].independent_reporting.length, 0);
+  assert.equal(validateStoryDiscovery(document).ok, true);
+});
+
+test('only fixture search is implemented; host web search and RSS/Atom fail with NOT_IMPLEMENTED', async () => {
+  assert.deepEqual([...IMPLEMENTED_SEARCH_PROVIDER_MODES], ['fixture']);
+  assert.deepEqual([...PLANNED_SEARCH_PROVIDER_MODES].sort(), ['host_web_search', 'medialyst', 'rss_atom']);
+  assert.equal(SEARCH_PROVIDER_MODE_STATUS.host_web_search, 'planned_not_implemented');
+  assert.equal(SEARCH_PROVIDER_MODE_STATUS.rss_atom, 'planned_not_implemented');
+  assert.equal(SEARCH_PROVIDER_NOT_IMPLEMENTED, 'NOT_IMPLEMENTED');
+  assert.equal(MEDIALYST_NOT_IMPLEMENTED, 'NOT_IMPLEMENTED');
+
+  const isNotImplemented = (mode) => (err) => err.code === 'NOT_IMPLEMENTED' && err.mode === mode;
+  assert.throws(() => createHostWebSearchProvider(), isNotImplemented('host_web_search'));
+  assert.throws(() => createRssAtomSearchProvider(), isNotImplemented('rss_atom'));
+  assert.throws(() => createSearchProvider({ mode: 'host_web_search' }), isNotImplemented('host_web_search'));
+  assert.throws(() => createSearchProvider({ mode: 'rss_atom' }), isNotImplemented('rss_atom'));
+  assert.throws(() => createSearchProvider({ mode: 'bing' }), (err) => err.code === 'UNKNOWN_SEARCH_PROVIDER_MODE');
+  const fixture = createSearchProvider({ mode: 'fixture', hits: [] });
+  assert.equal(fixture.provider_mode, 'fixture');
+  await assert.rejects(createSearchProvider({ mode: 'medialyst' }).search({}), isNotImplemented('medialyst'));
+
+  for (const mode of ['host_web_search', 'rss_atom', 'medialyst']) {
+    assert.throws(() => mapHits([], { providerMode: mode }), isNotImplemented(mode), mode);
+  }
+});
+
+test('independent reporting counts distinct outlets; extra URLs from a counted outlet do not inflate it', () => {
+  const urls = [
+    'https://fictional-daily.example/articles/fare-a',
+    'https://fictional-daily.example/articles/fare-a-update',
+    'https://metro.fictional-daily.example/fare-a-metro',
+    'https://second-outlet.example/news/fare-b'
+  ];
+  const document = mapHits(
+    [
+      datedHit('Fictional Daily', urls[0]),
+      datedHit('Fictional Daily', urls[1], 'same_story'),
+      datedHit('Fictional Daily Metro', urls[2], 'same_story'),
+      datedHit('Second Outlet', urls[3], 'same_story')
+    ],
+    { origin: sameStoryOrigin(urls) }
+  );
+  const cluster = document.clusters[0];
+  assert.equal(cluster.independent_reporting.length, 2);
+  assert.equal(cluster.independent_outlet_count, 2);
+  assert.deepEqual(cluster.independent_reporting.map((item) => item.outlet), ['Fictional Daily', 'Second Outlet']);
+  for (const url of [urls[1], urls[2]]) {
+    const member = cluster.members.find((item) => item.canonical_url === url);
+    assert.equal(member.independent_reporting, false, url);
+    assert.equal(member.relation, 'same_story', url);
+    assert.equal(member.labeling_basis, SAME_OUTLET_ADDITIONAL_URL_BASIS, url);
+  }
+  assert.equal(validateStoryDiscovery(document).ok, true, validateStoryDiscovery(document).errors.join(','));
+
+  const oneOutletTwoNames = mapHits(
+    [datedHit('Fictional Daily', urls[0]), datedHit('Fictional Daily Metro', urls[2], 'same_story')],
+    { origin: sameStoryOrigin([urls[0], urls[2]]) }
+  );
+  assert.equal(oneOutletTwoNames.clusters[0].independent_reporting.length, 0, 'one registrable domain is one outlet');
+
+  const repeated = structuredClone(document);
+  repeated.clusters[0].members[1].independent_reporting = true;
+  repeated.clusters[0].members[1].relation = 'independent_reporting';
+  repeated.clusters[0].independent_reporting.splice(1, 0, {
+    outlet: 'Fictional Daily',
+    canonical_url: urls[1],
+    labeling_basis: INDEPENDENCE_BASIS
+  });
+  assert.ok(validateStoryDiscovery(repeated).errors.includes('independent_outlet_repeated'));
+});
+
+test('malformed or wrongly shaped artifact JSON fails closed with a clear error', async () => {
+  const cases = [
+    ['clustered_candidates.json', '{"clusters": [', 'artifact_json_invalid'],
+    ['origin_findings.json', 'not json at all', 'artifact_json_invalid'],
+    ['clustered_candidates.json', 'null', 'artifact_shape_invalid'],
+    ['origin_findings.json', '[1, 2]', 'artifact_shape_invalid'],
+    ['clustered_candidates.json', '{"clusters": [{"members": "not-an-array"}]}', 'artifact_shape_invalid'],
+    ['clustered_candidates.json', '{"clusters": [42]}', 'artifact_shape_invalid']
+  ];
+  for (const [file, body, error] of cases) {
+    const dir = await mkdtemp(join(tmpdir(), 'newsjack-discovery-malformed-'));
+    await writeFile(join(dir, file), body);
+    const document = await artifactAdapter(dir);
+    assert.equal(document.status, 'abstain', `${file}: ${body}`);
+    assert.equal(document.reason, 'artifacts_invalid', `${file}: ${body}`);
+    assert.equal(document.clusters.length, 0);
+    assert.equal(document.sources_checked[0].outcome, 'failed');
+    assert.equal(document.sources_checked[0].error, error, `${file}: ${body}`);
+    assert.equal(document.sources_checked[0].error_file, file);
+    assert.match(document.message, /could not be parsed/);
+    assert.equal(validateStoryDiscovery(document).ok, true);
+  }
+
+  const junkMembersDir = await mkdtemp(join(tmpdir(), 'newsjack-discovery-junk-members-'));
+  await writeFile(join(junkMembersDir, 'clustered_candidates.json'), JSON.stringify({ clusters: [{ members: [null, 42, 'x', []] }] }));
+  await writeFile(join(junkMembersDir, 'origin_findings.json'), JSON.stringify({ same_story_assessment: 'same_story', timestamp_evidence: 7 }));
+  const junk = await artifactAdapter(junkMembersDir);
+  assert.equal(junk.status, 'empty');
+  assert.equal(junk.sources_checked[0].rejected_incomplete, 4);
+
+  const fixtureDir = await mkdtemp(join(tmpdir(), 'newsjack-discovery-bad-fixture-'));
+  await writeFile(join(fixtureDir, 'broken.json'), '{"cluster": ');
+  const fixture = await createNewsjackAdapter({ mode: 'fixture', fixtureId: 'broken', fixtureDir }).discoverStoryDocument({
+    retrievedAt: RETRIEVED_AT,
+    window: WINDOW
+  });
+  assert.equal(fixture.status, 'abstain');
+  assert.equal(fixture.reason, 'artifacts_invalid');
+  assert.equal(fixture.fixture_labeled, true);
+  assert.equal(fixture.sources_checked[0].error, 'artifact_json_invalid');
 });

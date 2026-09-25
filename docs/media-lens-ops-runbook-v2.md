@@ -1,17 +1,43 @@
 # Media Lens live URL — operator runbook (v2)
 
-Status: **operational controls only**. Live URL remains **disabled by default**. This document does not enable live URL, live pasted-text, GitHub Pages hosting of Media Lens, or a production-ready claim.
+Status: **operational controls only**. Live URL remains **disabled by default** in the repository. One operator host, ml-jev, runs Jev-only live URL under owner authorization (§0). This document does not enable live URL, live pasted-text, GitHub Pages hosting of Media Lens, or a production-ready claim.
 
 | Field | Value |
 | --- | --- |
 | Workstream | [Issue #118](https://github.com/Bthornton1994/Manipulation-score/issues/118) |
-| Phase | Ops controls for Live URL v2 (kill switch, audit, rate limits, monitoring). Flags stay off. |
+| Phase | Ops controls for Live URL v2 (kill switch, audit, rate limits, monitoring). Repository default flags stay off. |
 | Architecture | `docs/media-lens-live-url-v2-architecture.md` §§16–20 |
 | Canary drill packet | `docs/media-lens-canary-drill-v1.md` (Issue #118 E). Operator-run rehearsal docs only. Defaults remain OFF. |
-| classifier.dev privacy | `docs/media-lens-classifier-dev-privacy.md` — **KEEP_EVALUATION_ONLY** (retrieved 2026-09-19 PT). Default-off. Live URL unauthorized. |
+| classifier.dev privacy | `docs/media-lens-classifier-dev-privacy.md` — **KEEP_EVALUATION_ONLY** (retrieved 2026-09-19 PT). Default-off. classifier.dev is unauthorized on every live path. |
 | Public site | GitHub Pages remains Clarity-only. `docs/` and `media-lens/` stay off the Pages allowlist. |
 
 Issue #118 is not complete when these controls exist. Independent security review, canary evidence, public-claim review, and explicit owner authorization are still required before any live enablement. The drill packet is **DRILL_PACKET_ONLY**: it does not authorize live enablement and does **not** grant `READY_FOR_CANARY`.
+
+Dated note, 2026-09-25: the owner authorized Jev-only live URL enablement on ml-jev on 2026-09-21 PT (Issue #118 comment "Jev-only live URL activation"). §0 records that deployment. The paragraph above describes the gate as it stood before then. Issue #118 stays open.
+
+---
+
+## 0. Current operator deployment (ml-jev)
+
+Recorded 2026-09-25 from Issue #118 records dated up to 2026-09-21 PT. This section is a record, not an authorization, and it changes no flag. The host was not reachable when this was written, so confirm current values with `/health` and the host before relying on them.
+
+| Field | Last recorded value | Issue #118 record |
+| --- | --- | --- |
+| Host | `ml-jev.manipulationscore.com`: one cloud VM, systemd unit `media-lens-worker` on `127.0.0.1:8787`, Caddy in front. Provider resource identifiers are left out of this public document | "H1 host setup status", "H1 final production-host verification packet" |
+| Public routes | `/media-lens/` UI (three files plus shared assets), `/health`, `/analyze`. Everything else 404 | "Frontend deploy evidence" (`FRONTEND_DEPLOY_OK`) |
+| Activation | Owner-authorized Jev-only live URL, 2026-09-21 PT | "Jev-only live URL activation" |
+| Worker flags | `MEDIA_LENS_MODE=live`, `MEDIA_LENS_ENABLE_LIVE=true`, `MEDIA_LENS_ENABLE_LIVE_URL=true`, classifier.dev off, live pasted text off (`live_pasted_text_disabled` confirmed), Jev shadow flags off | "Jev-only live URL activation" |
+| URL allowlist | `en.wikipedia.org` (last recorded) | "Jev-only live URL activation" |
+| ESTIMATED TypeSafe budget | warn $20, hard stop $30 | "Ops blanks filled", owner waiver |
+| Email budget alerts | **WAIVED** by the owner (`WAIVE_EMAIL_ALERT_DELIVERY`). Outbound SMTP from the host timed out. There is no email monitoring. `/health` still shows `alert.credentialConfigured: true` because a credential file is installed | "Final host preflight", "Owner waiver: `WAIVE_EMAIL_ALERT_DELIVERY`" |
+| Newsjack artifacts | Not set and not approved, as far as the records show | none |
+| Incident owner | Repository owner | "Ops blanks filled", Independent QA PASS |
+| Deputy | None (single owner) | "Ops blanks filled" |
+| Key rotation | Every 90 days plus emergency rotation; rotation owner: repository owner | "Owner dispositions recorded" |
+| Access log | The host Caddy site keeps an access log (request metadata, not request bodies). It is set in the host's web server configuration, which is not in this repository; the repository Caddyfile has no `log` directive. Retention is not yet documented | "Frontend deploy evidence" (`FRONTEND_DEPLOY_OK`) |
+| Rollback references | A pre-canary host snapshot and a `worker.env` backup with fixture flags exist. Their identifiers and paths are left out of this public document | "H1 final production-host verification packet", "Jev-only live URL activation" |
+
+Still not authorized on ml-jev: classifier.dev on any live path, live pasted text, Newsjack or any other news provider, and any accuracy, general-availability, or production-readiness claim. Release deploys follow `docs/media-lens-frontend-deployment.md`; the 2026-09 release changes worker code and needs a worker restart. Public disclosure of this preview: `privacy.html` (Media Lens live URL analysis) and `limitations.html`.
 
 ---
 
@@ -78,7 +104,7 @@ MEDIA_LENS_MAX_LIVE_URL_PER_HOST_PER_MINUTE=2
 MEDIA_LENS_MAX_CONCURRENT_LIVE_URL=1
 ```
 
-Canary abort: pinning test failure, adversarial fixture failure, `model_match` false on the pinned Jev id, Pages allowlist drift, or any suspected SSRF. Production live URL is already off, so a canary abort is not a production incident.
+Canary abort: pinning test failure, adversarial fixture failure, `model_match` false on the pinned Jev id, Pages allowlist drift, or any suspected SSRF. Production live URL is already off, so a canary abort is not a production incident. (Historical, written before 2026-09-21. ml-jev now serves live URL, so the same failure there is a production incident: assert the kill switch first.)
 
 This runbook does **not** authorize turning these flags on in any shared environment.
 
@@ -94,6 +120,8 @@ MEDIA_LENS_MODE=fixture
 ```
 
 A production live-URL worker is **not authorized** by Issue #118 until every acceptance gate is evidenced and an owner explicitly enables it. If that ever happens, it would still be an operator-run loopback worker, not the Pages artifact, and defaults in this repository should remain off unless the owner changes them in a dedicated enablement PR.
+
+Dated note, 2026-09-25: the paragraph above is historical. The owner explicitly enabled the Jev-only worker on ml-jev on 2026-09-21 PT (§0). It is an operator-run loopback worker behind Caddy, not the Pages artifact, and repository defaults remain off.
 
 ---
 
@@ -134,6 +162,10 @@ Figures are **ESTIMATED** planning math unless the operator has verified provide
 
 **Durable counter file (not LoadCredential):** default `/var/lib/media-lens/typesafe-budget.json`, override with `MEDIA_LENS_TYPESAFE_BUDGET_FILE`. Updates use an exclusive lock file (`typesafe-budget.json.lock`, mode `0600`) plus atomic tmp/rename writes so concurrent worker processes cannot lose increments. The worker creates the parent directory if needed and writes atomically with mode `0600`. Store only `month`, `calls`, `estimatedTokens`, `warnEmitted`, and a schema `version`. No article text, URLs, or credentials. Owner: the same unprivileged user running the worker (recommended). Survives process restart within the same UTC month; rolls forward automatically on month change.
 
+Failure behavior (PR #149 and the release-review fixes that followed it): if the file exists but cannot be read or fails the schema check, or if a durable write of the record fails for any reason (the lock cannot be created, the lock wait times out after about 7.6 s, the directory is not writable, or the disk is full), live Jev fails closed before any provider call with "The TypeSafe ESTIMATED budget record could not be read or updated, so no live Jev analysis was performed." After a failed write the worker keeps that analysis's call count in memory and marks the budget unavailable, so every later live analysis abstains. The worker stays in that state until an operator repairs the record and restarts it. Calls kept only in memory are lost at the restart; the `analyze_complete` audit line for the analysis whose write failed normally shows its `jev_calls`. Same-month counts read from the file never lower the in-memory counts. A missing file starts the month at zero. A stale `typesafe-budget.json.lock` makes the next budget write spin for about 7.6 s (200 attempts) with the event loop blocked, then fail, which stops live Jev as above. A systemd sandbox (`ProtectSystem=`, `ReadOnlyPaths=`, `ReadWritePaths=`) can make the budget directory read-only for the worker even when a shell `test -w` passes, so check writability as the unit sees it. Pre-deploy checks for all of this: `docs/media-lens-frontend-deployment.md`.
+
+Timeout accounting (PR #145): when the 15 s analysis timeout fires, Jev calls the adapter has reported by then, or within a 100 ms grace, are kept in the abstention graph and added to this record.
+
 ### Alert delivery (budget warn)
 
 Recipient: `bthornton9415@gmail.com`. Credential path: systemd `LoadCredential=media-lens-alert` → `${CREDENTIALS_DIRECTORY}/media-lens-alert`, or explicit `MEDIA_LENS_ALERT_CREDENTIAL_FILE`. Never commit credentials to git, `worker.env`, or logs.
@@ -151,6 +183,8 @@ Supported credential file contents (choose one; never log the file contents):
 SMTP delivery uses authenticated SMTP (`AUTH LOGIN`) only after TLS: `smtp://` requires STARTTLS on port 587 (plaintext AUTH is rejected when STARTTLS is missing); prefer `smtps://` on port 465 for implicit TLS. Webhook delivery accepts **https:// only** and POSTs JSON `{ to, subject, text }` to the configured URL.
 
 Until a valid credential is injected on the host, real alert delivery remains **`BLOCKED_ALERT_TRANSPORT`**. CI uses mock transport only. Optional real delivery integration test runs only when `MEDIA_LENS_ALERT_DELIVERY_TEST=true` and a credential file is readable.
+
+On ml-jev, email alert delivery is **WAIVED** by the owner (§0). Do not claim that email monitoring exists there. The hard stop still applies.
 
 ---
 
@@ -170,6 +204,7 @@ The kill switch stops every external Jev-capable path, including isolated pin ve
 - If `MEDIA_LENS_MODE=live`, `/analyze` returns `503 live_killed` (before the body is read).
 - Fixture `mode: "fixture"` continues to serve local examples.
 - Fixture `mode: "url"` is `400 URL_MODE_REQUIRES_LIVE` even when the kill switch is on. The kill check runs after that gate.
+- With the kill switch off, a live-mode worker rejects `mode: "fixture"` with `400 live_fixture_disabled` (PR #146). Fixture examples need a fixture-mode worker.
 
 `/health` remains up so operators can confirm `killSwitch: true` without secrets.
 
@@ -191,13 +226,13 @@ No history rewrite. Do not rebase or force-push PR #117 / `9cca564`.
 
 Do not paste article bodies, span text, URLs with userinfo, or API keys into tickets.
 
-Ownership for production incident response is unset. Do not invent names.
+Ownership below is copied from the Issue #118 ops-blanks record (2026-09-21 PT, Independent QA PASS). Do not invent names. Change these rows only from a newer Issue #118 record.
 
 | Role | Status |
 | --- | --- |
-| Incident owner | PLACEHOLDER — unset |
-| Deputy | PLACEHOLDER — unset |
-| Alert channel | DECISION — unset |
+| Incident owner | Repository owner (Issue #118 ops-blanks record) |
+| Deputy | None, single owner (Issue #118 ops-blanks record) |
+| Alert channel | Email was recorded, then WAIVED by the owner on 2026-09-21 PT. No email monitoring |
 
 | Class | Immediate action |
 | --- | --- |
@@ -206,6 +241,7 @@ Ownership for production incident response is unset. Do not invent names.
 | Schema-invalid graphs reaching clients | Pipeline already validate-or-abstains; if bypassed, kill live Jev |
 | Abuse (bulk scoring people) | Rate limit / bind localhost; acceptable-use enforcement is human |
 | TypeSafe outage | Jev `unavailable` abstention; worker can still serve fixture |
+| Unreadable, invalid, or unwritable budget record | Live Jev already fails closed with its own copy, including after a failed write. Fix the file's or directory's permissions (as the unit's sandbox sees them), free disk space, or remove a stale lock while the worker is stopped. Do not lower counts. Record it on Issue #118 with the `jev_calls` of the analysis whose write failed, then restart the worker |
 
 Public communications must not claim that Media Lens “detected an attack” against a named outlet or person. Stick to operational facts (HTTP status, error code, commit SHA).
 
@@ -226,7 +262,11 @@ The worker writes one JSON object per event to stderr (tests may capture a sink)
 | `analyze_complete` | Response about to be sent (latency and counts only) |
 | `classifier_dev_cascade` | Evaluation-only cascade ran (counts, model id, circuit state; never span text) |
 
-Allowed fields include `ts`, `event`, `mode`, `input_mode`, `error`, `scheme`, `host_key` (registrable DNS only, never IP literals or userinfo), `duration_ms`, `jev_calls`, `jev_failures`, `model_match`, `abstention_count`, `limiter`, `kill_switch`. `/health` has no `secrets` object and no bearer strings.
+The complete field list is `ALLOWED_KEYS` in `media-lens/worker/audit.js`; any other field is dropped: `ts`, `event`, `mode`, `input_mode`, `error`, `reason`, `scheme`, `host_key`, `host_kind`, `pinned_family`, `duration_ms`, `byte_length`, `hop_count`, `jev_calls`, `jev_failures`, `model_match`, `kill_switch`, `limiter`, `live_enabled`, `live_url_enabled`, `status`, `retries`, `abstention_reason`, `abstention_count`, `allowlist_configured`, `classifier_dev_enabled`, `cdev_calls`, `cdev_classifications`, `cdev_status`, `cdev_model`, `escalated_span_count`, `circuit_open`, `span_id`, `escalate_reason`, `disposition`, `calibrated`, `jev_choice`, `jev_confidence`, `cdev_label`, `cdev_confidence`, `cdev_reason`, `taxonomy_version`, `policy_version`.
+
+`server.js` currently emits a subset of these: `ts`, `event`, `mode`, `input_mode`, `error`, `limiter`, `kill_switch`, `live_enabled`, `live_url_enabled`, `allowlist_configured`, `status`, `duration_ms`, `jev_calls`, `jev_failures`, `model_match`, `abstention_reason`, `abstention_count`, the classifier.dev counters and state (`classifier_dev_enabled`, `cdev_calls`, `cdev_classifications`, `escalated_span_count`, `circuit_open`, and on `classifier_dev_cascade` also `cdev_model`, `cdev_status`, `taxonomy_version`, `policy_version`), and for refused or rate-limited URLs `scheme`, `host_kind` (`dns`, `ip_literal`, `unparseable`, or `missing`), and `host_key` (registrable DNS name only, never an IP literal or userinfo). `/health` has no `secrets` object and no bearer strings.
+
+Requests rejected before these gates write no audit line: `consent_required`, `live_pasted_text_disabled`, `live_fixture_disabled`, invalid JSON, and oversized bodies. Audit lines never carry the client IP address, the full URL, the path or query, or article or span text. Under systemd they land in the journal (`journalctl -u media-lens-worker`); journal retention is set on the host and is not documented here. The host Caddy access log is separate and records request metadata, not request bodies. It is set in the host's web server configuration, which is not in this repository, and its retention is not yet documented.
 
 ---
 

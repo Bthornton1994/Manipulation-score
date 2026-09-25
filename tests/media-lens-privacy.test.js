@@ -67,7 +67,7 @@ const CLARITY_PRIVACY_SUMMARY =
 const CLARITY_PRIVACY_HOW_ANALYSIS_WORKS =
   'When you analyze a message, processing happens entirely in your browser using local JavaScript. Nothing is uploaded to Clarity or any third-party service for analysis.';
 const MEDIA_LENS_PRIVACY_DISCLOSURE =
-  'Media Lens is an unreleased, separate preview for public articles, advertisements, speeches, and campaign material. It is not deployed on this site. Its default fixture mode uses local example material and makes no network calls. Do not enter private messages or material you are not authorized to review. Any future live mode that sends prepared public text to an external service will require separate informed consent, an updated privacy notice, and additional security review before enablement. Clarity’s private analyzer remains governed by the on-device behavior described above.';
+  'Media Lens is a separate, experimental preview for public articles, advertisements, speeches, and campaign material. It is not part of this Clarity site. A limited Jev-only Media Lens preview runs on a separate operator host, ml-jev.manipulationscore.com. It analyzes one public web page at a time, and only from a short list of hosts the operator allows. The Media Lens page sends only https addresses. The worker on the operator host also accepts http addresses sent directly to its API, under the same host list, address checks, and redirect rules. Live pasted-text analysis is off. The secondary classifier, classifier.dev, is off. Media Lens is not production-ready, and the operator can pause it at any time with a kill switch. Do not enter private messages or material you are not authorized to review. Clarity’s private analyzer remains governed by the on-device behavior described above.';
 
 test('privacy.html keeps Clarity analysis language unchanged and adds the Media Lens preview disclosure after it', async () => {
   const html = await readFile('privacy.html', 'utf8');
@@ -77,17 +77,17 @@ test('privacy.html keeps Clarity analysis language unchanged and adds the Media 
 
   const howIdx = html.indexOf('<h2>How analysis works</h2>');
   const mediaLensIdx = html.indexOf('<h2>Media Lens preview</h2>');
-  const futureLiveIdx = html.indexOf('<h2>Future Media Lens live URL (not available)</h2>');
+  const liveUrlIdx = html.indexOf('<h2>Media Lens live URL analysis</h2>');
   const localIdx = html.indexOf('<h2>Local storage on your device</h2>');
   assert.ok(
-    howIdx !== -1 && mediaLensIdx !== -1 && futureLiveIdx !== -1 && localIdx !== -1,
-    'expected How analysis works, Media Lens preview, Future Media Lens live URL, and Local storage headings'
+    howIdx !== -1 && mediaLensIdx !== -1 && liveUrlIdx !== -1 && localIdx !== -1,
+    'expected How analysis works, Media Lens preview, Media Lens live URL analysis, and Local storage headings'
   );
-  const claimsIdx = html.indexOf('<h2>Media Lens public claims (flags off)</h2>');
+  const claimsIdx = html.indexOf('<h2>Media Lens public claims</h2>');
   assert.ok(claimsIdx !== -1, 'expected Media Lens public claims heading');
   assert.ok(
-    howIdx < mediaLensIdx && mediaLensIdx < futureLiveIdx && futureLiveIdx < claimsIdx && claimsIdx < localIdx,
-    'Media Lens preview then future live URL then public claims must sit after How analysis works and before Local storage'
+    howIdx < mediaLensIdx && mediaLensIdx < liveUrlIdx && liveUrlIdx < claimsIdx && claimsIdx < localIdx,
+    'Media Lens preview then live URL analysis then public claims must sit after How analysis works and before Local storage'
   );
   assert.match(html, /The Summary and How analysis works sections describe Clarity, the private message analyzer\./);
   assert.doesNotMatch(html, /live Media Lens processing is currently available/i);

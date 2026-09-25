@@ -55,7 +55,18 @@ async function resolveQuestionSetHash(signal) {
   }
 }
 
-async function buildAbstentionOnlyGraph({ prepared, reason, message, config, userAssertedPublic = true, consentAt = null }) {
+async function buildAbstentionOnlyGraph({
+  prepared,
+  reason,
+  message,
+  config,
+  userAssertedPublic = true,
+  consentAt = null,
+  // When a live analysis times out after Jev has already billed calls,
+  // preserve that count so TypeSafe ESTIMATED budget accounting cannot
+  // undercount real provider spend.
+  liveJevCalls = 0
+}) {
   const startedAt = new Date().toISOString();
   const fusionResult = {
     resolvedSpans: [],
@@ -69,6 +80,7 @@ async function buildAbstentionOnlyGraph({ prepared, reason, message, config, use
   // would use; it is always recorded, even when Jev was not actually
   // called for this analysis (schema/validate.js forbids it being null).
   const questionSetHash = await resolveQuestionSetHash();
+  const billedCalls = Number.isInteger(liveJevCalls) && liveJevCalls > 0 ? liveJevCalls : 0;
 
   return assembleGraph({
     prepared: { ...prepared, spans: [] },
@@ -76,13 +88,13 @@ async function buildAbstentionOnlyGraph({ prepared, reason, message, config, use
     engineMeta: {
       preparation: enginePreparation(prepared),
       jev: {
-        mode: 'disabled',
+        mode: billedCalls > 0 ? 'live' : 'disabled',
         model_requested: 'jev-1.13.0',
         model_reported: null,
         model_match: null,
         question_set: 'influence-questions.v1',
         question_set_sha256: questionSetHash,
-        calls: 0,
+        calls: billedCalls,
         failures: 0,
         elapsed_ms: 0
       },
@@ -90,7 +102,19 @@ async function buildAbstentionOnlyGraph({ prepared, reason, message, config, use
       startedAt,
       completedAt: new Date().toISOString()
     },
-    privacyMeta: { externalProcessing: [] },
+    privacyMeta: {
+      externalProcessing:
+        billedCalls > 0
+          ? [
+              {
+                recipient: 'typesafe.ai (Jev)',
+                data_sent:
+                  'Prepared public span text (capped length) and immediate surrounding context. No full article is persisted.',
+                occurred: true
+              }
+            ]
+          : []
+    },
     userAssertedPublic,
     consentAt,
     disclosureShown: true
@@ -192,6 +216,16 @@ export async function analyze({
       consentAt
     });
   }
+  if (jevAdapter.mode === 'live' && typesafeBudget?.isStoreUnavailable?.()) {
+    return buildAbstentionOnlyGraph({
+      prepared,
+      reason: 'engine_unavailable',
+      message: 'The TypeSafe ESTIMATED budget record could not be read or updated, so no live Jev analysis was performed.',
+      config,
+      userAssertedPublic,
+      consentAt
+    });
+  }
   if (jevAdapter.mode === 'live' && typesafeBudget?.isStopped?.()) {
     return buildAbstentionOnlyGraph({
       prepared,
@@ -219,6 +253,9 @@ export async function analyze({
   // immediately rather than continuing to run and retry in the background
   // after the caller has already been served an abstention graph.
   const pipelineAbortController = new AbortController();
+  // Live Jev calls that completed (or were started and counted) before a
+  // timeout must still reach server-side budget accounting.
+  let liveJevCalls = 0;
 
   function pipelineTimedOut() {
     return pipelineAbortController.signal.aborted;
@@ -231,6 +268,9 @@ export async function analyze({
       { kind: prepared.artifact.kind, title: prepared.artifact.title },
       { signal }
     );
+    if (jevAdapter.mode === 'live' && Number.isInteger(jevResult?.calls) && jevResult.calls > 0) {
+      liveJevCalls = jevResult.calls;
+    }
     if (pipelineTimedOut()) return TIMED_OUT;
 
     if (jevAdapter.mode === 'live' && (jevResult.capReached || jevResult.calls > maxJevCalls)) {
@@ -378,17 +418,39 @@ export async function analyze({
     timer = setTimeout(() => resolve(TIMED_OUT), timeoutMs);
   });
 
+  const pipelinePromise = runPipeline();
   try {
-    const result = await Promise.race([runPipeline(), timeoutPromise]);
+    const result = await Promise.race([pipelinePromise, timeoutPromise]);
     if (result === TIMED_OUT) {
       pipelineAbortController.abort();
+      // Prefer calls already counted after Jev returned. If timeout fired
+      // mid-Jev, allow a short grace for a well-behaved adapter to settle
+      // and report its calls — but never wait forever (hanging adapters
+      // must not block the timeout abstention).
+      if (liveJevCalls === 0 && jevAdapter.mode === 'live') {
+        await Promise.race([
+          pipelinePromise.then(
+            () => {},
+            () => {}
+          ),
+          new Promise((resolve) => setTimeout(resolve, 100))
+        ]);
+      } else {
+        // Keep the losing pipeline from becoming an unhandled rejection if
+        // it later throws after abort, without delaying the response.
+        pipelinePromise.then(
+          () => {},
+          () => {}
+        );
+      }
       return buildAbstentionOnlyGraph({
         prepared,
         reason: 'engine_unavailable',
         message: 'The analysis took longer than the configured limit and was stopped before completion.',
         config,
         userAssertedPublic,
-        consentAt
+        consentAt,
+        liveJevCalls: jevAdapter.mode === 'live' ? liveJevCalls : 0
       });
     }
     return result;

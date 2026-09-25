@@ -167,6 +167,45 @@ test('createServer fixture mode remains unchanged without live opt-in or API key
   }
 });
 
+test('live fixture mode is rejected before any external Jev request', async () => {
+  let jevHits = 0;
+  const mockJev = http.createServer((req, res) => {
+    jevHits += 1;
+    req.resume();
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        model: 'jev-1.13.0',
+        answers: { influence_signal: { choice: 'none' }, is_quoted_or_attributed: { noul: 0.1 } }
+      })
+    );
+  });
+  await new Promise((resolve) => mockJev.listen(0, '127.0.0.1', resolve));
+
+  const mockAddress = mockJev.address();
+  const config = loadConfig({
+    MEDIA_LENS_MODE: 'live',
+    MEDIA_LENS_ENABLE_LIVE: 'true',
+    MEDIA_LENS_TYPESAFE_API_KEY: 'test-key',
+    MEDIA_LENS_TYPESAFE_BASE_URL: `http://127.0.0.1:${mockAddress.port}`
+  });
+  const server = await listen(createServer(config));
+  try {
+    const res = await requestJson(server, {
+      method: 'POST',
+      path: '/analyze',
+      body: { user_asserted_public: true, mode: 'fixture', fixture_id: 'synthetic-01-quoted-vs-authorial' }
+    });
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error, 'live_fixture_disabled');
+    assert.match(res.body.message, /Fixture examples are disabled in live mode/i);
+    assert.equal(jevHits, 0, 'live fixture mode must not call the Jev endpoint');
+  } finally {
+    server.close();
+    mockJev.close();
+  }
+});
+
 test('live pasted text is rejected before any external request', async () => {
   let jevHits = 0;
   const mockJev = http.createServer((req, res) => {
@@ -269,6 +308,22 @@ test('URL mode is marked experimental and not production-ready', async () => {
 
   const js = await readFile('media-lens/media-lens.js', 'utf8');
   assert.match(js, /not production-ready/);
+});
+
+// Negated forms are the only allowed uses of these terms in the READMEs.
+const ALLOWED_READINESS_NEGATIONS = [/\b(?:not|never)\s+(?:a\s+)?production-ready\b/gi, /\bnot\s+(?:yet\s+)?generally available\b/gi];
+const READINESS_CLAIM =
+  /production[- ]ready|production readiness|ready for production|generally available|general availability|\bGA\b/i;
+
+test('README.md and media-lens/README.md never claim Media Lens is production-ready or generally available', async () => {
+  for (const path of ['README.md', 'media-lens/README.md']) {
+    const readme = await readFile(path, 'utf8');
+    assert.match(readme, /not production-ready/, `${path} keeps its not production-ready statement`);
+    let rest = readme;
+    for (const negation of ALLOWED_READINESS_NEGATIONS) rest = rest.replace(negation, '');
+    const claim = rest.match(READINESS_CLAIM);
+    assert.equal(claim, null, `${path} has a readiness or availability claim near: ${claim ? rest.slice(Math.max(0, claim.index - 80), claim.index + 40) : ''}`);
+  }
 });
 
 test('live Jev without MEDIA_LENS_ENABLE_LIVE_URL cannot open article fetch', async () => {

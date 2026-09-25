@@ -18,7 +18,7 @@ import { TAXONOMY_IDS, ALLOWED_UI_PHRASES, BANNED_PHRASES } from './taxonomy.js'
 
 const FORBIDDEN_KEY_PATTERN = /score|rank|leaderboard|manipulat|trust|credib|reliab/i;
 
-const ARTIFACT_KINDS = ['article', 'headline', 'excerpt', 'speech', 'ad', 'campaign', 'other_public'];
+export const ARTIFACT_KINDS = Object.freeze(['article', 'headline', 'excerpt', 'speech', 'ad', 'campaign', 'other_public']);
 const INPUT_MODES = ['url', 'pasted_text', 'fixture'];
 const TIMESTAMP_PRECISIONS = ['time', 'date', 'none'];
 const LANGUAGES = ['en', 'und'];

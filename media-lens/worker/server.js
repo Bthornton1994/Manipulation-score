@@ -37,7 +37,7 @@ import { createClassifierDevAdapter } from './adapters/classifier-dev.js';
 import { analyze, buildAbstentionOnlyGraph } from './analyze.js';
 import { fetchArticleSafely } from './safe-fetch.js';
 import { parseArticleUrl } from './address-policy.js';
-import { validate } from '../schema/validate.js';
+import { ARTIFACT_KINDS, validate } from '../schema/validate.js';
 import { createAuditLogger, AUDIT_EVENTS } from './audit.js';
 import { createFixedWindowLimiter, createKeyedFixedWindowLimiter, createConcurrencyGate } from './rate-limit.js';
 import { hostIsAllowlisted, rateLimitHostKeys, safeUrlAuditFields } from './host-key.js';
@@ -171,6 +171,12 @@ async function preparePayload({ payload, config, fetchArticle, extractImpl }) {
     throw Object.assign(
       new Error('Live pasted-text analysis is disabled until a later privacy and security review.'),
       { code: 'live_pasted_text_disabled' }
+    );
+  }
+  if (config.mode === 'live' && payload.mode === 'fixture') {
+    throw Object.assign(
+      new Error('Fixture examples are disabled in live mode. Use URL mode for approved public sources, or run a fixture-only worker for local development.'),
+      { code: 'live_fixture_disabled' }
     );
   }
   if (payload.mode === 'pasted_text') {
@@ -487,6 +493,26 @@ export function createServer(config = loadConfig(), options = {}) {
           sendJson(res, 400, {
             error: 'live_pasted_text_disabled',
             message: 'Live pasted-text analysis is disabled until a later privacy and security review.'
+          });
+          return;
+        }
+
+        if (config.mode === 'live' && payload.mode === 'fixture') {
+          sendJson(res, 400, {
+            error: 'live_fixture_disabled',
+            message:
+              'Fixture examples are disabled in live mode. Use URL mode for approved public sources, or run a fixture-only worker for local development.'
+          });
+          return;
+        }
+
+        // payload.kind is forwarded to TypeSafe with every span, so an
+        // unchecked value could inflate provider tokens past the ESTIMATED
+        // per-call basis. Accept only the schema's artifact kinds.
+        if (payload.kind !== undefined && payload.kind !== null && !ARTIFACT_KINDS.includes(payload.kind)) {
+          sendJson(res, 400, {
+            error: 'invalid_kind',
+            message: `kind must be one of ${ARTIFACT_KINDS.join(', ')}.`
           });
           return;
         }

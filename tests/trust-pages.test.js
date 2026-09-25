@@ -64,3 +64,28 @@ test('service worker shells trust pages with network-first', async () => {
   assert.match(worker, /contact\.html/);
   assert.match(worker, /acceptable-use\.html/);
 });
+
+test('changelog records the September 25, 2026 Media Lens disclosure entry above the earlier Unreleased entry', async () => {
+  const html = await readFile('changelog.html', 'utf8');
+  const entryIdx = html.indexOf('<h2>September 25, 2026 | Media Lens preview disclosures</h2>');
+  const unreleasedIdx = html.indexOf('<h2>Unreleased | Media Lens preview (not deployed)</h2>');
+  assert.ok(entryIdx !== -1, 'expected the September 25, 2026 Media Lens entry');
+  assert.ok(unreleasedIdx !== -1, 'the earlier Unreleased entry stays as a historical record');
+  assert.ok(entryIdx < unreleasedIdx, 'the dated entry sits above the historical Unreleased entry');
+  const entry = html.slice(entryIdx, unreleasedIdx);
+  assert.match(entry, /separate operator host, ml-jev\.manipulationscore\.com/);
+  assert.match(entry, /experimental and not production-ready/);
+  assert.match(entry, /Comparing coverage across outlets is not live/);
+  assert.match(entry, /The retention period of the host's logs is not yet documented/);
+  assert.match(entry, /a page recognized as paywalled is analyzed from its visible excerpt only/);
+  assert.match(entry, /access log set in the host's own configuration/);
+  assert.match(entry, /clarity-v37/);
+  assert.doesNotMatch(entry, /accura|generally available|is production-ready/i);
+});
+
+test('trust pages changed for the Media Lens operator preview carry the September 25, 2026 date', async () => {
+  for (const page of ['privacy.html', 'limitations.html', 'acceptable-use.html', 'methodology.html', 'changelog.html']) {
+    const html = await readFile(page, 'utf8');
+    assert.match(html, /<p class="legal-updated">Last updated: September 25, 2026<\/p>/, page);
+  }
+});

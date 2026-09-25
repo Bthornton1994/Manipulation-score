@@ -616,10 +616,18 @@ test('ops runbook exists, stays off Pages, and does not claim production readine
   assert.match(body, /media-lens-canary-drill-v1\.md/);
   assert.match(body, /DRILL_PACKET_ONLY/);
   assert.match(body, /does \*\*not\*\* grant `READY_FOR_CANARY`/);
-  assert.match(body, /Incident owner \| PLACEHOLDER/);
-  assert.match(body, /Deputy \| PLACEHOLDER/);
-  assert.match(body, /Alert channel \| DECISION — unset/);
+  // Incident roles come only from the Issue #118 ops-blanks record.
+  assert.match(body, /Incident owner \| Repository owner \(Issue #118 ops-blanks record\)/);
+  assert.match(body, /Deputy \| None, single owner \(Issue #118 ops-blanks record\)/);
+  assert.match(body, /Alert channel \| Email was recorded, then WAIVED by the owner on 2026-09-21 PT\. No email monitoring/);
   assert.match(body, /Do not invent names/);
+  assert.doesNotMatch(body, /PLACEHOLDER/);
+  // Current operator deployment record, dated, without enabling anything.
+  assert.match(body, /## 0\. Current operator deployment \(ml-jev\)/);
+  assert.match(body, /This section is a record, not an authorization, and it changes no flag\./);
+  assert.match(body, /`en\.wikipedia\.org` \(last recorded\)/);
+  assert.match(body, /\*\*WAIVED\*\* by the owner/);
+  assert.doesNotMatch(body, /email monitoring (is active|exists on ml-jev)/i);
 
   assert.ok(PAGES_FORBIDDEN_NAMES.includes('docs'));
   assert.equal(isAllowedSitePath(RUNBOOK), false);
@@ -628,6 +636,52 @@ test('ops runbook exists, stays off Pages, and does not claim production readine
   await buildPagesSite(dest);
   const files = await listSiteFiles(dest);
   assert.equal(files.includes(RUNBOOK), false);
+});
+
+// Public docs name roles, not people, and carry no host identifiers. The
+// identifiers stay in the operator's host records.
+const PUBLIC_DOC_HOST_IDENTIFIERS = [
+  /Bryant Thornton/,
+  /\bsnapshot `?\d{6,}/i,
+  /\b\d{9}\b/,
+  /worker\.env\.[a-z0-9.-]*\.bak/i,
+  /\.bak\b/,
+  /\bdroplet\b/i,
+  /\bsfo\d\b/i,
+  /\bfirewall id\b/i,
+  /\b(?:\d{1,3}\.){3}\d{1,3}\/\d{1,2}\b/
+];
+
+test('public ops and deploy docs carry no host identifiers, owner names, or instruction to post the worker.env hash', async () => {
+  for (const path of [RUNBOOK, 'docs/media-lens-frontend-deployment.md']) {
+    const body = await readFile(path, 'utf8');
+    for (const pattern of PUBLIC_DOC_HOST_IDENTIFIERS) {
+      assert.doesNotMatch(body, pattern, `${path} must not contain ${pattern}`);
+    }
+    assert.doesNotMatch(body, /md5sum \/etc\/media-lens\/worker\.env\s+#\s*hash only/, path);
+    assert.doesNotMatch(body, /record the new hash/i, path);
+  }
+  const deploy = await readFile('docs/media-lens-frontend-deployment.md', 'utf8');
+  assert.match(deploy, /Do not post the\s+`worker\.env` hash/);
+  assert.match(deploy, /record only `unchanged` or\s+`changed`/);
+  assert.match(deploy, /md5sum -c --quiet \/root\/media-lens-worker-env\.md5/);
+});
+
+test('ops runbook lists exactly the audit fields audit.js allows', async () => {
+  const auditSrc = await readFile('media-lens/worker/audit.js', 'utf8');
+  const block = auditSrc.slice(auditSrc.indexOf('const ALLOWED_KEYS = new Set(['), auditSrc.indexOf(']);', auditSrc.indexOf('const ALLOWED_KEYS')));
+  const allowed = [...block.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+  assert.ok(allowed.length > 20, 'expected to read the ALLOWED_KEYS list from audit.js');
+  for (const key of allowed) {
+    assert.deepEqual(Object.keys(redactAuditRecord({ event: 'analyze_complete', [key]: 1 })).includes(key), true, key);
+  }
+
+  const body = await readFile(RUNBOOK, 'utf8');
+  const section = body.slice(body.indexOf('## 7. Audit events'), body.indexOf('## 8. Monitoring metrics'));
+  const listLine = section.split('\n').find((line) => line.startsWith('The complete field list is `ALLOWED_KEYS`'));
+  assert.ok(listLine, 'runbook section 7 must carry the complete ALLOWED_KEYS list');
+  const listed = [...listLine.matchAll(/`([a-z_]+)`/g)].map((m) => m[1]).filter((key) => key !== 'ALLOWED_KEYS');
+  assert.deepEqual(listed, allowed);
 });
 
 test('fetchArticle on createServer is a test seam and is unused by startServer', async () => {

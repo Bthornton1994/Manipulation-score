@@ -6,7 +6,7 @@ Pinned model: `jev-1.13.0`.
 Public docs fetched: `https://docs.typesafe.ai` (index `llms.txt`, API, models, primitives, confidence, jaggedness, JavaScript SDK, legal index).
 This file lives under `docs/` and is excluded from GitHub Pages. It is operator/engineering evidence, not a public accuracy claim.
 
-Vision check: **Aligns with constraints** (`VISION.md` sections “Evidence comes before a score”, “Uncertainty must be visible”, “Analyze communication, not identity”, “Privacy is the default architecture”). Jev remains a typed classifier for public Media Lens spans. It is not enabled for Clarity private messages, live URL fetch, or published real-world accuracy.
+Vision check: **Aligns with constraints** (`VISION.md` sections “Evidence comes before a score”, “Uncertainty must be visible”, “Analyze communication, not identity”, “Privacy is the default architecture”). Jev remains a typed classifier for public Media Lens spans. It is not enabled for Clarity private messages or published real-world accuracy. Dated note, 2026-09-25: repository defaults keep live URL off, but on the owner-authorized ml-jev operator host (activated 2026-09-21 PT, Issue #118) Jev is the only external classifier for live URL analysis. See `docs/media-lens-ops-runbook-v2.md` §0.
 
 ## 1. What this phase verifies
 
@@ -135,7 +135,7 @@ Automated tests call TypeSafe only when **both** are true:
 
 Otherwise `tests/media-lens-jev-live-optional.test.js` **skips** (does not fail). CI must not set a production key. Keys are never committed (`.env` is gitignored; `worker/config.js` is the only worker module that reads `process.env`).
 
-Live URL fetch remains disabled by default. `MEDIA_LENS_TYPESAFE_BASE_URL` may point tests at a loopback mock; it is not a live-URL enablement flag.
+Live URL fetch remains disabled by default in the repository and in CI; only the ml-jev operator host enables it. `MEDIA_LENS_TYPESAFE_BASE_URL` may point tests at a loopback mock; it is not a live-URL enablement flag.
 
 ### Isolated pin verify (Phase 4)
 

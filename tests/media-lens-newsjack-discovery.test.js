@@ -7,6 +7,8 @@ import { createNewsjackAdapter } from '../media-lens/worker/adapters/newsjack.js
 import {
   mapNewsjackEvidenceToStoryDiscovery,
   classifySourceUrl,
+  NON_PUBLIC_HOST_SUFFIXES,
+  sanitizeWindow,
   CLUSTER_BASIS,
   INDEPENDENCE_BASIS,
   SAME_OUTLET_ADDITIONAL_URL_BASIS
@@ -630,4 +632,190 @@ test('malformed or wrongly shaped artifact JSON fails closed with a clear error'
   assert.equal(fixture.reason, 'artifacts_invalid');
   assert.equal(fixture.fixture_labeled, true);
   assert.equal(fixture.sources_checked[0].error, 'artifact_json_invalid');
+});
+
+function independentOutlets(document) {
+  return document.clusters[0].independent_reporting.map((item) => item.outlet);
+}
+
+test('the two-outlet rule counts only members that are shown and can be labeled independent', () => {
+  const A = 'https://fictional-daily.example/articles/fare-a';
+  const B = 'https://second-outlet.example/news/fare-b';
+  const origin = sameStoryOrigin([A, B]);
+  const variants = {
+    'second outlet has no title': { url: B, outlet: 'Second Outlet', published_at: ORIGIN_AT, relation: 'surfaced' },
+    'second outlet has an unknown relation': { ...datedHit('Second Outlet', B), relation: 'related' },
+    'second outlet has an empty outlet and a source': { ...datedHit('', B), source: 'Second Outlet' }
+  };
+  for (const [label, second] of Object.entries(variants)) {
+    const document = mapHits([datedHit('Fictional Daily', A), second], { origin });
+    const cluster = document.clusters[0];
+    assert.equal(cluster.independent_reporting.length, 0, label);
+    assert.equal(cluster.independent_outlet_count, 0, label);
+    assert.ok(cluster.members.every((member) => member.independent_reporting === false), label);
+    assert.equal(validateStoryDiscovery(document).ok, true, label);
+  }
+});
+
+test('outlet identity is transitive across names, name spellings, domains, and stated source ids', () => {
+  const urls = {
+    a: 'https://fictional-daily.example/articles/fare-a',
+    b: 'https://fd-metro.example/fare-b',
+    c: 'https://fd-metro.example/fare-c',
+    d: 'https://second-outlet.example/news/fare-d',
+    e: 'https://other-host.example/fare-e',
+    f: 'https://third-host.example/fare-f'
+  };
+  const chain = mapHits(
+    [
+      datedHit('Fictional Daily', urls.a),
+      datedHit('Fictional Daily', urls.b, 'same_story'),
+      datedHit('Fictional Daily Metro Desk', urls.c, 'same_story')
+    ],
+    { origin: sameStoryOrigin([urls.a, urls.b, urls.c]) }
+  );
+  assert.equal(chain.clusters[0].independent_reporting.length, 0, 'one outlet on two domains is still one outlet');
+
+  const withSecond = mapHits(
+    [
+      datedHit('Fictional Daily', urls.a),
+      datedHit('Fictional Daily', urls.b, 'same_story'),
+      datedHit('Fictional Daily Metro Desk', urls.c, 'same_story'),
+      datedHit('Second Outlet', urls.d, 'same_story')
+    ],
+    { origin: sameStoryOrigin([urls.a, urls.b, urls.c, urls.d]) }
+  );
+  assert.deepEqual(independentOutlets(withSecond), ['Fictional Daily', 'Second Outlet']);
+  assert.equal(withSecond.clusters[0].independent_outlet_count, 2);
+  assert.equal(validateStoryDiscovery(withSecond).ok, true);
+
+  const sameName = mapHits(
+    [datedHit('Fictional Daily', urls.a), datedHit('Fictional  daily', urls.e, 'same_story')],
+    { origin: sameStoryOrigin([urls.a, urls.e]) }
+  );
+  assert.equal(sameName.clusters[0].independent_reporting.length, 0, 'same normalized name on another domain');
+
+  const spelling = mapHits(
+    [datedHit('BBC News', urls.e), datedHit('BBC​News', urls.f, 'same_story')],
+    { origin: sameStoryOrigin([urls.e, urls.f]) }
+  );
+  assert.equal(spelling.clusters[0].independent_reporting.length, 0, 'name spellings with the same slug');
+
+  const statedId = mapHits(
+    [
+      { ...datedHit('Harbor Times', urls.e), source_id: 'approved:harbor-times' },
+      { ...datedHit('The Harbor Times Online', urls.f, 'same_story'), source_id: 'approved:harbor-times' }
+    ],
+    { origin: sameStoryOrigin([urls.e, urls.f]) }
+  );
+  assert.equal(statedId.clusters[0].independent_reporting.length, 0, 'same stated source_id');
+});
+
+test('a different_story assessment wins over wire, partner, and repeated-URL rules', () => {
+  const document = mapHits([
+    datedHit('Fictional Daily', 'https://fictional-daily.example/articles/fare-a'),
+    datedHit('PR Newswire', 'https://www.prnewswire.com/news-releases/unrelated', 'different_story'),
+    datedHit('Fictional Daily', 'https://fictional-daily.example/articles/fare-a', 'different_story')
+  ]);
+  const row = document.sources_checked[0];
+  assert.equal(row.rejected_different_story, 2);
+  assert.equal(document.clusters[0].members.length, 1);
+  assert.ok(document.clusters[0].members.every((member) => member.relation !== 'syndicated'));
+});
+
+test('every listed non-public suffix is refused, with wildcard private DNS names', () => {
+  for (const suffix of NON_PUBLIC_HOST_SUFFIXES) {
+    const url = `https://host${suffix}/story`;
+    assert.equal(classifySourceUrl(url).reason, 'non_public_url', url);
+  }
+  for (const url of ['https://169.254.169.254.nip.io/', 'https://127.0.0.1.sslip.io/', 'https://app.localtest.me/', 'https://kubernetes.default.svc/x', 'https://router.home/', 'https://foo.alt/']) {
+    assert.equal(classifySourceUrl(url).reason, 'non_public_url', url);
+  }
+});
+
+test('the validator rejects an independent count that disagrees with the rows', () => {
+  const urls = ['https://fictional-daily.example/articles/fare-a', 'https://second-outlet.example/news/fare-b'];
+  const document = mapHits(
+    [datedHit('Fictional Daily', urls[0]), datedHit('Second Outlet', urls[1], 'same_story')],
+    { origin: sameStoryOrigin(urls) }
+  );
+  const tampered = structuredClone(document);
+  tampered.clusters[0].independent_outlet_count = 3;
+  assert.ok(validateStoryDiscovery(tampered).errors.includes('independent_outlet_count'));
+});
+
+test('labels, windows, source ids, and outlet names cannot smuggle other sources or URLs', async () => {
+  assert.throws(() => mapHits([], { dataOrigin: 'rss_atom' }), (err) => err.code === 'INVALID_DISCOVERY_LABEL' && err.field === 'data_origin');
+  assert.throws(() => mapHits([], { providerId: 'rss_atom:bbc' }), (err) => err.code === 'INVALID_DISCOVERY_LABEL' && err.field === 'provider_id');
+  assert.throws(() => mapHits([], { freshnessGrade: 'live' }), (err) => err.code === 'INVALID_DISCOVERY_LABEL' && err.field === 'freshness_grade');
+  assert.throws(() => mapHits([], { providerMode: ['fixture'] }), (err) => err.code === 'UNKNOWN_SEARCH_PROVIDER_MODE');
+
+  assert.equal(sanitizeWindow({ start: 'https://169.254.169.254/', end: RETRIEVED_AT, hours: 24 }), null);
+  assert.equal(sanitizeWindow({ ...WINDOW, hours: 1e400 }), null);
+  assert.deepEqual(sanitizeWindow({ ...WINDOW, url: 'https://metadata.google.internal/' }), WINDOW);
+  const badWindow = mapHits([datedHit('Fictional Daily', 'https://fictional-daily.example/a')], { window: { start: 'x', end: 'y', hours: 24 } });
+  assert.equal(badWindow.reason, 'window_missing');
+
+  const document = mapHits([
+    { ...datedHit('Fictional Daily', 'https://fictional-daily.example/a'), source_id: 'http://169.254.169.254/latest/meta-data' },
+    datedHit('https://metadata.google.internal/', 'https://second-outlet.example/b')
+  ]);
+  assert.equal(document.clusters[0].members[0].source_id, 'newsjack:fictional-daily');
+  assert.equal(document.clusters[0].members.length, 1);
+  assert.equal(document.sources_checked[0].rejected_incomplete, 1);
+  assert.ok(!JSON.stringify(document).includes('169.254') && !JSON.stringify(document).includes('metadata.google'));
+
+  const dir = await mkdtemp(join(tmpdir(), 'newsjack-discovery-window-'));
+  await writeFile(join(dir, 'clustered_candidates.json'), JSON.stringify({
+    window: { start: 'bogus', end: 'bogus', hours: 24, extra: 'https://10.0.0.1/' },
+    clusters: [{ members: [datedHit('Fictional Daily', 'https://fictional-daily.example/a')] }]
+  }));
+  const fromArtifact = await artifactAdapter(dir);
+  assert.equal(fromArtifact.status, 'ok', 'an invalid artifact window falls back to the caller window');
+  assert.deepEqual(fromArtifact.window, WINDOW);
+});
+
+test('non-array clusters and non-object cluster fields are invalid artifacts, and unnamed-group rejections point at the built cluster', async () => {
+  for (const body of ['{"clusters": {"a": 1}}', '{"clusters": "x"}', '{"cluster": "x"}', '{"clusters": null}']) {
+    const dir = await mkdtemp(join(tmpdir(), 'newsjack-discovery-clusters-shape-'));
+    await writeFile(join(dir, 'clustered_candidates.json'), body);
+    const document = await artifactAdapter(dir);
+    assert.equal(document.reason, 'artifacts_invalid', body);
+    assert.equal(document.sources_checked[0].error, 'artifact_shape_invalid', body);
+  }
+  const document = mapHits([
+    datedHit('Fictional Daily', 'https://fictional-daily.example/a'),
+    datedHit('Unrelated Gazette', 'https://unrelated-gazette.example/x', 'different_story')
+  ]);
+  const rejection = document.sources_checked[0].rejected_members[0];
+  assert.equal(rejection.cluster_id, document.clusters[0].cluster_id);
+  assert.equal(rejection.group_index, 0);
+});
+
+test('shared wire and aggregator hosts do not merge distinct outlets, and an outlet path marker does not unmerge one', () => {
+  const A = 'https://alpha-post.example/fare-a';
+  const B = 'https://beta-herald.example/fare-b';
+  const origin = sameStoryOrigin([A, B]);
+  const viaAggregator = mapHits(
+    [
+      datedHit('Alpha Post', A),
+      datedHit('Beta Herald', B, 'same_story'),
+      datedHit('Alpha Post', 'https://news.yahoo.com/alpha-fare', 'syndicated'),
+      datedHit('Beta Herald', 'https://news.yahoo.com/beta-fare', 'syndicated'),
+      datedHit('Alpha Post', 'https://www.prnewswire.com/news-releases/alpha', 'syndicated'),
+      datedHit('Beta Herald', 'https://www.prnewswire.com/news-releases/beta', 'syndicated')
+    ],
+    { origin }
+  );
+  assert.deepEqual(independentOutlets(viaAggregator), ['Alpha Post', 'Beta Herald']);
+
+  const ownSite = mapHits(
+    [
+      datedHit('Alpha Post', A),
+      datedHit('Beta Herald', B, 'same_story'),
+      datedHit('Alpha Post', 'https://beta-herald.example/statement/alpha-column', 'syndicated')
+    ],
+    { origin }
+  );
+  assert.equal(ownSite.clusters[0].independent_reporting.length, 0, 'an Alpha Post record on the Beta Herald site ties them together');
 });

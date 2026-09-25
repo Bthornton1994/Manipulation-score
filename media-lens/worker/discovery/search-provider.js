@@ -31,6 +31,9 @@ function notImplemented(mode) {
 }
 
 export function assertSearchProviderModeImplemented(mode) {
+  if (typeof mode !== 'string') {
+    throw Object.assign(new Error(`Unknown search provider mode: ${String(mode)}`), { code: 'UNKNOWN_SEARCH_PROVIDER_MODE' });
+  }
   if (SEARCH_PROVIDER_MODE_STATUS[mode] === 'implemented') return;
   if (Object.prototype.hasOwnProperty.call(SEARCH_PROVIDER_MODE_STATUS, mode)) throw notImplemented(mode);
   throw Object.assign(new Error(`Unknown search provider mode: ${String(mode)}`), { code: 'UNKNOWN_SEARCH_PROVIDER_MODE' });

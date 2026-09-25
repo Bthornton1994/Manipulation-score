@@ -14,7 +14,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { abortableDelay, throwIfAborted } from '../abort-utils.js';
-import { mapNewsjackEvidenceToStoryDiscovery } from '../discovery/newsjack-discovery.js';
+import { mapNewsjackEvidenceToStoryDiscovery, sanitizeWindow } from '../discovery/newsjack-discovery.js';
 import { normalizedURLKey } from '../url-key.js';
 
 export function emptyStoryContext(provenance = 'none') {
@@ -157,7 +157,7 @@ export function createNewsjackAdapter({ mode, fixtureId = null, fixtureDir = nul
       }
       return mapNewsjackEvidenceToStoryDiscovery({
         retrievedAt,
-        window: parsed.window || window,
+        window: sanitizeWindow(parsed.window) || window,
         providerId: 'fixture:newsjack_shaped',
         providerMode: 'fixture',
         freshnessGrade: 'fixture',
@@ -173,7 +173,7 @@ export function createNewsjackAdapter({ mode, fixtureId = null, fixtureDir = nul
         : { ok: false, error: 'artifacts_dir_missing', clusters: [], origin: null, window: null };
       return mapNewsjackEvidenceToStoryDiscovery({
         retrievedAt,
-        window: loaded.window || window,
+        window: sanitizeWindow(loaded.window) || window,
         providerId: 'newsjack:artifacts',
         providerMode: 'fixture',
         freshnessGrade: 'unknown',
@@ -198,15 +198,20 @@ function isPlainObject(value) {
 // that is not an object, or members that are not an array). Callers treat
 // null as an invalid artifact instead of guessing.
 function discoveryClusters(parsed) {
+  const has = (key) => Boolean(parsed) && Object.prototype.hasOwnProperty.call(parsed, key);
   let groups;
-  if (Array.isArray(parsed?.clusters)) {
+  if (has('clusters')) {
+    if (!Array.isArray(parsed.clusters)) return null;
     groups = parsed.clusters;
-  } else if (parsed && Object.prototype.hasOwnProperty.call(parsed, 'members')) {
+  } else if (has('members')) {
     groups = [{ cluster_id: parsed.cluster_id || null, members: parsed.members }];
+  } else if (has('cluster')) {
+    const cluster = parsed.cluster;
+    if (Array.isArray(cluster)) groups = cluster;
+    else if (isPlainObject(cluster)) groups = [cluster];
+    else return null;
   } else {
-    const cluster = parsed?.cluster;
-    if (cluster === undefined || cluster === null) return [];
-    groups = Array.isArray(cluster) ? cluster : [cluster];
+    return [];
   }
   const out = [];
   for (const item of groups) {

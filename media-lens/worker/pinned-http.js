@@ -29,6 +29,13 @@ import {
 } from './address-policy.js';
 
 const ALLOWED_CONTENT_TYPES = new Set(['text/html', 'application/xhtml+xml']);
+// Feed retrieval only. Article reads stay on ALLOWED_CONTENT_TYPES.
+export const FEED_CONTENT_TYPES = new Set([
+  'application/rss+xml',
+  'application/atom+xml',
+  'text/xml',
+  'application/xml'
+]);
 const ALLOWED_ENCODINGS = new Set(['identity', 'gzip', 'x-gzip', 'deflate', 'br']);
 const DEFAULT_CONNECT_TIMEOUT_MS = 3000;
 const DEFAULT_MAX_HEADER_BYTES = 8192;
@@ -97,6 +104,12 @@ function contentTypeAllowed(value) {
   if (!value) return 'missing';
   const mime = value.split(';')[0].trim().toLowerCase();
   return ALLOWED_CONTENT_TYPES.has(mime) ? 'ok' : 'blocked';
+}
+
+export function feedContentTypeAllowed(value) {
+  if (!value) return 'missing';
+  const mime = value.split(';')[0].trim().toLowerCase();
+  return FEED_CONTENT_TYPES.has(mime) ? 'ok' : 'blocked';
 }
 
 function looksLikeHtml(buffer) {
@@ -190,6 +203,16 @@ function requestHeaders(parsed) {
     'Accept-Language': 'en',
     Connection: 'close',
     'User-Agent': 'ManipulationScore-MediaLens/0.1 (local worker; fail-closed GET)'
+  };
+}
+
+export function feedRequestHeaders(parsed) {
+  return {
+    Host: parsed.host,
+    Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9',
+    'Accept-Language': 'en',
+    Connection: 'close',
+    'User-Agent': 'ManipulationScore-MediaLens/0.1 (local worker; fail-closed feed GET)'
   };
 }
 
@@ -405,7 +428,7 @@ export function performPinnedGet(ctx) {
   return performPinnedRequest({
     ...ctx,
     method: 'GET',
-    headers: requestHeaders(ctx.parsed),
+    headers: ctx.headers || requestHeaders(ctx.parsed),
     body: null
   });
 }
@@ -460,6 +483,36 @@ export async function finalizePinnedResponse(response, { pin, maxBytes, signal, 
         throw taggedError('Response HTML exceeded parser limits', 'TOO_LARGE');
       }
       return html;
+    },
+    async readFeed() {
+      const contentLength = headerValue(response.headers, 'content-length');
+      if (contentLength && /^\d+$/.test(contentLength) && Number(contentLength) > maxBytes) {
+        throw taggedError('Response exceeded the size limit', 'TOO_LARGE');
+      }
+      const encodingRaw = (headerValue(response.headers, 'content-encoding') || 'identity').trim().toLowerCase();
+      const encoding = encodingRaw === '' ? 'identity' : encodingRaw;
+      if (!ALLOWED_ENCODINGS.has(encoding)) {
+        throw taggedError(`Unsupported Content-Encoding: ${encoding}`, 'FETCH_ERROR');
+      }
+      const typeCheck = feedContentTypeAllowed(headerValue(response.headers, 'content-type'));
+      const buffer = await readDecodedBody(asReadable(response.body), {
+        encoding: encoding === 'identity' ? 'identity' : encoding,
+        maxBytes,
+        signal
+      });
+      if (typeCheck !== 'ok') {
+        throw taggedError('Response Content-Type is not an allowed feed type', 'BAD_CONTENT_TYPE');
+      }
+      const xml = buffer.toString('utf8');
+      const deadlineMs = parseTimeoutMs ? Date.now() + parseTimeoutMs : 0;
+      const over = htmlTokenBudgetExceeded(xml, { maxTokens, maxNesting, deadlineMs });
+      if (over === 'parse_timeout') {
+        throw taggedError('Feed parse exceeded the time limit', 'TIMEOUT');
+      }
+      if (over) {
+        throw taggedError('Response feed exceeded parser limits', 'TOO_LARGE');
+      }
+      return xml;
     }
   };
 }

@@ -5,7 +5,9 @@ import { readFile } from 'node:fs/promises';
 import { createServer } from '../media-lens/worker/server.js';
 import { loadConfig } from '../media-lens/worker/config.js';
 import { SOURCE_REGISTRY, approvedSources } from '../media-lens/worker/discovery/source-registry.js';
-import { discoverStories, NOT_LIVE_MESSAGE } from '../media-lens/worker/discovery/discover.js';
+import { discoverStories, feedDocumentText, fetchFeedSafely as discoveryFeedClient, NOT_LIVE_MESSAGE } from '../media-lens/worker/discovery/discover.js';
+import { fetchArticleSafely, fetchFeedSafely } from '../media-lens/worker/safe-fetch.js';
+import { FEED_CONTENT_TYPES } from '../media-lens/worker/pinned-http.js';
 import { validateStoryDiscovery } from '../media-lens/schema/story-discovery.js';
 import { OMISSION_NOTE } from '../media-lens/worker/discovery/cluster.js';
 import { loadMediaLensPage } from './helpers/media-lens-dom.js';
@@ -139,7 +141,7 @@ test('mocked feeds discover, cluster, and compare without treating same-story or
   assert.equal(document.sources_checked[0].stale_or_undated_excluded, 1);
   const original = cluster.members.find((member) => member.source_id === 'fixture-daily');
   assert.equal(original.independent_reporting, true);
-  assert.equal(original.labeling_basis, 'recorded_origin_evidence_first_independent_report');
+  assert.equal(original.labeling_basis, 'feed_supplied_tag_first_independent_report');
   const wire = cluster.members.find((member) => member.canonical_url.includes('prnewswire.com'));
   assert.equal(wire.relation, 'syndicated');
   assert.equal(wire.independent_reporting, false);
@@ -396,6 +398,107 @@ test('local preview labels fixture discovery and the live host does not request 
   } finally {
     live.restore();
   }
+});
+
+const FEED_XML =
+  '<rss version="2.0"><channel><item><title>Harbor bridge inspection closes one lane</title><link>https://www.fixture-daily.test/2026/09/25/harbor-bridge</link><pubDate>Thu, 25 Sep 2026 11:00:00 GMT</pubDate></item></channel></rss>';
+
+function feedHttpResponse(pin, contentType, body = FEED_XML) {
+  return {
+    status: 200,
+    headers: { 'content-type': contentType },
+    rawHeaders: ['Content-Type', contentType],
+    remoteAddress: pin.address,
+    body
+  };
+}
+
+test('production feed client accepts RSS and Atom types and returns body', async () => {
+  assert.equal(discoveryFeedClient, fetchFeedSafely);
+  const types = [...FEED_CONTENT_TYPES, 'application/rss+xml; charset=utf-8'];
+  for (const contentType of types) {
+    let calls = 0;
+    const fetched = await fetchFeedSafely('https://feeds.example.test/rss.xml', {
+      timeoutMs: 500,
+      maxBytes: 8000,
+      urlAllowlist: ['feeds.example.test'],
+      lookupImpl: async () => [{ address: '8.8.8.8', family: 4 }],
+      requestImpl: async ({ pin, headers }) => {
+        calls += 1;
+        assert.match(headers.Accept, /application\/rss\+xml/);
+        return feedHttpResponse(pin, contentType);
+      }
+    });
+    assert.equal(calls, 1, contentType);
+    assert.equal(fetched.body, FEED_XML);
+    assert.equal(fetched.html, undefined);
+    assert.match(fetched.contentType, /xml/);
+  }
+
+  await assert.rejects(
+    () =>
+      fetchArticleSafely('http://8.8.8.8/feed.xml', {
+        timeoutMs: 500,
+        maxBytes: 8000,
+        requestImpl: async ({ pin }) => feedHttpResponse(pin, 'application/rss+xml')
+      }),
+    (err) => err.code === 'BAD_CONTENT_TYPE'
+  );
+  await assert.rejects(
+    () =>
+      fetchFeedSafely('https://feeds.example.test/page', {
+        timeoutMs: 500,
+        maxBytes: 8000,
+        urlAllowlist: ['feeds.example.test'],
+        lookupImpl: async () => [{ address: '8.8.8.8', family: 4 }],
+        requestImpl: async ({ pin }) =>
+          feedHttpResponse(pin, 'text/html', '<!doctype html><html><body><p>Public article fixture.</p></body></html>')
+      }),
+    (err) => err.code === 'BAD_CONTENT_TYPE'
+  );
+});
+
+test('feed client refuses unsafe URLs before the request, and html-only responses still cluster', async () => {
+  for (const url of ['https://127.0.0.1/feed.xml', 'http://feeds.example.test/rss.xml', 'https://user:pass@feeds.example.test/rss.xml']) {
+    let calls = 0;
+    await assert.rejects(
+      () =>
+        fetchFeedSafely(url, {
+          timeoutMs: 500,
+          maxBytes: 8000,
+          urlAllowlist: ['feeds.example.test'],
+          lookupImpl: async () => {
+            calls += 1;
+            return [{ address: '8.8.8.8', family: 4 }];
+          },
+          requestImpl: async () => {
+            calls += 1;
+            throw new Error('must not connect');
+          }
+        }),
+      (err) => ['BLOCKED_HOST', 'BAD_SCHEME', 'BAD_URL'].includes(err.code)
+    );
+    assert.equal(calls, 0, url);
+  }
+
+  const source = {
+    source_id: 'approved-example',
+    outlet: 'Example Outlet',
+    feed_url: 'https://feeds.example.test/rss.xml',
+    feed_host: 'feeds.example.test',
+    approval_status: 'approved'
+  };
+  const htmlOnly = await discoverStories({
+    config: loadConfig({ MEDIA_LENS_ENABLE_STORY_DISCOVERY: 'true' }),
+    now: NOW,
+    registry: [source],
+    fetchFeed: async () => ({ html: FEED_XML, contentType: 'application/rss+xml' })
+  });
+  assert.equal(htmlOnly.status, 'ok');
+  assert.equal(htmlOnly.clusters.length, 1);
+  assert.equal(htmlOnly.privacy.article_pages_fetched, false);
+  const emptyBody = feedDocumentText({ body: '', html: FEED_XML });
+  assert.equal(emptyBody, FEED_XML);
 });
 
 test('labeled fixture files stay out of discovery until the fixture flag is set on a fixture worker', async () => {

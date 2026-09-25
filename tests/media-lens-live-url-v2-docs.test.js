@@ -127,6 +127,13 @@ test('Live URL v2 implementation plan maps Issue #118 gates and separates the se
 const FRONTEND_DEPLOYMENT = 'docs/media-lens-frontend-deployment.md';
 const CADDYFILE = 'media-lens/deploy/Caddyfile';
 
+// The worker's abstention copy when the ESTIMATED budget record cannot be
+// read or a durable write of it fails. Docs quote it exactly.
+const BUDGET_UNAVAILABLE_COPY =
+  'The TypeSafe ESTIMATED budget record could not be read or updated, so no live Jev analysis was performed.';
+const OLD_BUDGET_UNAVAILABLE_COPY =
+  'The TypeSafe ESTIMATED budget record could not be read, so no live Jev analysis was performed.';
+
 // The exact blocker statement for live coverage. It must stay identical in
 // every place that explains why story discovery and coverage comparison are
 // not live, so a future edit cannot soften one copy.
@@ -152,7 +159,8 @@ test('frontend deployment doc is a worker-restart release procedure, not a front
   assert.match(doc, /\*\*not frontend-only\*\*/);
   assert.match(doc, /PR #146 `live_fixture_disabled`, PR #145 timeout call\s+accounting, PR #149 fail-closed budget record/);
   assert.match(doc, /git -C \/opt\/media-lens\/app rev-parse HEAD/);
-  assert.match(doc, /sudo md5sum \/etc\/media-lens\/worker\.env/);
+  assert.match(doc, /md5sum \/etc\/media-lens\/worker\.env > \/root\/media-lens-worker-env\.md5/);
+  assert.match(doc, /sudo md5sum -c --quiet \/root\/media-lens-worker-env\.md5/);
   assert.match(doc, /systemctl cat media-lens-worker/);
   assert.match(doc, /sudo systemctl restart media-lens-worker/);
   assert.match(doc, /Python 3\.12 or newer and Trafilatura `2\.2\.0`/);
@@ -212,10 +220,23 @@ test('frontend deployment budget checks mirror the budget store schema and lock 
     .sort()
     .join(',');
   assert.ok(doc.includes(`"${keys}"`), 'the doc validity check must list exactly the budget store keys');
-  const unreadableCopy = 'The TypeSafe ESTIMATED budget record could not be read, so no live Jev analysis was performed.';
-  const analyzeSrc = await readFile('media-lens/worker/analyze.js', 'utf8');
-  assert.ok(analyzeSrc.includes(unreadableCopy), 'analyze.js must still use the documented abstention copy');
-  assert.ok(doc.replace(/\s+/g, ' ').includes(unreadableCopy), 'the deploy doc must quote the abstention copy exactly');
+  const flat = doc.replace(/\s+/g, ' ');
+  assert.ok(flat.includes(BUDGET_UNAVAILABLE_COPY), 'the deploy doc must quote the abstention copy exactly');
+  assert.ok(!flat.includes(OLD_BUDGET_UNAVAILABLE_COPY), 'the deploy doc must not quote the old abstention copy');
+  // A failed write now fails closed until repair and restart; the doc must
+  // not describe the old keep-in-memory-and-continue behavior.
+  assert.match(flat, /A failed budget write also fails closed after this release\./);
+  assert.match(flat, /the lock cannot be created, the lock wait times out, the directory is not writable, or the disk is full/);
+  assert.match(flat, /until an operator repairs the record and restarts the worker/);
+  assert.match(flat, /Same-month counts read from the file never lower the worker's in-memory counts\./);
+  assert.doesNotMatch(flat, /spend is undercounted/);
+  assert.doesNotMatch(flat, /give up and keep the calls in memory only/);
+  // Writability must be checked as the systemd unit sees it.
+  assert.match(flat, /A shell `test -w` is not enough on its own\./);
+  assert.match(flat, /`ProtectSystem=`, `ReadOnlyPaths=`, `ReadWritePaths=`/);
+  assert.match(flat, /systemctl show media-lens-worker -p User -p ProtectSystem -p ReadOnlyPaths/);
+  assert.match(flat, /sudo systemd-run --wait --pipe --quiet -p User="\$WORKER_USER"/);
+  assert.match(flat, /This repository does not record the unit's sandbox settings/);
 
   const storeSrc = await readFile('media-lens/worker/typesafe-budget-store.js', 'utf8');
   assert.match(storeSrc, /maxAttempts = 200, baseDelayMs = 2/);
@@ -223,7 +244,7 @@ test('frontend deployment budget checks mirror the budget store schema and lock 
   let totalMs = 0;
   for (let attempt = 0; attempt < 200; attempt += 1) totalMs += 2 + Math.min(attempt, 40);
   assert.equal(Math.round(totalMs / 100) / 10, 7.6);
-  assert.match(doc, /about 7\.6 s \(200\s+attempts\)/);
+  assert.match(doc, /about 7\.6\s+s\s+\(200\s+attempts\)/);
 });
 
 test('Media Lens docs state the worker/config.js limits, not the stale 10 per minute and 30 s values', async () => {
@@ -247,16 +268,44 @@ test('the coverage blocker statement is identical wherever live coverage is expl
 test('media-lens/README.md quotes the worker copy for the #146 and #149 fixes exactly', async () => {
   const readme = await readFile('media-lens/README.md', 'utf8');
   const serverSrc = await readFile('media-lens/worker/server.js', 'utf8');
-  const analyzeSrc = await readFile('media-lens/worker/analyze.js', 'utf8');
   const fixtureCopy =
     'Fixture examples are disabled in live mode. Use URL mode for approved public sources, or run a fixture-only worker for local development.';
-  const budgetCopy = 'The TypeSafe ESTIMATED budget record could not be read, so no live Jev analysis was performed.';
   assert.ok(serverSrc.includes(fixtureCopy));
-  assert.ok(analyzeSrc.includes(budgetCopy));
   assert.ok(readme.includes(fixtureCopy));
-  assert.ok(readme.includes(budgetCopy));
+  assert.ok(readme.includes(BUDGET_UNAVAILABLE_COPY));
+  assert.ok(!readme.includes(OLD_BUDGET_UNAVAILABLE_COPY));
   assert.match(readme, /`400 live_fixture_disabled`/);
   assert.match(readme, /This rejection writes no audit line/);
+  assert.match(readme, /\*\*Release review, failed budget write\.\*\*/);
+  assert.match(readme, /until an operator repairs the record and restarts the worker/);
+});
+
+test('ops runbook describes the fail-closed budget write with the exact copy', async () => {
+  const runbook = (await readFile(RUNBOOK, 'utf8')).replace(/\s+/g, ' ');
+  assert.ok(runbook.includes(BUDGET_UNAVAILABLE_COPY));
+  assert.ok(!runbook.includes(OLD_BUDGET_UNAVAILABLE_COPY));
+  assert.match(runbook, /a durable write of the record fails for any reason/);
+  assert.match(runbook, /until an operator repairs the record and restarts it/);
+  assert.doesNotMatch(runbook, /an unwritable file undercounts spend/);
+});
+
+// This cross-check follows the release-review worker change to analyze.js.
+// It fails until that change lands, so the docs and the worker cannot drift.
+test('the documented budget abstention copy is the copy analyze.js serves', async () => {
+  const analyzeSrc = await readFile('media-lens/worker/analyze.js', 'utf8');
+  assert.ok(analyzeSrc.includes(BUDGET_UNAVAILABLE_COPY), 'analyze.js must serve the documented budget abstention copy');
+  assert.ok(!analyzeSrc.includes(OLD_BUDGET_UNAVAILABLE_COPY), 'analyze.js must not keep the old budget abstention copy');
+});
+
+test('both READMEs document the 400 invalid_kind rejection', async () => {
+  const kinds = ['article', 'headline', 'excerpt', 'speech', 'ad', 'campaign', 'other_public'];
+  const schema = JSON.parse(await readFile('media-lens/schema/influence-graph.v1.json', 'utf8'));
+  assert.deepEqual(schema.properties.artifact.properties.kind.enum, kinds);
+  const readme = await readFile('media-lens/README.md', 'utf8');
+  assert.match(readme, /`400 invalid_kind` before any fetch or provider call/);
+  assert.ok(readme.includes(kinds.map((kind) => `\`${kind}\``).join(', ')), 'media-lens/README.md lists the artifact kinds');
+  const rootReadme = await readFile('README.md', 'utf8');
+  assert.match(rootReadme, /`400 invalid_kind` before any fetch or provider call/);
 });
 
 test('Media Lens docs and trust pages keep Issue #118 open', async () => {

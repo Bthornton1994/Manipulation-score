@@ -23,7 +23,7 @@ Recorded 2026-09-25 from Issue #118 records dated up to 2026-09-21 PT. This sect
 
 | Field | Last recorded value | Issue #118 record |
 | --- | --- | --- |
-| Host | `ml-jev.manipulationscore.com`: DigitalOcean droplet `ml-jev` (sfo3), systemd unit `media-lens-worker` on `127.0.0.1:8787`, Caddy in front | "H1 host setup status", "H1 final production-host verification packet" |
+| Host | `ml-jev.manipulationscore.com`: one cloud VM, systemd unit `media-lens-worker` on `127.0.0.1:8787`, Caddy in front. Provider resource identifiers are left out of this public document | "H1 host setup status", "H1 final production-host verification packet" |
 | Public routes | `/media-lens/` UI (three files plus shared assets), `/health`, `/analyze`. Everything else 404 | "Frontend deploy evidence" (`FRONTEND_DEPLOY_OK`) |
 | Activation | Owner-authorized Jev-only live URL, 2026-09-21 PT | "Jev-only live URL activation" |
 | Worker flags | `MEDIA_LENS_MODE=live`, `MEDIA_LENS_ENABLE_LIVE=true`, `MEDIA_LENS_ENABLE_LIVE_URL=true`, classifier.dev off, live pasted text off (`live_pasted_text_disabled` confirmed), Jev shadow flags off | "Jev-only live URL activation" |
@@ -31,11 +31,11 @@ Recorded 2026-09-25 from Issue #118 records dated up to 2026-09-21 PT. This sect
 | ESTIMATED TypeSafe budget | warn $20, hard stop $30 | "Ops blanks filled", owner waiver |
 | Email budget alerts | **WAIVED** by the owner (`WAIVE_EMAIL_ALERT_DELIVERY`). Outbound SMTP from the host timed out. There is no email monitoring. `/health` still shows `alert.credentialConfigured: true` because a credential file is installed | "Final host preflight", "Owner waiver: `WAIVE_EMAIL_ALERT_DELIVERY`" |
 | Newsjack artifacts | Not set and not approved, as far as the records show | none |
-| Incident owner | Bryant Thornton | "Ops blanks filled", Independent QA PASS |
+| Incident owner | Repository owner | "Ops blanks filled", Independent QA PASS |
 | Deputy | None (single owner) | "Ops blanks filled" |
-| Key rotation | Every 90 days plus emergency rotation; rotation owner Bryant Thornton | "Owner dispositions recorded" |
-| Access log | The host Caddy site keeps an access log (request metadata, not request bodies). Retention is not documented | "Frontend deploy evidence" (`FRONTEND_DEPLOY_OK`) |
-| Rollback references | Pre-canary snapshot `246404883`; fixture-flag env backup `/etc/media-lens/worker.env.fixture-restore.bak` | "H1 final production-host verification packet", "Jev-only live URL activation" |
+| Key rotation | Every 90 days plus emergency rotation; rotation owner: repository owner | "Owner dispositions recorded" |
+| Access log | The host Caddy site keeps an access log (request metadata, not request bodies). It is set in the host's web server configuration, which is not in this repository; the repository Caddyfile has no `log` directive. Retention is not yet documented | "Frontend deploy evidence" (`FRONTEND_DEPLOY_OK`) |
+| Rollback references | A pre-canary host snapshot and a `worker.env` backup with fixture flags exist. Their identifiers and paths are left out of this public document | "H1 final production-host verification packet", "Jev-only live URL activation" |
 
 Still not authorized on ml-jev: classifier.dev on any live path, live pasted text, Newsjack or any other news provider, and any accuracy, general-availability, or production-readiness claim. Release deploys follow `docs/media-lens-frontend-deployment.md`; the 2026-09 release changes worker code and needs a worker restart. Public disclosure of this preview: `privacy.html` (Media Lens live URL analysis) and `limitations.html`.
 
@@ -162,7 +162,7 @@ Figures are **ESTIMATED** planning math unless the operator has verified provide
 
 **Durable counter file (not LoadCredential):** default `/var/lib/media-lens/typesafe-budget.json`, override with `MEDIA_LENS_TYPESAFE_BUDGET_FILE`. Updates use an exclusive lock file (`typesafe-budget.json.lock`, mode `0600`) plus atomic tmp/rename writes so concurrent worker processes cannot lose increments. The worker creates the parent directory if needed and writes atomically with mode `0600`. Store only `month`, `calls`, `estimatedTokens`, `warnEmitted`, and a schema `version`. No article text, URLs, or credentials. Owner: the same unprivileged user running the worker (recommended). Survives process restart within the same UTC month; rolls forward automatically on month change.
 
-Failure behavior (PR #149 and the release fix that followed it): if the file exists but cannot be read or fails the schema check, live Jev fails closed before any provider call with "The TypeSafe ESTIMATED budget record could not be read, so no live Jev analysis was performed." The worker stays in that state until it restarts with a readable, valid file. A missing file starts the month at zero. A failed write keeps the new calls in memory only, and a later read of the older file can replace them, so an unwritable file undercounts spend. A stale `typesafe-budget.json.lock` makes each budget write spin for about 7.6 s (200 attempts) with the event loop blocked before it gives up. Pre-deploy checks for all of this: `docs/media-lens-frontend-deployment.md`.
+Failure behavior (PR #149 and the release-review fixes that followed it): if the file exists but cannot be read or fails the schema check, or if a durable write of the record fails for any reason (the lock cannot be created, the lock wait times out after about 7.6 s, the directory is not writable, or the disk is full), live Jev fails closed before any provider call with "The TypeSafe ESTIMATED budget record could not be read or updated, so no live Jev analysis was performed." After a failed write the worker keeps that analysis's call count in memory and marks the budget unavailable, so every later live analysis abstains. The worker stays in that state until an operator repairs the record and restarts it. Calls kept only in memory are lost at the restart; the `analyze_complete` audit line for the analysis whose write failed normally shows its `jev_calls`. Same-month counts read from the file never lower the in-memory counts. A missing file starts the month at zero. A stale `typesafe-budget.json.lock` makes the next budget write spin for about 7.6 s (200 attempts) with the event loop blocked, then fail, which stops live Jev as above. A systemd sandbox (`ProtectSystem=`, `ReadOnlyPaths=`, `ReadWritePaths=`) can make the budget directory read-only for the worker even when a shell `test -w` passes, so check writability as the unit sees it. Pre-deploy checks for all of this: `docs/media-lens-frontend-deployment.md`.
 
 Timeout accounting (PR #145): when the 15 s analysis timeout fires, Jev calls the adapter has reported by then, or within a 100 ms grace, are kept in the abstention graph and added to this record.
 
@@ -230,7 +230,7 @@ Ownership below is copied from the Issue #118 ops-blanks record (2026-09-21 PT, 
 
 | Role | Status |
 | --- | --- |
-| Incident owner | Bryant Thornton (Issue #118 ops-blanks record) |
+| Incident owner | Repository owner (Issue #118 ops-blanks record) |
 | Deputy | None, single owner (Issue #118 ops-blanks record) |
 | Alert channel | Email was recorded, then WAIVED by the owner on 2026-09-21 PT. No email monitoring |
 
@@ -241,7 +241,7 @@ Ownership below is copied from the Issue #118 ops-blanks record (2026-09-21 PT, 
 | Schema-invalid graphs reaching clients | Pipeline already validate-or-abstains; if bypassed, kill live Jev |
 | Abuse (bulk scoring people) | Rate limit / bind localhost; acceptable-use enforcement is human |
 | TypeSafe outage | Jev `unavailable` abstention; worker can still serve fixture |
-| Unreadable or invalid budget record | Live Jev already fails closed with its own copy. Fix the file's permissions or contents without lowering counts, record it on Issue #118, then restart the worker |
+| Unreadable, invalid, or unwritable budget record | Live Jev already fails closed with its own copy, including after a failed write. Fix the file's or directory's permissions (as the unit's sandbox sees them), free disk space, or remove a stale lock while the worker is stopped. Do not lower counts. Record it on Issue #118 with the `jev_calls` of the analysis whose write failed, then restart the worker |
 
 Public communications must not claim that Media Lens “detected an attack” against a named outlet or person. Stick to operational facts (HTTP status, error code, commit SHA).
 
@@ -262,9 +262,11 @@ The worker writes one JSON object per event to stderr (tests may capture a sink)
 | `analyze_complete` | Response about to be sent (latency and counts only) |
 | `classifier_dev_cascade` | Evaluation-only cascade ran (counts, model id, circuit state; never span text) |
 
-Allowed fields include `ts`, `event`, `mode`, `input_mode`, `error`, `scheme`, `host_key` (registrable DNS only, never IP literals or userinfo), `duration_ms`, `jev_calls`, `jev_failures`, `model_match`, `abstention_count`, `limiter`, `kill_switch`. `/health` has no `secrets` object and no bearer strings.
+The complete field list is `ALLOWED_KEYS` in `media-lens/worker/audit.js`; any other field is dropped: `ts`, `event`, `mode`, `input_mode`, `error`, `reason`, `scheme`, `host_key`, `host_kind`, `pinned_family`, `duration_ms`, `byte_length`, `hop_count`, `jev_calls`, `jev_failures`, `model_match`, `kill_switch`, `limiter`, `live_enabled`, `live_url_enabled`, `status`, `retries`, `abstention_reason`, `abstention_count`, `allowlist_configured`, `classifier_dev_enabled`, `cdev_calls`, `cdev_classifications`, `cdev_status`, `cdev_model`, `escalated_span_count`, `circuit_open`, `span_id`, `escalate_reason`, `disposition`, `calibrated`, `jev_choice`, `jev_confidence`, `cdev_label`, `cdev_confidence`, `cdev_reason`, `taxonomy_version`, `policy_version`.
 
-Requests rejected before these gates write no audit line: `consent_required`, `live_pasted_text_disabled`, `live_fixture_disabled`, invalid JSON, and oversized bodies. Audit lines never carry the client IP address, the full URL, the path or query, or article or span text. Under systemd they land in the journal (`journalctl -u media-lens-worker`); journal retention is set on the host and is not documented here. The host Caddy access log is separate and records request metadata, not request bodies.
+`server.js` currently emits a subset of these: `ts`, `event`, `mode`, `input_mode`, `error`, `limiter`, `kill_switch`, `live_enabled`, `live_url_enabled`, `allowlist_configured`, `status`, `duration_ms`, `jev_calls`, `jev_failures`, `model_match`, `abstention_reason`, `abstention_count`, the classifier.dev counters and state (`classifier_dev_enabled`, `cdev_calls`, `cdev_classifications`, `escalated_span_count`, `circuit_open`, and on `classifier_dev_cascade` also `cdev_model`, `cdev_status`, `taxonomy_version`, `policy_version`), and for refused or rate-limited URLs `scheme`, `host_kind` (`dns`, `ip_literal`, `unparseable`, or `missing`), and `host_key` (registrable DNS name only, never an IP literal or userinfo). `/health` has no `secrets` object and no bearer strings.
+
+Requests rejected before these gates write no audit line: `consent_required`, `live_pasted_text_disabled`, `live_fixture_disabled`, invalid JSON, and oversized bodies. Audit lines never carry the client IP address, the full URL, the path or query, or article or span text. Under systemd they land in the journal (`journalctl -u media-lens-worker`); journal retention is set on the host and is not documented here. The host Caddy access log is separate and records request metadata, not request bodies. It is set in the host's web server configuration, which is not in this repository, and its retention is not yet documented.
 
 ---
 

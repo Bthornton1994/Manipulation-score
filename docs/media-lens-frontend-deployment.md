@@ -7,9 +7,12 @@ worker host.
 
 Updated 2026-09-25. The release that follows PR #143 is **not frontend-only**.
 It changes worker code (PR #146 `live_fixture_disabled`, PR #145 timeout call
-accounting, PR #149 fail-closed budget record), and it is the first deploy
-whose article preparation needs the pinned Trafilatura virtualenv. The worker
-must be restarted. Use the release procedure below. Issue #118 stays open.
+accounting, PR #149 fail-closed budget record, and two release-review worker
+fixes: a failed budget write now stops live Jev until repair and restart, and
+`/analyze` rejects an unknown `kind` with `400 invalid_kind`), and it is the
+first deploy whose article preparation needs the pinned Trafilatura
+virtualenv. The worker must be restarted. Use the release procedure below.
+Issue #118 stays open.
 
 ## Route
 
@@ -35,7 +38,10 @@ as the site configuration. It serves only:
 path returns 404. No worker source, fixtures, tests, repository
 documentation, or credentials are served. Issue #118 records that the host's
 Caddy site merged these routes into an existing site that also keeps the ACME
-email, security headers, and an access log.
+email, security headers, and an access log. Those settings, including the
+access log, are part of the host's web server configuration, which is not in
+this repository: the repository Caddyfile has no `log` directive. Access log
+retention is not yet documented.
 
 Article preparation needs Python 3.12 or newer and the pinned Trafilatura
 virtualenv on the worker `PATH`. numpy 2.5.3 does not install on an older
@@ -74,7 +80,10 @@ alerts work: delivery from that host failed and the owner waived email alerts
 
 Run these on `ml-jev` as an operator with sudo. Never print
 `/etc/media-lens/worker.env` or credential files. Post the evidence to Issue
-#118 without secrets, article text, or credentialed URLs.
+#118 without secrets, article text, or credentialed URLs. Do not post the
+`worker.env` hash or any host identifier (snapshot IDs, backup file paths, IP
+addresses). Compare the hash on the host and record only `unchanged` or
+`changed`.
 
 ### Before
 
@@ -83,9 +92,12 @@ Run these on `ml-jev` as an operator with sudo. Never print
    ```sh
    git -C /opt/media-lens/app rev-parse HEAD        # PREVIOUS_SHA, write it down
    git -C /opt/media-lens/app status --porcelain    # must print nothing
-   sudo md5sum /etc/media-lens/worker.env           # hash only
+   sudo sh -c 'umask 077; md5sum /etc/media-lens/worker.env > /root/media-lens-worker-env.md5'   # stays on the host
    curl -fsS https://ml-jev.manipulationscore.com/health
    ```
+
+   The hash stays on the host in a root-only file. Do not print it or post
+   it. Later steps compare against it with `md5sum -c`.
 
 2. Confirm which checkout the worker runs from.
 
@@ -119,6 +131,7 @@ Run these on `ml-jev` as an operator with sudo. Never print
    BUDGET=/var/lib/media-lens/typesafe-budget.json
    sudo -u "$WORKER_USER" test -w "$(dirname "$BUDGET")" && echo dir-writable
    sudo -u "$WORKER_USER" test -r "$BUDGET" -a -w "$BUDGET" && echo file-readable-writable
+   df -h "$(dirname "$BUDGET")"                        # the filesystem must have free space
    sudo cat "$BUDGET"                                  # counts only
    sudo -u "$WORKER_USER" node -e '
    const r = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
@@ -133,23 +146,62 @@ Run these on `ml-jev` as an operator with sudo. Never print
 
    - The directory must be writable by the worker user. The lock file, the
      temporary file, and the atomic rename all happen there.
+   - A shell `test -w` is not enough on its own. A systemd sandbox in the unit
+     (`ProtectSystem=`, `ReadOnlyPaths=`, `ReadWritePaths=`,
+     `InaccessiblePaths=`) applies only inside the worker's service, so the
+     budget directory can be read-only for the worker even when the checks
+     above pass. Check writability as the unit sees it:
+
+     ```sh
+     systemctl show media-lens-worker -p User -p ProtectSystem -p ReadOnlyPaths \
+       -p ReadWritePaths -p InaccessiblePaths -p StateDirectory
+     ```
+
+     This repository does not record the unit's sandbox settings; read them
+     from this output. If `ProtectSystem` is `strict`, the budget directory
+     must be under a `ReadWritePaths` entry or be the unit's `StateDirectory`.
+     If it, or a parent, is under `ReadOnlyPaths` or `InaccessiblePaths`, the
+     worker cannot write there. To test directly, run the same check in a
+     transient service with each sandbox property that printed a non-empty
+     value, copied exactly from the output above. For example, if the output
+     showed `ProtectSystem=strict` and a `ReadWritePaths=` value:
+
+     ```sh
+     DIR=$(dirname "$BUDGET")
+     sudo systemd-run --wait --pipe --quiet -p User="$WORKER_USER" \
+       -p ProtectSystem=strict -p ReadWritePaths="<value from systemctl show>" \
+       sh -c "test -w $DIR && echo dir-writable-in-unit || echo DIR-NOT-WRITABLE-in-unit"
+     ```
+
+     Stop if it prints `DIR-NOT-WRITABLE-in-unit`.
    - A missing file is acceptable when the directory is writable. The worker
      creates it on the first recorded call.
    - If the file exists it must be readable and writable by the worker user and
      print `budget-record-valid`. This check mirrors
      `sanitizeBudgetStoreRecord` in `media-lens/worker/typesafe-budget-store.js`.
-     After this release an unreadable or invalid record makes the worker refuse
-     all live Jev with "The TypeSafe ESTIMATED budget record could not be read,
-     so no live Jev analysis was performed." until it restarts with a valid
-     file. A readable but unwritable file is worse: new calls stay in memory
-     and the next read replaces them with the older count, so spend is
-     undercounted. Do not hand-edit counts. Stop and record it on Issue #118.
+     An unreadable or invalid record makes the worker refuse all live Jev with
+     "The TypeSafe ESTIMATED budget record could not be read or updated, so no
+     live Jev analysis was performed." until an operator repairs the record and
+     restarts the worker. Do not hand-edit counts. Stop and record it on Issue
+     #118.
+   - A failed budget write also fails closed after this release. If the worker
+     cannot write the record for any reason (the lock cannot be created, the
+     lock wait times out, the directory is not writable, or the disk is full),
+     it keeps that analysis's calls in memory and marks the budget
+     unavailable. Every later live analysis then abstains before any provider
+     call with the same copy, until an operator repairs the record and
+     restarts the worker. Calls kept only in memory are lost at the restart,
+     so the file can be short by the calls of the analysis whose write failed.
+     That analysis's `analyze_complete` audit line normally shows its
+     `jev_calls`; record that number on Issue #118. Same-month counts read
+     from the file never lower the worker's in-memory counts.
    - `typesafe-budget.json.lock` should not exist while no analysis is
-     running. A stale lock makes every budget write spin for about 7.6 s (200
-     attempts) with the worker's event loop blocked, then give up and keep the
-     calls in memory only. Remove a stale lock only while the worker is stopped
-     (between `systemctl stop` and `systemctl start` in the deploy step), and
-     record that you did.
+     running. A stale lock makes the next budget write spin for about 7.6 s
+     (200 attempts) with the worker's event loop blocked, then fail, which
+     stops live Jev until repair and restart as described above. Remove a
+     stale lock only while the worker is stopped (`sudo systemctl stop
+     media-lens-worker` first; the restart in the deploy step starts it
+     again), and record that you did.
 
 5. No Caddy change is needed. `media-lens/deploy/Caddyfile` is unchanged since
    the deployed frontend commit `1d3f379`.
@@ -162,7 +214,7 @@ git -C /opt/media-lens/app checkout --detach MERGED_SHA
 git -C /opt/media-lens/app rev-parse HEAD        # must equal MERGED_SHA
 sudo systemctl restart media-lens-worker
 systemctl is-active media-lens-worker            # active
-sudo md5sum /etc/media-lens/worker.env           # must equal the hash recorded before
+sudo md5sum -c --quiet /root/media-lens-worker-env.md5 && echo worker.env-unchanged || echo worker.env-CHANGED
 ```
 
 Caddy serves the UI files from the checkout, so the new UI is live as soon as
@@ -267,22 +319,26 @@ match.
    read, so nothing is fetched), then `"killSwitch":true`, then
    `"killSwitch":false` after clearing. If no kill file is configured, the
    only switch is `MEDIA_LENS_KILL_SWITCH=true` in `worker.env` plus a
-   restart. That changes the env hash, so record the new hash.
+   restart. That changes `worker.env`, so record the env comparison as
+   `changed`, say why, and do not post the new hash.
 
 ### Rollback
 
 ```sh
 git -C /opt/media-lens/app checkout --detach PREVIOUS_SHA
 sudo systemctl restart media-lens-worker
-sudo md5sum /etc/media-lens/worker.env           # unchanged
+sudo md5sum -c --quiet /root/media-lens-worker-env.md5 && echo worker.env-unchanged || echo worker.env-CHANGED
 curl -fsS https://ml-jev.manipulationscore.com/health
 ```
 
 Caddy is unchanged, so there is nothing to roll back there. A commit from
 before PR #146 accepts `mode: "fixture"` on a live worker and runs live Jev on
 fixture articles without the allowlist. A commit from before PR #149 restarts
-the month's count at zero when the budget file is unreadable. If you roll back
-past either, assert the kill switch until a fixed commit is deployed again.
+the month's count at zero when the budget file is unreadable. A commit from
+before the release-review budget fix keeps serving live Jev after a failed
+budget write, keeps those calls in memory only, and can undercount spend. If
+you roll back past any of these, assert the kill switch until a fixed commit
+is deployed again.
 
 ## Other deploys triggered by merging to main
 

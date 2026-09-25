@@ -310,6 +310,22 @@ test('URL mode is marked experimental and not production-ready', async () => {
   assert.match(js, /not production-ready/);
 });
 
+// Negated forms are the only allowed uses of these terms in the READMEs.
+const ALLOWED_READINESS_NEGATIONS = [/\b(?:not|never)\s+(?:a\s+)?production-ready\b/gi, /\bnot\s+(?:yet\s+)?generally available\b/gi];
+const READINESS_CLAIM =
+  /production[- ]ready|production readiness|ready for production|generally available|general availability|\bGA\b/i;
+
+test('README.md and media-lens/README.md never claim Media Lens is production-ready or generally available', async () => {
+  for (const path of ['README.md', 'media-lens/README.md']) {
+    const readme = await readFile(path, 'utf8');
+    assert.match(readme, /not production-ready/, `${path} keeps its not production-ready statement`);
+    let rest = readme;
+    for (const negation of ALLOWED_READINESS_NEGATIONS) rest = rest.replace(negation, '');
+    const claim = rest.match(READINESS_CLAIM);
+    assert.equal(claim, null, `${path} has a readiness or availability claim near: ${claim ? rest.slice(Math.max(0, claim.index - 80), claim.index + 40) : ''}`);
+  }
+});
+
 test('live Jev without MEDIA_LENS_ENABLE_LIVE_URL cannot open article fetch', async () => {
   const config = loadConfig({
     MEDIA_LENS_MODE: 'live',

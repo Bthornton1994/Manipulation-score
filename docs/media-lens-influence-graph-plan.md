@@ -88,7 +88,7 @@ artifact:
   timestamp_precision: "time" | "date" | "none"
   language: "en" | "und"
   text_sha256: string                text_length_chars: integer
-  paywall_detected: boolean          (true -> graph-level abstention "paywall"; never bypass)
+  paywall_detected: boolean          (true -> graph-level "paywall" note; only the visible excerpt is analyzed; never bypass)
   authorization: { user_asserted_public: boolean, consent_at: ISO | null }
 
 spans[]:
@@ -206,7 +206,7 @@ Newsjack code intended to be copied or ported, and attribution:
 
 ## 7. Preparation layer, limits, untrusted text
 
-`prepare.js` accepts `{ mode: "url" | "pasted_text" | "fixture", url?, html?, text?, kind }`. In v1 the worker fetches a URL only in live mode; fixture mode reads `fixtures/articles/`. Steps: strip `<script>`, `<style>`, `<template>`, comments, and elements with `hidden`, `aria-hidden="true"`, or inline `display:none`; select the first `<article>`, or the document root when the page has no `<article>`; keep a walked block only when its normalized text appears in the Trafilatura paragraph text, and if no content blocks remain fall back to one block per Trafilatura line; collect `<meta property="article:published_time">`, `og:title`, `<link rel=canonical>`, `author` meta and JSON-LD `datePublished`/`dateModified` (parse only, never execute); detect paywall markers (`isAccessibleForFree: false`, truncated body under 400 chars with a subscription CTA) and abstain instead of retrying, using cookies, or AMP/cached mirrors; segment into paragraphs then sentences (reuse patterns similar to `text-normalize.js` but do not import it); assign roles; propose claim candidates (numerals, percentages, dates, "according to", "found that", "announced"); compute `text_sha256`.
+`prepare.js` accepts `{ mode: "url" | "pasted_text" | "fixture", url?, html?, text?, kind }`. In v1 the worker fetches a URL only in live mode; fixture mode reads `fixtures/articles/`. Steps: strip `<script>`, `<style>`, `<template>`, comments, and elements with `hidden`, `aria-hidden="true"`, or inline `display:none`; select the first `<article>`, or the document root when the page has no `<article>`; keep a walked block only when its normalized text appears in the Trafilatura paragraph text, and if no content blocks remain fall back to one block per Trafilatura line; collect `<meta property="article:published_time">`, `og:title`, `<link rel=canonical>`, `author` meta and JSON-LD `datePublished`/`dateModified` (parse only, never execute); detect paywall markers (`isAccessibleForFree: false`, truncated body under 400 chars with a subscription CTA), analyze only the visible excerpt, and add a graph-level `paywall` note instead of retrying, using cookies, or AMP/cached mirrors; segment into paragraphs then sentences (reuse patterns similar to `text-normalize.js` but do not import it); assign roles; propose claim candidates (numerals, percentages, dates, "according to", "found that", "announced"); compute `text_sha256`.
 
 Limits (config, enforced in `server.js` and `prepare.js`): request body 512 KB; prepared text 60,000 chars; 200 spans; 5 analyses per minute per worker (`MEDIA_LENS_MAX_ANALYSES_PER_MINUTE`); 160 Jev calls per analysis; 8 s per Jev call; 15 s per analysis (`MEDIA_LENS_PER_ANALYSIS_TIMEOUT_MS`). Values corrected 2026-09-25 to match `worker/config.js`; the original plan said 10 per minute and 30 s. Exceeding a limit yields HTTP 413/429 and a graph with a single `oversized_input` or `engine_unavailable` abstention rather than a partial result.
 
@@ -310,7 +310,7 @@ Conflicts requiring owner approval (quoted text is verbatim from the current fil
 No other exact conflicts were found with `VISION.md`, `acceptable-use.html`, or `methodology.html`. Tensions to record (not conflicts):
 
 - T1 `VISION.md` "Who we serve": "The product is not built for spectators scoring public figures". Media Lens will be used on speeches and campaign material by public figures. Mitigated by no score, no person field, banned phrases, artifact-only framing; the owner should confirm this reading.
-- T2 `acceptable-use.html` "Prohibited uses": "Upload or analyze content you do not have permission to review." Public articles are readable by design; paywalled content is abstained, not bypassed. The consent checkbox records the user's assertion.
+- T2 `acceptable-use.html` "Prohibited uses": "Upload or analyze content you do not have permission to review." Public articles are readable by design; for paywalled content only the visible excerpt is analyzed, and the paywall is not bypassed. The consent checkbox records the user's assertion.
 
 ## 13. Open questions that would materially change implementation
 

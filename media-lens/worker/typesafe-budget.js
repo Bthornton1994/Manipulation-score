@@ -41,7 +41,15 @@ export function createTypesafeBudget({
   now = () => Date.now()
 } = {}) {
   const currentMonth = utcMonthKey(now());
-  const persisted = storePath ? readBudgetStore(storePath, io) : null;
+  let storeUnavailable = false;
+  let persisted = null;
+  if (storePath) {
+    try {
+      persisted = readBudgetStore(storePath, io);
+    } catch {
+      storeUnavailable = true;
+    }
+  }
   let month = persisted && persisted.month === currentMonth ? persisted.month : currentMonth;
   let calls = persisted && persisted.month === currentMonth ? persisted.calls : 0;
   let estimatedTokens = persisted && persisted.month === currentMonth ? persisted.estimatedTokens : 0;
@@ -58,25 +66,18 @@ export function createTypesafeBudget({
   function refreshFromStore() {
     if (!storePath) return;
     try {
-      const record = mutateBudgetStore(
-        storePath,
-        (current) => {
-          const activeMonth = utcMonthKey(now());
-          if (current && current.month === activeMonth) {
-            syncFromRecord(current);
-          } else if (activeMonth !== month) {
-            month = activeMonth;
-            calls = 0;
-            estimatedTokens = 0;
-            warnEmitted = false;
-          }
-          return null;
-        },
-        io
-      );
-      if (record) syncFromRecord(record);
+      const record = readBudgetStore(storePath, io);
+      const activeMonth = utcMonthKey(now());
+      if (record && record.month === activeMonth) {
+        syncFromRecord(record);
+      } else if (activeMonth !== month) {
+        month = activeMonth;
+        calls = 0;
+        estimatedTokens = 0;
+        warnEmitted = false;
+      }
     } catch {
-      // Best-effort refresh when the store path is unavailable.
+      storeUnavailable = true;
     }
   }
 
@@ -148,6 +149,7 @@ export function createTypesafeBudget({
         estimatedUsd: estimatedUsdForCallCount(calls),
         basis: 'ESTIMATED',
         persisted: Boolean(storePath),
+        storeUnavailable,
         calculationInputs: {
           estimatedUsdPerCall,
           estimatedTokensPerCall,
@@ -157,12 +159,16 @@ export function createTypesafeBudget({
       };
     },
     isStopped() {
+      if (storeUnavailable) return true;
       refreshFromStore();
+      if (storeUnavailable) return true;
       roll();
       return estimatedUsdForCallCount(calls) >= stopUsd;
     },
     wouldExceed(additionalCalls = 1) {
+      if (storeUnavailable) return true;
       refreshFromStore();
+      if (storeUnavailable) return true;
       roll();
       const n = Number(additionalCalls);
       if (!Number.isFinite(n) || n < 0) return true;

@@ -26,10 +26,10 @@ async function golden(id) {
   return JSON.parse(await readFile(`media-lens/fixtures/expected/${id}.graph.json`, 'utf8'));
 }
 
-test('home is a media-intelligence workspace with separate story search and URL entry', async () => {
+test('home keeps story search (catalog mode only) separate from URL entry', async () => {
   const html = await readFile('media-lens/index.html', 'utf8');
-  assert.match(html, /media-intelligence workspace/i);
-  assert.match(html, /id="story-explore-heading"/);
+  assert.match(html, /<h3 id="story-explore-heading">Made-up example stories<\/h3>/);
+  assert.match(html, /<div class="ml-fixture-explorer" id="fixture-explorer" data-local-only hidden>/);
   assert.match(html, /id="url-entry-heading"/);
   assert.match(html, /id="story-query"/);
   assert.match(html, /<label class="ml-field-label" for="story-query">/);
@@ -59,8 +59,11 @@ test('home is a media-intelligence workspace with separate story search and URL 
   assert.match(limitations, /id="question-reading-destination"/);
   assert.match(limitations, /does not send feedback/);
   assert.doesNotMatch(html, BIAS_METER);
-  const storyForm = html.slice(html.indexOf('id="story-search-form"'), html.indexOf('id="analyze-form"'));
+  const storyFormStart = html.indexOf('id="story-search-form"');
+  const storyForm = html.slice(storyFormStart, html.indexOf('</form>', storyFormStart));
+  assert.ok(storyForm.length > 0);
   assert.doesNotMatch(storyForm, /name="url"/);
+  assert.doesNotMatch(html, /data-compare="frames"|Represented frames<\/button>/);
 });
 
 test('fixture catalog matches golden titles and domains and does not invent extra stories', async () => {
@@ -132,8 +135,11 @@ test('source comparison filters recorded relations and coverage gaps stay non-cl
     membersForCompare(cluster.coverage, 'independent').some((member) => member.source === 'PR Newswire'),
     false
   );
-  assert.equal(membersForCompare(cluster.coverage, 'frames').length, 0);
+  assert.equal(membersForCompare(cluster.coverage, 'frames').length, 0, 'there is no frames comparison mode');
   assert.equal(membersForCompare(cluster.coverage, 'all').length, 5);
+  assert.match(compareStatusCopy(cluster.coverage, 'all', 5, 5, true), /Fixture comparison only\.$/);
+  assert.doesNotMatch(compareStatusCopy(cluster.coverage, 'all', 5, 5, false), /Fixture comparison only/);
+  assert.doesNotMatch(compareStatusCopy(cluster.coverage, 'independent', 2, 5, false), /Fixture comparison only/);
   const independentStatus = compareStatusCopy(cluster.coverage, 'independent', 2, 5);
   assert.match(independentStatus, /Independent-source estimate recorded separately: 2/);
   assert.match(independentStatus, /same-story relation alone is not independent reporting/);
@@ -141,7 +147,7 @@ test('source comparison filters recorded relations and coverage gaps stay non-cl
   assert.equal(renderCoverageGap(cluster.coverage), '');
   const missing = await golden('synthetic-03-no-timestamp');
   const gap = renderCoverageGap(missing.coverage);
-  assert.match(gap, /Coverage gap/);
+  assert.match(gap, /<h5>Coverage gap<\/h5>/);
   assert.match(gap, /insufficient/);
   assert.match(gap, /not proof a fact was left out/);
   assert.doesNotMatch(gap, /proven omission|blindspot|left-leaning|right-leaning/i);

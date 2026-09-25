@@ -341,6 +341,63 @@ test('Fix 1: in-flight newsjack observes shared AbortSignal when per-analysis ti
   assert.equal(newsjackAborted, true);
 });
 
+test('per-analysis timeout after live Jev preserves billable call count for budget recording', async () => {
+  const config = loadConfig({ MEDIA_LENS_MODE: 'fixture' });
+  config.limits = { ...config.limits, perAnalysisTimeoutMs: 50, maxJevCallsPerAnalysis: 160 };
+
+  const prepared = prepareFromPastedText({
+    text: 'A '.repeat(150) + 'long enough body for timeout budget billing test.'
+  });
+  const jevCallsMade = 6;
+
+  const jevAdapter = {
+    mode: 'live',
+    analyzeSpans: async () => ({
+      answersBySpanId: new Map(),
+      failedSpanIds: new Set(),
+      reviewSpanIds: new Set(),
+      unavailableSpanIds: new Set(),
+      dispositionsBySpanId: new Map(),
+      calls: jevCallsMade,
+      failures: 0,
+      elapsedMs: 12,
+      modelReported: 'jev-1.13.0',
+      modelMatch: true,
+      capReached: false
+    })
+  };
+
+  const newsjackAdapter = {
+    mode: 'artifacts',
+    getStoryContext: async ({ signal } = {}) => {
+      await abortableDelay(5000, signal);
+      return { story_origin: null, freshness_gate: null, cluster: null, provenance: 'newsjack_artifacts' };
+    }
+  };
+
+  const budget = createTypesafeBudget({ stopUsd: 1000 });
+  const graph = await analyze({
+    prepared,
+    config,
+    jevAdapter,
+    newsjackAdapter,
+    typesafeBudget: budget,
+    userAssertedPublic: true,
+    consentAt: '2026-09-21T00:00:00.000Z'
+  });
+
+  assert.equal(validate(graph).valid, true);
+  assert.ok(graph.abstentions.some((a) => a.reason === 'engine_unavailable'));
+  assert.equal(graph.engine.jev.mode, 'live');
+  assert.equal(graph.engine.jev.calls, jevCallsMade);
+  assert.equal(budget.getSnapshot().calls, 0, 'analyze() must not record budget itself');
+
+  if (graph.engine.jev.mode === 'live' && graph.engine.jev.calls > 0) {
+    budget.recordCalls(graph.engine.jev.calls);
+  }
+  assert.equal(budget.getSnapshot().calls, jevCallsMade);
+});
+
 test('R2: ESTIMATED budget store persists across process restart within the same UTC month', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'media-lens-budget-store-'));
   const storePath = join(dir, 'typesafe-budget.json');

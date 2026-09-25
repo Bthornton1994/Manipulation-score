@@ -35,7 +35,43 @@ async function resolveQuestionSetHash(signal) {
   }
 }
 
-async function buildAbstentionOnlyGraph({ prepared, reason, message, config, userAssertedPublic = true, consentAt = null }) {
+function buildBillableJevMeta(jevBillable, questionSetHash) {
+  if (jevBillable?.calls > 0) {
+    return {
+      mode: jevBillable.mode || 'live',
+      model_requested: 'jev-1.13.0',
+      model_reported: jevBillable.modelReported ?? null,
+      model_match: jevBillable.modelMatch ?? null,
+      question_set: 'influence-questions.v1',
+      question_set_sha256: questionSetHash,
+      calls: jevBillable.calls,
+      failures: jevBillable.failures ?? 0,
+      elapsed_ms: jevBillable.elapsedMs ?? 0
+    };
+  }
+
+  return {
+    mode: 'disabled',
+    model_requested: 'jev-1.13.0',
+    model_reported: null,
+    model_match: null,
+    question_set: 'influence-questions.v1',
+    question_set_sha256: questionSetHash,
+    calls: 0,
+    failures: 0,
+    elapsed_ms: 0
+  };
+}
+
+async function buildAbstentionOnlyGraph({
+  prepared,
+  reason,
+  message,
+  config,
+  userAssertedPublic = true,
+  consentAt = null,
+  jevBillable = null
+}) {
   const startedAt = new Date().toISOString();
   const fusionResult = {
     resolvedSpans: [],
@@ -49,28 +85,29 @@ async function buildAbstentionOnlyGraph({ prepared, reason, message, config, use
   // would use; it is always recorded, even when Jev was not actually
   // called for this analysis (schema/validate.js forbids it being null).
   const questionSetHash = await resolveQuestionSetHash();
+  const jevMeta = buildBillableJevMeta(jevBillable, questionSetHash);
+  const externalProcessing =
+    jevMeta.mode === 'live' && jevMeta.calls > 0
+      ? [
+          {
+            recipient: 'typesafe.ai (Jev)',
+            data_sent: 'Prepared public span text (capped length) and immediate surrounding context. No full article is persisted.',
+            occurred: true
+          }
+        ]
+      : [];
 
   return assembleGraph({
     prepared: { ...prepared, spans: [] },
     fusionResult,
     engineMeta: {
       extractor: prepared.artifact.inputMode === 'pasted_text' ? 'pasted' : prepared.artifact.inputMode === 'fixture' ? 'fixture' : 'html-lite',
-      jev: {
-        mode: 'disabled',
-        model_requested: 'jev-1.13.0',
-        model_reported: null,
-        model_match: null,
-        question_set: 'influence-questions.v1',
-        question_set_sha256: questionSetHash,
-        calls: 0,
-        failures: 0,
-        elapsed_ms: 0
-      },
+      jev: jevMeta,
       newsjack: { mode: 'disabled', version: null, artifacts: [] },
       startedAt,
       completedAt: new Date().toISOString()
     },
-    privacyMeta: { externalProcessing: [] },
+    privacyMeta: { externalProcessing },
     userAssertedPublic,
     consentAt,
     disclosureShown: true
@@ -175,9 +212,22 @@ export async function analyze({
   // immediately rather than continuing to run and retry in the background
   // after the caller has already been served an abstention graph.
   const pipelineAbortController = new AbortController();
+  let billableJev = null;
 
   function pipelineTimedOut() {
     return pipelineAbortController.signal.aborted;
+  }
+
+  function captureBillableJev(jevResult) {
+    if (jevAdapter.mode !== 'live' || jevResult.calls <= 0) return;
+    billableJev = {
+      mode: 'live',
+      calls: jevResult.calls,
+      failures: jevResult.failures,
+      modelReported: jevResult.modelReported,
+      modelMatch: jevResult.modelMatch,
+      elapsedMs: jevResult.elapsedMs
+    };
   }
 
   async function runPipeline() {
@@ -187,6 +237,7 @@ export async function analyze({
       { kind: prepared.artifact.kind, title: prepared.artifact.title },
       { signal }
     );
+    captureBillableJev(jevResult);
     if (pipelineTimedOut()) return TIMED_OUT;
 
     if (jevAdapter.mode === 'live' && (jevResult.capReached || jevResult.calls > maxJevCalls)) {
@@ -196,7 +247,8 @@ export async function analyze({
         message: 'This analysis exceeded the configured Jev call cap, so no manipulation analysis or score was generated.',
         config,
         userAssertedPublic,
-        consentAt
+        consentAt,
+        jevBillable: billableJev
       });
     }
 
@@ -344,7 +396,8 @@ export async function analyze({
         message: 'The analysis took longer than the configured limit and was stopped before completion.',
         config,
         userAssertedPublic,
-        consentAt
+        consentAt,
+        jevBillable: billableJev
       });
     }
     return result;

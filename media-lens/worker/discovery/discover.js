@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArticleUrl } from '../address-policy.js';
-import { fetchArticleSafely } from '../safe-fetch.js';
+import { fetchFeedSafely } from '../safe-fetch.js';
 import { SOURCE_REGISTRY, approvedSources } from './source-registry.js';
 import { parseFeedXml } from './feed-parse.js';
 import { clusterRecords, compareCluster, OMISSION_NOTE } from './cluster.js';
@@ -163,13 +163,13 @@ export async function discoverStories({
       let xml = bodies ? bodies.get(source.source_id) : null;
       if (!xml && dataOrigin === 'live_feed') {
         assertApprovedFeedUrl(source);
-        const fetcher = fetchFeed || ((url) => fetchArticleSafely(url, {
+        const fetcher = fetchFeed || ((url) => fetchFeedSafely(url, {
           timeoutMs: 8000,
           maxBytes: MAX_FEED_BYTES,
           urlAllowlist: [source.feed_host]
         }));
         const response = await fetcher(source.feed_url, source);
-        xml = typeof response === 'string' ? response : response?.body;
+        xml = feedDocumentText(response);
       }
       if (typeof xml !== 'string') {
         checked.outcome = 'empty';
@@ -244,4 +244,14 @@ export function clusterFromDocument(document, clusterId) {
   };
 }
 
-export { compareCluster };
+// Accept the feed client's `body` and, if a caller still returns the article
+// client's `html` field, that string too. An empty `body` must not hide XML
+// that arrived on `html`.
+export function feedDocumentText(response) {
+  if (typeof response === 'string') return response;
+  if (typeof response?.body === 'string' && response.body.length > 0) return response.body;
+  if (typeof response?.html === 'string' && response.html.length > 0) return response.html;
+  return null;
+}
+
+export { compareCluster, fetchFeedSafely };

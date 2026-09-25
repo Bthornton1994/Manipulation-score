@@ -36,6 +36,7 @@ import { createNewsjackAdapter } from './adapters/newsjack.js';
 import { createClassifierDevAdapter } from './adapters/classifier-dev.js';
 import { analyze, buildAbstentionOnlyGraph } from './analyze.js';
 import { fetchArticleSafely } from './safe-fetch.js';
+import { clusterFromDocument, discoverStories } from './discovery/discover.js';
 import { parseArticleUrl } from './address-policy.js';
 import { ARTIFACT_KINDS, validate } from '../schema/validate.js';
 import { createAuditLogger, AUDIT_EVENTS } from './audit.js';
@@ -405,6 +406,8 @@ export function createServer(config = loadConfig(), options = {}) {
       credential: readAlertCredential(config._env, options.alertIo || {})
     });
   const checkRateLimit = createFixedWindowLimiter(config.limits.maxAnalysesPerMinute);
+  const checkDiscoveryRate = createFixedWindowLimiter(config.limits.maxStoryDiscoveryPerMinute);
+  let latestDiscovery = null;
   const consumeLiveUrl = createFixedWindowLimiter(config.limits.maxLiveUrlPerMinute);
   const consumeLiveUrlHost = createKeyedFixedWindowLimiter(config.limits.maxLiveUrlPerHostPerMinute);
   const liveUrlConcurrency = createConcurrencyGate(config.limits.maxConcurrentLiveUrl);
@@ -431,6 +434,37 @@ export function createServer(config = loadConfig(), options = {}) {
 
       if (req.method === 'GET' && req.url === '/health') {
         sendJson(res, 200, { status: 'ok', ...publicConfig(config) });
+        return;
+      }
+
+      const requestUrl = new URL(req.url, 'http://127.0.0.1');
+      if (
+        req.method === 'GET' &&
+        (requestUrl.pathname === '/stories' || /^\/stories\/cluster\/[a-f0-9]{16}$/.test(requestUrl.pathname))
+      ) {
+        if (!checkDiscoveryRate()) {
+          sendJson(res, 429, {
+            error: 'rate_limited',
+            message: 'Too many story discovery requests. Wait a minute and try again. No feeds were checked for this request.'
+          });
+          return;
+        }
+        const clusterMatch = requestUrl.pathname.match(/^\/stories\/cluster\/([a-f0-9]{16})$/);
+        if (clusterMatch && latestDiscovery?.clusters?.some((cluster) => cluster.cluster_id === clusterMatch[1])) {
+          sendJson(res, 200, clusterFromDocument(latestDiscovery, clusterMatch[1]));
+          return;
+        }
+        const document = await discoverStories({
+          config,
+          windowHours: requestUrl.searchParams.get('window_hours'),
+          registry: options.discoveryRegistry,
+          fetchFeed: options.fetchFeed || null,
+          feedBodies: options.discoveryFeedBodies || null,
+          allowFixtures: config.storyDiscoveryFixtures === true,
+          now: options.discoveryNow
+        });
+        latestDiscovery = document;
+        sendJson(res, 200, clusterMatch ? clusterFromDocument(document, clusterMatch[1]) : document);
         return;
       }
 

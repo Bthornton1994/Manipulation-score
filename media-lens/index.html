@@ -51,16 +51,15 @@
         <section class="ml-hero" aria-labelledby="ml-hero-heading">
           <div class="ml-hero-copy">
             <p class="eyebrow"><span></span> Limited Jev-only experimental preview</p>
-            <h1 id="ml-hero-heading">Analyze one public article</h1>
+            <h1 id="ml-hero-heading">Discover how outlets cover a story</h1>
             <p class="ml-lede">
-              Media Lens analyzes one public page from a short list of sites the operator approves. It keeps language, claims,
-              coverage, and source context separate, and it links each finding to the text it came from. It gives no score for the
-              article, a person, or an outlet.
+              Media Lens lists stories from sources it actually checked, opens one cluster, and compares only retrieved reports.
+              Live discovery is off until the owner approves named feeds. It gives no score for an article, a person, or an outlet.
             </p>
             <ul class="ml-compare">
               <li>
-                <strong>Media Lens</strong> does not yet find other reports of the same story or compare how outlets covered it.
-                Examples on this page are made up and labeled as examples.
+                <strong>Media Lens</strong> does not yet check live feeds or compare how outlets covered a story. Analyzing one
+                article URL does not do that. Examples on this page are made up and labeled as examples.
               </li>
               <li>
                 <strong>Clarity</strong> reviews a private message on your device.
@@ -68,6 +67,21 @@
               </li>
             </ul>
           </div>
+        </section>
+
+        <section class="ml-entry ml-story-discovery" aria-labelledby="story-discovery-heading">
+          <h2 id="story-discovery-heading">Story discovery</h2>
+          <p class="ml-dimension-note">
+            Open a cluster to see the reports that were retrieved, which copies are syndicated, and which reports have recorded
+            independent-reporting evidence. A matching title alone is not independent reporting.
+          </p>
+          <p class="ml-coverage-status" id="story-discovery-status">
+            Story discovery is not live on this host. No feeds were checked. Analyzing one article URL does not discover stories
+            or compare outlet coverage.
+          </p>
+          <p class="ml-fixture-preview-marker" id="story-discovery-fixture-badge" hidden>Fixture discovery. Not live coverage.</p>
+          <ul class="ml-cluster-list" id="story-discovery-list"></ul>
+          <div id="story-cluster-detail" hidden></div>
         </section>
 
         <div class="ml-entries">

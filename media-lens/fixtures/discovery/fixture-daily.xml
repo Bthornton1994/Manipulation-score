@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Fixture Daily</title>
+    <item>
+      <title>Harbor bridge inspection closes one lane</title>
+      <link>https://www.fixture-daily.test/2026/09/25/harbor-bridge</link>
+      <pubDate>Thu, 25 Sep 2026 11:00:00 GMT</pubDate>
+      <mediaLens:originEvidence>first_independent_report</mediaLens:originEvidence>
+    </item>
+    <item>
+      <title>Old ferry schedule change</title>
+      <link>https://www.fixture-daily.test/2026/08/01/ferry</link>
+      <pubDate>Sat, 01 Aug 2026 12:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>

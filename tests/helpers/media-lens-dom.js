@@ -419,6 +419,20 @@ export async function loadMediaLensPage(options = {}) {
     if (target.startsWith('./fixtures/')) {
       return options.fixture ? options.fixture(target) : fixtureResponse(target);
     }
+    if (target.endsWith('/stories') || target.includes('/stories/cluster/')) {
+      const story = typeof options.stories === 'function' ? options.stories(target) : options.stories;
+      if (story) return story;
+      return jsonResponse({
+        contract: 'story-discovery.v1',
+        status: 'not_live',
+        message:
+          'Story discovery is not live. No feeds were checked. Article URL analysis does not discover stories or compare outlet coverage.',
+        data_origin: 'none',
+        fixture_labeled: false,
+        clusters: [],
+        sources_checked: []
+      });
+    }
     throw new Error(`unexpected fetch in test: ${target}`);
   }
 

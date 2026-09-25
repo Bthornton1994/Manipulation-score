@@ -22,6 +22,7 @@ import {
 import { DEFAULT_TYPESAFE_BUDGET } from './typesafe-budget.js';
 import { DEFAULT_TYPESAFE_BUDGET_STORE_FILE } from './typesafe-budget-store.js';
 import { BLOCKED_ALERT_TRANSPORT, readAlertCredential, resolveAlertCredentialPath } from './alert.js';
+import { candidateSources, approvedSources } from './discovery/source-registry.js';
 
 export const LIVE_URL_OVERSIZED_MESSAGE =
   'This public page is too long for Media Lens live analysis. No manipulation analysis or score was generated. Try a shorter public article.';
@@ -43,7 +44,8 @@ export const DEFAULT_LIMITS = Object.freeze({
   urlFetchMaxRedirects: 3,
   urlFetchConnectTimeoutMs: 3000,
   urlFetchMaxHeaderBytes: 8192,
-  urlFetchParseTimeoutMs: 2000
+  urlFetchParseTimeoutMs: 2000,
+  maxStoryDiscoveryPerMinute: 6
 });
 
 // Owner approval 2026-09-22 PT for the four numeric limits, and a same-day
@@ -166,6 +168,12 @@ export function loadConfig(env = process.env) {
       maxConcurrentLiveUrl: readInt(env, 'MEDIA_LENS_MAX_CONCURRENT_LIVE_URL', DEFAULT_LIMITS.maxConcurrentLiveUrl, {
         min: 0
       }),
+      maxStoryDiscoveryPerMinute: readInt(
+        env,
+        'MEDIA_LENS_MAX_STORY_DISCOVERY_PER_MINUTE',
+        DEFAULT_LIMITS.maxStoryDiscoveryPerMinute,
+        { min: 0 }
+      ),
       maxJevCallsPerAnalysis: readInt(
         env,
         'MEDIA_LENS_MAX_JEV_CALLS_PER_ANALYSIS',
@@ -241,6 +249,10 @@ export function loadConfig(env = process.env) {
     newsjack: {
       artifactsDir: env.MEDIA_LENS_NEWSJACK_ARTIFACTS_DIR || null
     },
+    // Exact string only. Does not enable Jev, live URL, or feed retrieval
+    // until a registry entry is approved. The fixture flag is ignored in live mode.
+    storyDiscoveryEnabled: readExactTrue(env, 'MEDIA_LENS_ENABLE_STORY_DISCOVERY'),
+    storyDiscoveryFixtures: mode !== 'live' && readExactTrue(env, 'MEDIA_LENS_STORY_DISCOVERY_FIXTURES'),
     classifierDev: {
       enabled: readExactTrue(env, 'MEDIA_LENS_ENABLE_CLASSIFIER_DEV'),
       baseUrl: env.MEDIA_LENS_CLASSIFIER_DEV_BASE_URL || CLASSIFIER_DEV_DEFAULT_BASE_URL,
@@ -347,6 +359,11 @@ export function publicConfig(config) {
     limits: config.limits,
     jev: { mode: config.mode === 'live' ? 'live' : 'fixture', modelRequested: config.jev.modelRequested, hasApiKey: config.jev.hasApiKey },
     newsjack: { artifactsConfigured: Boolean(config.newsjack.artifactsDir) },
+    storyDiscovery: {
+      enabled: config.storyDiscoveryEnabled === true,
+      approvedSourceCount: approvedSources().length,
+      candidateSourceCount: candidateSources().length
+    },
     classifierDev: {
       enabled: Boolean(config.classifierDev.enabled),
       effectiveEnabled: flags.classifierDevEnabled,

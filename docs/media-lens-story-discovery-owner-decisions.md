@@ -8,6 +8,8 @@ Vision check: **Aligns with constraints.** Relevant `VISION.md` sections: "Evide
 
 `GET /stories` and `GET /stories/cluster/:id` return a `story-discovery.v1` document. Live retrieval runs only when `MEDIA_LENS_ENABLE_STORY_DISCOVERY` is the exact string `true` and the registry entry is `approved`. Neither is true in this repository. CI uses mocked feeds. Jev is not called. Article pages are not fetched. The operator Caddy site is unchanged, so ml-jev still does not proxy these routes.
 
+`independent_reporting` is set only when the feed itself includes `mediaLens:originEvidence` with the value `first_independent_report`. That is a feed-supplied tag. In this repository it appears only in fixture XML. It is not an external evidence store, and this change does not add one.
+
 ## Candidate sources
 
 All four entries are `candidate_pending_owner_approval`. None are approved. A public terms URL is listed so the owner can review it. Listing the URL is not a grant to index or display titles, URLs, and timestamps.
@@ -25,7 +27,7 @@ No candidate was fetched for this change. Bounded real-source verification was s
 
 1. Approve or reject each named feed. Approval has to cite the rights basis for storing and showing that outlet's titles, canonical URLs, and publication times in this non-commercial product.
 2. Say whether any additional outlet is required before the comparison is broad enough to call the product goal met. Four candidates are not an approved set, and they may still be too narrow after approval.
-3. Confirm retention: this worker keeps the discovery response in the HTTP response only (`privacy.retention` is `none`). Say if a longer retention period is wanted.
+3. Confirm retention. `privacy.retention` is `none` and full article text is not written to disk. The worker also keeps the latest discovery document in process memory (`latestDiscovery`) so a cluster open does not harvest again. That cache holds titles, canonical URLs, outlet names, and publication times for the latest response, for as long as the process runs. It is not full text and not a disk store. Confirm that in-process cache, or say it should be dropped.
 4. Confirm cost: $0 only if retrieval stays on free public feeds with no API key. A Newsjack, Medialyst, or other paid path is not approved and is not implemented here. No invoice was available to check.
 5. Decide whether ml-jev should proxy `GET /stories` later. This change does not edit Caddy, `worker.env`, flags, or the host.
 

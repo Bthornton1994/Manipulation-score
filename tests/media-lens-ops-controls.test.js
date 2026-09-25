@@ -616,10 +616,18 @@ test('ops runbook exists, stays off Pages, and does not claim production readine
   assert.match(body, /media-lens-canary-drill-v1\.md/);
   assert.match(body, /DRILL_PACKET_ONLY/);
   assert.match(body, /does \*\*not\*\* grant `READY_FOR_CANARY`/);
-  assert.match(body, /Incident owner \| PLACEHOLDER/);
-  assert.match(body, /Deputy \| PLACEHOLDER/);
-  assert.match(body, /Alert channel \| DECISION — unset/);
+  // Incident roles come only from the Issue #118 ops-blanks record.
+  assert.match(body, /Incident owner \| Bryant Thornton \(Issue #118 ops-blanks record\)/);
+  assert.match(body, /Deputy \| None, single owner \(Issue #118 ops-blanks record\)/);
+  assert.match(body, /Alert channel \| Email was recorded, then WAIVED by the owner on 2026-09-21 PT\. No email monitoring/);
   assert.match(body, /Do not invent names/);
+  assert.doesNotMatch(body, /PLACEHOLDER/);
+  // Current operator deployment record, dated, without enabling anything.
+  assert.match(body, /## 0\. Current operator deployment \(ml-jev\)/);
+  assert.match(body, /This section is a record, not an authorization, and it changes no flag\./);
+  assert.match(body, /`en\.wikipedia\.org` \(last recorded\)/);
+  assert.match(body, /\*\*WAIVED\*\* by the owner/);
+  assert.doesNotMatch(body, /email monitoring (is active|exists on ml-jev)/i);
 
   assert.ok(PAGES_FORBIDDEN_NAMES.includes('docs'));
   assert.equal(isAllowedSitePath(RUNBOOK), false);

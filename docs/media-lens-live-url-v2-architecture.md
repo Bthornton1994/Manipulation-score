@@ -11,6 +11,8 @@ Status: **design artifact only**. Not an implementation. Not a release. Not prod
 | Public site | GitHub Pages remains Clarity-only. `docs/` and `media-lens/` stay off the Pages allowlist. |
 | Authority order | `VISION.md` > `docs/media-lens-build-brief.md` > this document > `docs/media-lens-influence-graph-plan.md` (Phase 0). If this document and the brief disagree, stop and ask the owner. If the brief and `VISION.md` disagree, stop and ask the owner. |
 
+Current-state note, 2026-09-25: this design was implemented, and the owner authorized a Jev-only live URL preview on one operator host, `ml-jev.manipulationscore.com`, on 2026-09-21 PT (Issue #118). That worker runs on loopback behind Caddy, not on GitHub Pages; the repository defaults below stay off; classifier.dev and live pasted-text stay off; it is not production-ready. `privacy.html` now scopes its Summary and How analysis works sections to Clarity and describes the operator preview (see C1 below). Current operator record: `docs/media-lens-ops-runbook-v2.md` §0. The rest of this document is the original design record and is not rewritten.
+
 This document specifies how a future live-URL path **must** work if it is ever implemented. It does not authorize enablement, deployment, public advertising, or a production-readiness claim. Issue #118 is complete only when its security, privacy, operational, integration, and release gates are evidenced **and** an owner explicitly authorizes live enablement.
 
 ---
@@ -620,7 +622,7 @@ TypeSafe public docs (2026-09-19) state Jev is not trained on customer requests;
 
 Two disclosures, kept separate:
 
-- Origin contact: IP of the worker (usually the user's machine) becomes visible to the destination and its CDN.
+- Origin contact: the network address of the machine running the worker becomes visible to the destination and its CDN. On the ml-jev preview that is the operator host's address, not the user's (dated correction, 2026-09-25).
 - Jev: capped span text.
 
 Do not imply that the destination site "analyzes" the user, or that TypeSafe fetches the URL.
@@ -632,9 +634,9 @@ Do not imply that the destination site "analyzes" the user, or that TypeSafe fet
 Existing (keep):
 
 - 512 KiB request body
-- 10 analyses / minute / worker, checked before body read
+- 5 analyses / minute / worker, checked before body read (`MEDIA_LENS_MAX_ANALYSES_PER_MINUTE`; corrected 2026-09-25 to match `worker/config.js`)
 - 200 spans, 60k prepared chars
-- 8s Jev call, 30s analysis, 8s URL fetch, 2 MiB URL bytes, 3 redirects
+- 8s Jev call, 15s analysis (`MEDIA_LENS_PER_ANALYSIS_TIMEOUT_MS`), 8s URL fetch, 2 MiB URL bytes, 3 redirects
 
 Add before live URL enablement:
 

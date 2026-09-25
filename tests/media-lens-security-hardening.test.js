@@ -9,6 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import { readFile } from 'node:fs/promises';
 import { createServer, validateOrAbstain } from '../media-lens/worker/server.js';
 import { loadConfig } from '../media-lens/worker/config.js';
 import { validate } from '../media-lens/schema/validate.js';
@@ -71,6 +72,7 @@ async function withMockJevServer(handler) {
 // ---------------------------------------------------------------------------
 
 test('H1: a mock Jev returning an out-of-taxonomy choice for every span never produces a fabricated observation, end to end through the live-mode server', async () => {
+  const fixtureHtml = await readFile('media-lens/fixtures/articles/synthetic-01-quoted-vs-authorial.html', 'utf8');
   const mockJev = await withMockJevServer(async (req, res) => {
     let raw = '';
     req.on('data', (c) => (raw += c));
@@ -93,15 +95,20 @@ test('H1: a mock Jev returning an out-of-taxonomy choice for every span never pr
   const config = loadConfig({
     MEDIA_LENS_MODE: 'live',
     MEDIA_LENS_ENABLE_LIVE: 'true',
+    MEDIA_LENS_ENABLE_LIVE_URL: 'true',
     MEDIA_LENS_TYPESAFE_API_KEY: 'test-key',
     MEDIA_LENS_TYPESAFE_BASE_URL: `http://127.0.0.1:${mockJevAddress.port}`
   });
-  const server = await listen(createServer(config));
+  const server = await listen(
+    createServer(config, {
+      fetchArticle: async () => ({ html: fixtureHtml })
+    })
+  );
   try {
     const res = await requestJson(server, {
       method: 'POST',
       path: '/analyze',
-      body: { user_asserted_public: true, mode: 'fixture', fixture_id: 'synthetic-01-quoted-vs-authorial' }
+      body: { user_asserted_public: true, mode: 'url', url: 'http://8.8.8.8/article' }
     });
     assert.equal(res.status, 200);
 

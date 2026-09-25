@@ -173,6 +173,12 @@ async function preparePayload({ payload, config, fetchArticle, extractImpl }) {
       { code: 'live_pasted_text_disabled' }
     );
   }
+  if (config.mode === 'live' && payload.mode === 'fixture') {
+    throw Object.assign(
+      new Error('Fixture examples are disabled in live mode. Use URL mode for approved public sources, or run a fixture-only worker for local development.'),
+      { code: 'live_fixture_disabled' }
+    );
+  }
   if (payload.mode === 'pasted_text') {
     return prepareFromPastedText({ text: String(payload.text || ''), kind: payload.kind || 'other_public' });
   }
@@ -487,6 +493,15 @@ export function createServer(config = loadConfig(), options = {}) {
           sendJson(res, 400, {
             error: 'live_pasted_text_disabled',
             message: 'Live pasted-text analysis is disabled until a later privacy and security review.'
+          });
+          return;
+        }
+
+        if (config.mode === 'live' && payload.mode === 'fixture') {
+          sendJson(res, 400, {
+            error: 'live_fixture_disabled',
+            message:
+              'Fixture examples are disabled in live mode. Use URL mode for approved public sources, or run a fixture-only worker for local development.'
           });
           return;
         }

@@ -899,6 +899,10 @@ test('URL-like outlet, source_id, and cluster_id text is not kept', () => {
   }
   const document = mapHits(null, { clusters: [{ cluster_id: 'https://169.254.169.254/latest', members: [datedHit('Alpha Post', A_URL)] }] });
   assert.match(document.clusters[0].cluster_id, /^[0-9a-f]{16}$/);
+  for (const clusterId of ['https:169.254.169.254', ' HTTPS:x', 'data:x', 'javascript:alert']) {
+    const refused = mapHits(null, { clusters: [{ cluster_id: clusterId, members: [datedHit('Alpha Post', A_URL)] }] });
+    assert.match(refused.clusters[0].cluster_id, /^[0-9a-f]{16}$/, clusterId);
+  }
   const kept = mapHits(null, { clusters: [{ cluster_id: 'nj:cluster-7', members: [datedHit('Alpha Post', A_URL)] }] });
   assert.equal(kept.clusters[0].cluster_id, 'nj:cluster-7');
 });
@@ -1048,4 +1052,38 @@ test('an invalid fixture-file window falls back to the caller window', async () 
   const document = await createNewsjackAdapter({ mode: 'fixture', fixtureId: 'win', fixtureDir }).discoverStoryDocument({ retrievedAt: RETRIEVED_AT, window: WINDOW });
   assert.equal(document.status, 'ok');
   assert.deepEqual(document.window, WINDOW);
+});
+
+test('outlet identity joins chains deeper than one link', () => {
+  const urls = {
+    alpha: 'https://alpha-post.example/a',
+    beta: 'https://beta-herald.example/b',
+    gamma: 'https://gamma-news.example/c',
+    delta: 'https://delta-daily.example/d'
+  };
+  const origin = sameStoryOrigin(Object.values(urls));
+  // Alpha and Beta are joined only through the gamma domain. This order puts
+  // the Beta candidate two links from the group root, so a lookup that
+  // follows only one link would count Beta as a second outlet.
+  const chain = [
+    datedHit('Alpha Post', urls.alpha),
+    datedHit('Beta Herald', 'https://gamma-news.example/c2', 'syndicated'),
+    datedHit('Beta Herald', urls.beta, 'same_story'),
+    datedHit('Alpha Post', 'https://gamma-news.example/c3', 'syndicated')
+  ];
+  for (const hits of [chain, [...chain].reverse()]) {
+    assert.equal(mapHits(hits, { origin }).clusters[0].independent_outlet_count, 0);
+  }
+  // A four-hop chain through name, domain, and source_id.
+  const long = mapHits(
+    [
+      datedHit('Alpha Post', urls.alpha),
+      { ...datedHit('Alpha Post', 'https://mirror-one.example/x', 'syndicated'), source_id: 'approved:mirror' },
+      { ...datedHit('Mirror Desk', 'https://mirror-two.example/y', 'syndicated'), source_id: 'approved:mirror' },
+      datedHit('Mirror Desk', 'https://delta-daily.example/z', 'syndicated'),
+      datedHit('Delta Daily', urls.delta, 'same_story')
+    ],
+    { origin }
+  );
+  assert.equal(long.clusters[0].independent_outlet_count, 0);
 });

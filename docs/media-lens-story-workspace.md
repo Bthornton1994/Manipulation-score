@@ -1,6 +1,6 @@
 # Media Lens story workspace
 
-Date: 2026-09-21 UTC. Draft product note for the fixture-first Media Lens workspace. This does not enable live analysis, change release flags, or close Issue #118.
+Date: 2026-09-21 UTC. Draft product note for the fixture-first Media Lens workspace. This does not enable live analysis, change release flags, or close Issue #118. Updated 2026-09-25: "Fixture versus live" and "Still blocked" now describe the host-mode behavior of the release.
 
 ## What this follows
 
@@ -79,12 +79,14 @@ Not verifiable from this repo state:
 
 ## Fixture versus live
 
-Home story search and the story workspace read labeled in-repo fixtures. Counts, distributions, and provenance in those workspaces are fixture records, not live facts. The page says so in the catalog, the sample card, and the workspace badge.
+Local preview (`localhost`, `127.0.0.1`, `[::1]`, or `file:`) keeps the labeled fixture story explorer, the fixture workspace, and `#story=` deep links for development. Counts, distributions, and provenance there are fixture records, not live facts. The page says so in the catalog, the sample card, and the workspace badge. Opening a fixture there requests only a same-origin file, `./fixtures/expected/<fixture-id>.graph.json`, from the local static server. It does not call TypeSafe, classifier.dev, or a news cluster API.
 
-Opening a fixture requests only a same-origin file: `./fixtures/expected/<fixture-id>.graph.json`. It does not call TypeSafe, classifier.dev, ml-jev, or a news cluster API.
+On any other host, including the operator host ml-jev, the fixture story explorer and workspace are hidden, `#story=` deep links do nothing, and the page requests no fixture files. The operator host would return 404 for them in any case, because its Caddy site serves only the three UI files and shared assets. The static sample card stays on every host and is labeled as a made-up example.
 
-Article URL analysis stays a separate entry. Consent, URL checks, and the Jev-only experimental disclosure are unchanged. Live URL remains off unless an operator host already enables it. This PR does not enable it.
+Article URL entry comes first on the page. A Coverage context section says coverage comparison is not live because no approved source exists for finding other reports of the same story. Live results show one plain coverage statement instead of empty comparison controls. A result that contains only abstentions says "No analysis was run". Consent is a dialog after Analyze and is asked again for each analysis. URLs that contain a username or password are rejected in the browser, and the worker also rejects them. On ml-jev, Jev-only live URL analysis is on for the operator allowlist (owner activation 2026-09-21 PT, Issue #118). This note does not change any flag.
 
 ## Still blocked
 
-Live story discovery, topic search over real coverage, Newsjack CLI or news-search, canonical-source resolution beyond a fixture or supplied artifact, frame comparison when `coverage.frames` is empty, claim support other than "not checked", omission findings that were not already recorded, and any person or outlet rating. Those wait on Newsjack, backend, data, and owner authorization. This note does not authorize that work.
+Real story discovery, same-story clustering, and cross-outlet coverage comparison are blocked. The only coverage input the worker supports is operator-provided Newsjack run artifacts (`MEDIA_LENS_NEWSJACK_ARTIFACTS_DIR`), and none are approved for ml-jev. Producing those artifacts needs a Medialyst news-search login, an LLM agent runtime with web retrieval, a TypeSafe key for Newsjack's coarse filter, and a supply-chain and trademark review. The alternative is a new news API or RSS provider plus an owner data-rights decision about storing and showing third-party outlet URLs, titles, and timestamps. No such provider is approved, so Media Lens adds no provider, network call, or fixture substitute for live coverage.
+
+Also not built: frame generation and side-by-side coverage (deferred by the owner until a real backend contract exists), claim support other than "not checked", and omission findings that were not already recorded. Person or outlet ratings are out of scope under `VISION.md`. This note does not authorize that work.

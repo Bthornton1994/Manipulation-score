@@ -14,6 +14,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { abortableDelay, throwIfAborted } from '../abort-utils.js';
+import { mapNewsjackEvidenceToStoryDiscovery } from '../discovery/newsjack-discovery.js';
 import { normalizedURLKey } from '../url-key.js';
 
 export function emptyStoryContext(provenance = 'none') {
@@ -100,5 +101,115 @@ export function createNewsjackAdapter({ mode, fixtureId = null, fixtureDir = nul
     throw new Error(`Unknown Newsjack adapter mode: ${mode}`);
   }
 
-  return { mode, getStoryContext };
+  async function discoverStoryDocument({ retrievedAt, window, query = null, signal } = {}) {
+    throwIfAborted(signal);
+    if (mode === 'cli') {
+      throw new Error('Newsjack CLI mode is not implemented in v1 (see plan section 6 / 11)');
+    }
+    if (mode === 'disabled') {
+      return mapNewsjackEvidenceToStoryDiscovery({
+        retrievedAt,
+        window,
+        providerId: 'newsjack:disabled',
+        providerMode: 'fixture',
+        freshnessGrade: 'fixture',
+        query,
+        hits: [],
+        dataOrigin: 'fixture'
+      });
+    }
+    if (mode === 'fixture') {
+      if (!fixtureId || !fixtureDir) {
+        return mapNewsjackEvidenceToStoryDiscovery({
+          retrievedAt,
+          window,
+          query,
+          hits: [],
+          dataOrigin: 'fixture'
+        });
+      }
+      const parsed = JSON.parse(await readFile(join(fixtureDir, `${fixtureId}.json`), { encoding: 'utf8', signal }));
+      return mapNewsjackEvidenceToStoryDiscovery({
+        retrievedAt,
+        window: parsed.window || window,
+        providerId: 'fixture:newsjack_shaped',
+        providerMode: 'fixture',
+        freshnessGrade: 'fixture',
+        query,
+        clusters: discoveryClusters(parsed),
+        origin: parsed.story_origin || parsed.origin_findings || null,
+        dataOrigin: 'fixture'
+      });
+    }
+    if (mode === 'artifacts') {
+      if (!artifactsDir) {
+        return mapNewsjackEvidenceToStoryDiscovery({
+          retrievedAt,
+          window,
+          providerId: 'newsjack:artifacts',
+          providerMode: 'fixture',
+          freshnessGrade: 'unknown',
+          query,
+          hits: [],
+          dataOrigin: 'newsjack_artifacts'
+        });
+      }
+      const loaded = await readDiscoveryArtifacts(artifactsDir, signal);
+      return mapNewsjackEvidenceToStoryDiscovery({
+        retrievedAt,
+        window: loaded.window || window,
+        providerId: 'newsjack:artifacts',
+        providerMode: 'fixture',
+        freshnessGrade: 'unknown',
+        query,
+        clusters: loaded.clusters,
+        origin: loaded.origin,
+        dataOrigin: 'newsjack_artifacts'
+      });
+    }
+    throw new Error(`Unknown Newsjack adapter mode: ${mode}`);
+  }
+
+  return { mode, getStoryContext, discoverStoryDocument };
+}
+
+function discoveryClusters(parsed) {
+  if (Array.isArray(parsed?.clusters)) return parsed.clusters;
+  if (Array.isArray(parsed?.members)) {
+    return [{ cluster_id: parsed.cluster_id || null, members: parsed.members }];
+  }
+  const cluster = parsed?.cluster;
+  if (!cluster) return [];
+  const list = Array.isArray(cluster) ? cluster : [cluster];
+  return list.map((item) => ({
+    cluster_id: item.cluster_id || null,
+    members: item.members || []
+  }));
+}
+
+async function readDiscoveryArtifacts(artifactsDir, signal) {
+  throwIfAborted(signal);
+  let entries;
+  try {
+    entries = await readdir(artifactsDir, { signal });
+  } catch (err) {
+    if (err?.name === 'AbortError') throw err;
+    return { clusters: [], origin: null, window: null };
+  }
+  const clusterName = ['clustered_candidates.json', 'cluster.json'].find((name) => entries.includes(name));
+  const originName = ['origin_findings.json', 'story_origin.json'].find((name) => entries.includes(name));
+  let clusters = [];
+  let window = null;
+  if (clusterName) {
+    const parsed = JSON.parse(await readFile(join(artifactsDir, clusterName), { encoding: 'utf8', signal }));
+    window = parsed?.window || null;
+    if (Array.isArray(parsed)) clusters = discoveryClusters({ cluster: parsed });
+    else clusters = discoveryClusters(parsed);
+  }
+  let origin = null;
+  if (originName) {
+    const parsed = JSON.parse(await readFile(join(artifactsDir, originName), { encoding: 'utf8', signal }));
+    origin = parsed.story_origin || parsed;
+  }
+  return { clusters, origin, window };
 }

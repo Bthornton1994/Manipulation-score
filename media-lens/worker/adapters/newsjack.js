@@ -142,19 +142,9 @@ export function createNewsjackAdapter({ mode, fixtureId = null, fixtureDir = nul
       });
     }
     if (mode === 'artifacts') {
-      if (!artifactsDir) {
-        return mapNewsjackEvidenceToStoryDiscovery({
-          retrievedAt,
-          window,
-          providerId: 'newsjack:artifacts',
-          providerMode: 'fixture',
-          freshnessGrade: 'unknown',
-          query,
-          hits: [],
-          dataOrigin: 'newsjack_artifacts'
-        });
-      }
-      const loaded = await readDiscoveryArtifacts(artifactsDir, signal);
+      const loaded = artifactsDir
+        ? await readDiscoveryArtifacts(artifactsDir, signal)
+        : { ok: false, error: 'artifacts_dir_missing', clusters: [], origin: null, window: null };
       return mapNewsjackEvidenceToStoryDiscovery({
         retrievedAt,
         window: loaded.window || window,
@@ -162,9 +152,10 @@ export function createNewsjackAdapter({ mode, fixtureId = null, fixtureDir = nul
         providerMode: 'fixture',
         freshnessGrade: 'unknown',
         query,
-        clusters: loaded.clusters,
-        origin: loaded.origin,
-        dataOrigin: 'newsjack_artifacts'
+        clusters: loaded.ok ? loaded.clusters : [],
+        origin: loaded.ok ? loaded.origin : null,
+        dataOrigin: 'newsjack_artifacts',
+        artifactRead: loaded.ok ? { ok: true } : { ok: false, error: loaded.error }
       });
     }
     throw new Error(`Unknown Newsjack adapter mode: ${mode}`);
@@ -194,7 +185,7 @@ async function readDiscoveryArtifacts(artifactsDir, signal) {
     entries = await readdir(artifactsDir, { signal });
   } catch (err) {
     if (err?.name === 'AbortError') throw err;
-    return { clusters: [], origin: null, window: null };
+    return { ok: false, error: err?.code || 'artifacts_unreadable', clusters: [], origin: null, window: null };
   }
   const clusterName = ['clustered_candidates.json', 'cluster.json'].find((name) => entries.includes(name));
   const originName = ['origin_findings.json', 'story_origin.json'].find((name) => entries.includes(name));
@@ -211,5 +202,5 @@ async function readDiscoveryArtifacts(artifactsDir, signal) {
     const parsed = JSON.parse(await readFile(join(artifactsDir, originName), { encoding: 'utf8', signal }));
     origin = parsed.story_origin || parsed;
   }
-  return { clusters, origin, window };
+  return { ok: true, clusters, origin, window };
 }

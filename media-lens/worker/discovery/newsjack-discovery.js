@@ -7,7 +7,7 @@ import { normalizedURLKey } from '../url-key.js';
 import { FRAME_NOTE, OMISSION_NOTE, SAME_STORY_NOT_INDEPENDENT } from './cluster.js';
 
 export const CLUSTER_BASIS = 'newsjack_cluster_same_public_event';
-export const INDEPENDENCE_BASIS = 'newsjack_origin_two_independent_urls';
+export const INDEPENDENCE_BASIS = 'newsjack_origin_distinct_independent_outlets';
 
 const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 
@@ -59,18 +59,40 @@ function baseDocument(extra) {
   };
 }
 
-function evidenceKeys(origin) {
-  if (!origin || typeof origin !== 'object') return new Set();
-  if (origin.same_story_assessment === 'unclear' || origin.same_story_assessment == null) return new Set();
+function outletIdentity(value) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().replace(/\s+/g, ' ');
+  if (!normalized || /^unknown$/i.test(normalized)) return null;
+  return normalized.toLowerCase();
+}
+
+function datedSameStoryKeys(origin) {
   const keys = new Set();
+  if (!origin || origin.same_story_assessment !== 'same_story') return keys;
   for (const item of origin.timestamp_evidence || []) {
     const key = normalizedURLKey(item?.url_key || item?.url);
     if (!key || !knownPublishedAt(item?.published_at)) continue;
     if (isWireOrAdvocacyUrl(key) || isPartnerRepublicationHost(key)) continue;
     keys.add(key);
   }
-  if (keys.size < 2) return new Set();
   return keys;
+}
+
+function independentKeysForMembers(members, origin) {
+  const eligible = datedSameStoryKeys(origin);
+  const outletByUrl = new Map();
+  for (const hit of members || []) {
+    const url = httpsUrl(hit.url || hit.canonical_url);
+    const urlKey = url ? normalizedURLKey(url) : null;
+    if (!urlKey || !eligible.has(urlKey)) continue;
+    if (hit.relation === 'syndicated' || hit.relation === 'different_story' || hit.relation === 'unclear') continue;
+    if (isWireOrAdvocacyUrl(url) || isPartnerRepublicationHost(url)) continue;
+    const outlet = outletIdentity(hit.outlet || hit.source);
+    if (!outlet) continue;
+    if (!outletByUrl.has(urlKey)) outletByUrl.set(urlKey, outlet);
+  }
+  if (new Set(outletByUrl.values()).size < 2) return new Set();
+  return new Set(outletByUrl.keys());
 }
 
 function labelMember(hit, url, seenUrlKeys, independentKeys, originUncertain) {
@@ -132,7 +154,8 @@ function memberFromHit(hit, retrievedAt, seenUrlKeys, independentKeys, originUnc
   };
 }
 
-function clusterFromGroup(group, { retrievedAt, window, sourcesChecked, independentKeys, originUncertain }) {
+function clusterFromGroup(group, { retrievedAt, window, sourcesChecked, origin, originUncertain }) {
+  const independentKeys = independentKeysForMembers(group.members, origin);
   const seenUrlKeys = new Set();
   const rejected = { count: 0, different_story: 0 };
   const members = [];
@@ -179,8 +202,37 @@ export function mapNewsjackEvidenceToStoryDiscovery({
   hits = null,
   clusters = null,
   origin = null,
-  dataOrigin = 'fixture'
+  dataOrigin = 'fixture',
+  artifactRead = null
 } = {}) {
+  if (dataOrigin === 'newsjack_artifacts' && artifactRead?.ok !== true) {
+    const stamp = knownPublishedAt(retrievedAt);
+    const statedWindow = window && typeof window.start === 'string' && typeof window.end === 'string' && Number.isFinite(window.hours)
+      ? window
+      : null;
+    return baseDocument({
+      status: 'abstain',
+      reason: 'artifacts_unavailable',
+      message: 'The Newsjack artifact directory was not read. No story members were checked. This is not a live provider result.',
+      data_origin: dataOrigin,
+      fixture_labeled: false,
+      retrieved_at: stamp,
+      window: statedWindow,
+      sources_checked: [{
+        source_id: providerId,
+        provider: providerId,
+        provider_mode: providerMode,
+        outlet: null,
+        query: query || null,
+        feed_url: null,
+        checked_at: stamp,
+        outcome: 'failed',
+        item_count: 0,
+        freshness_grade: freshnessGrade,
+        error: artifactRead?.error || 'artifacts_unreadable'
+      }]
+    });
+  }
   if (typeof retrievedAt !== 'string' || !knownPublishedAt(retrievedAt)) {
     return baseDocument({
       status: 'abstain',
@@ -206,8 +258,7 @@ export function mapNewsjackEvidenceToStoryDiscovery({
     });
   }
 
-  const originUncertain = Boolean(origin) && (origin.same_story_assessment === 'unclear' || origin.same_story_assessment == null);
-  const independentKeys = evidenceKeys(origin);
+  const originUncertain = Boolean(origin) && origin.same_story_assessment !== 'same_story';
   const groups = Array.isArray(clusters) && clusters.length > 0
     ? clusters
     : [{ cluster_id: null, members: Array.isArray(hits) ? hits : [] }];
@@ -233,7 +284,7 @@ export function mapNewsjackEvidenceToStoryDiscovery({
       retrievedAt,
       window,
       sourcesChecked: [checked],
-      independentKeys,
+      origin,
       originUncertain
     });
     rejected += result.rejected.count;

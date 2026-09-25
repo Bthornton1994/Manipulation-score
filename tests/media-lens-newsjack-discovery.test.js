@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNewsjackAdapter } from '../media-lens/worker/adapters/newsjack.js';
@@ -282,4 +282,156 @@ test('artifact directory and fixture adapter emit story-discovery.v1; cli stays 
   const cli = createNewsjackAdapter({ mode: 'cli' });
   await assert.rejects(() => cli.getStoryContext({}), /not implemented/);
   await assert.rejects(() => cli.discoverStoryDocument({ retrievedAt: RETRIEVED_AT, window: WINDOW }), /not implemented/);
+});
+
+function artifactAdapter(artifactsDir) {
+  return createNewsjackAdapter({ mode: 'artifacts', artifactsDir }).discoverStoryDocument({
+    retrievedAt: RETRIEVED_AT,
+    window: WINDOW
+  });
+}
+
+test('artifact reads fail closed when the directory is missing or unreadable', async () => {
+  const missing = await artifactAdapter(join(tmpdir(), 'newsjack-discovery-missing-dir'));
+  assert.equal(missing.status, 'abstain');
+  assert.equal(missing.reason, 'artifacts_unavailable');
+  assert.equal(missing.clusters.length, 0);
+  assert.equal(missing.sources_checked[0].outcome, 'failed');
+  assert.equal(missing.sources_checked[0].error, 'ENOENT');
+  assert.equal(validateStoryDiscovery(missing).ok, true);
+
+  const unset = await artifactAdapter(null);
+  assert.equal(unset.status, 'abstain');
+  assert.equal(unset.reason, 'artifacts_unavailable');
+  assert.equal(unset.sources_checked[0].outcome, 'failed');
+  assert.equal(unset.sources_checked[0].error, 'artifacts_dir_missing');
+
+  const blocked = await mkdtemp(join(tmpdir(), 'newsjack-discovery-blocked-'));
+  await chmod(blocked, 0);
+  let unreadable;
+  try {
+    unreadable = await artifactAdapter(blocked);
+  } finally {
+    await chmod(blocked, 0o700);
+  }
+  if (unreadable.sources_checked[0].error === null) {
+    const fileDir = await mkdtemp(join(tmpdir(), 'newsjack-discovery-file-'));
+    const filePath = join(fileDir, 'not-a-directory');
+    await writeFile(filePath, '{}');
+    unreadable = await artifactAdapter(filePath);
+  }
+  assert.equal(unreadable.status, 'abstain');
+  assert.equal(unreadable.reason, 'artifacts_unavailable');
+  assert.equal(unreadable.sources_checked[0].outcome, 'failed');
+  assert.notEqual(unreadable.sources_checked[0].error, null);
+  assert.notEqual(unreadable.sources_checked[0].outcome, 'artifacts_read');
+});
+
+test('a readable artifact directory with no matching files is an empty read', async () => {
+  const emptyDir = await mkdtemp(join(tmpdir(), 'newsjack-discovery-empty-'));
+  const empty = await artifactAdapter(emptyDir);
+  assert.equal(empty.status, 'empty');
+  assert.equal(empty.reason, 'no_usable_members');
+  assert.equal(empty.sources_checked[0].outcome, 'artifacts_read');
+  assert.equal(empty.sources_checked[0].error, null);
+  assert.equal(validateStoryDiscovery(empty).ok, true);
+
+  const otherDir = await mkdtemp(join(tmpdir(), 'newsjack-discovery-nomatch-'));
+  await writeFile(join(otherDir, 'notes.txt'), 'not an artifact');
+  const noMatch = await artifactAdapter(otherDir);
+  assert.equal(noMatch.status, 'empty');
+  assert.equal(noMatch.reason, 'no_usable_members');
+  assert.equal(noMatch.sources_checked[0].outcome, 'artifacts_read');
+  assert.equal(noMatch.sources_checked[0].error, null);
+  assert.equal(noMatch.clusters.length, 0);
+});
+
+function datedHit(outlet, url, relation = 'surfaced') {
+  return {
+    title: 'Fare vote',
+    url,
+    outlet,
+    published_at: '2026-09-25T12:00:00.000Z',
+    relation
+  };
+}
+
+test('independence requires distinct outlets and fails closed otherwise', () => {
+  const originUrls = (urls) => ({
+    same_story_assessment: 'same_story',
+    timestamp_evidence: urls.map((url) => ({ url_key: url, published_at: '2026-09-25T12:00:00.000Z' }))
+  });
+  const sameOutlet = mapHits(
+    [
+      datedHit('Fictional Daily', 'https://fictional-daily.example/articles/fare-a'),
+      datedHit('Fictional Daily', 'https://fictional-daily.example/articles/fare-b', 'same_story')
+    ],
+    { origin: originUrls([
+      'https://fictional-daily.example/articles/fare-a',
+      'https://fictional-daily.example/articles/fare-b'
+    ]) }
+  );
+  assert.equal(sameOutlet.clusters[0].independent_reporting.length, 0);
+
+  const differentStory = mapHits(
+    [
+      datedHit('Fictional Daily', 'https://fictional-daily.example/articles/fare-a'),
+      datedHit('Second Outlet', 'https://second-outlet.example/news/fare-b', 'same_story')
+    ],
+    {
+      origin: {
+        ...originUrls([
+          'https://fictional-daily.example/articles/fare-a',
+          'https://second-outlet.example/news/fare-b'
+        ]),
+        same_story_assessment: 'different_story'
+      }
+    }
+  );
+  assert.equal(differentStory.clusters[0].independent_reporting.length, 0);
+  assert.ok(differentStory.clusters[0].members.every((member) => member.independent_reporting === false));
+  assert.ok(differentStory.clusters[0].members.every((member) => member.labeling_basis === 'newsjack_origin_uncertain'));
+
+  const wirePair = mapHits(
+    [
+      datedHit('Fictional Daily', 'https://fictional-daily.example/articles/fare-a'),
+      datedHit('PR Newswire', 'https://www.prnewswire.com/news-releases/fare-b', 'syndicated')
+    ],
+    { origin: originUrls([
+      'https://fictional-daily.example/articles/fare-a',
+      'https://www.prnewswire.com/news-releases/fare-b'
+    ]) }
+  );
+  assert.equal(wirePair.clusters[0].independent_reporting.length, 0);
+  assert.equal(wirePair.clusters[0].members.find((member) => member.outlet === 'PR Newswire').relation, 'syndicated');
+
+  const unknownOutlet = mapHits(
+    [
+      datedHit('unknown', 'https://fictional-daily.example/articles/fare-a'),
+      datedHit('Second Outlet', 'https://second-outlet.example/news/fare-b', 'same_story'),
+      { title: 'Fare vote', url: 'https://third-outlet.example/news/fare-c', published_at: '2026-09-25T12:00:00.000Z', relation: 'surfaced' }
+    ],
+    { origin: originUrls([
+      'https://fictional-daily.example/articles/fare-a',
+      'https://second-outlet.example/news/fare-b',
+      'https://third-outlet.example/news/fare-c'
+    ]) }
+  );
+  assert.equal(unknownOutlet.clusters[0].members.find((member) => member.outlet === 'unknown').independent_reporting, false);
+  assert.equal(unknownOutlet.clusters[0].members.some((member) => member.canonical_url.includes('third-outlet')), false);
+  assert.equal(unknownOutlet.clusters[0].independent_reporting.length, 0);
+
+  const corroborated = mapHits(
+    [
+      datedHit('Fictional Daily', 'https://fictional-daily.example/articles/fare-a'),
+      datedHit('Second Outlet', 'https://second-outlet.example/news/fare-b', 'same_story')
+    ],
+    { origin: originUrls([
+      'https://fictional-daily.example/articles/fare-a',
+      'https://second-outlet.example/news/fare-b'
+    ]) }
+  );
+  assert.equal(validateStoryDiscovery(corroborated).ok, true);
+  assert.equal(corroborated.clusters[0].independent_reporting.length, 2);
+  assert.ok(corroborated.clusters[0].members.every((member) => member.labeling_basis === INDEPENDENCE_BASIS));
 });

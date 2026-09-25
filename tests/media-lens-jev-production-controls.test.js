@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { openSync, writeFileSync as fsWriteFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from '../media-lens/worker/server.js';
@@ -38,6 +39,7 @@ import {
   shouldRunAlertDeliveryTest
 } from '../media-lens/worker/alert.js';
 import { validate } from '../media-lens/schema/validate.js';
+import { createAuditLogger } from '../media-lens/worker/audit.js';
 
 const EXACT_LIVE_URL_OVERSIZED =
   'This public page is too long for Media Lens live analysis. No manipulation analysis or score was generated. Try a shorter public article.';
@@ -396,6 +398,11 @@ test('timeout after live Jev still exposes calls for ESTIMATED budget accounting
 
   assert.ok(graph.abstentions.some((a) => a.reason === 'engine_unavailable'));
   assert.equal(graph.engine.jev.calls, billedCalls);
+  assert.equal(graph.engine.jev.mode, 'live');
+  assert.ok(
+    graph.privacy.external_processing.some((entry) => /typesafe/i.test(entry.recipient) && entry.occurred === true),
+    'a timeout after billed Jev calls must still record that span text went to TypeSafe'
+  );
   assert.equal(validate(graph).valid, true);
 
   // Mirror server.js: record whatever live calls the graph reports.
@@ -542,8 +549,183 @@ test('R2c: an unreadable budget store abstains with store copy and makes no prov
   assert.equal(graph.engine.jev.calls, 0);
   const abstention = graph.abstentions.find((a) => a.reason === 'engine_unavailable');
   assert.ok(abstention);
-  assert.equal(abstention.message, 'The TypeSafe ESTIMATED budget record could not be read, so no live Jev analysis was performed.');
+  assert.equal(abstention.message, 'The TypeSafe ESTIMATED budget record could not be read or updated, so no live Jev analysis was performed.');
   assert.doesNotMatch(abstention.message, /reached the configured stop threshold/);
+});
+
+function lockDeniedIo() {
+  return {
+    openSync(path, flags, mode) {
+      if (String(path).endsWith('.lock')) throw Object.assign(new Error('lock denied'), { code: 'EACCES' });
+      return openSync(path, flags, mode);
+    }
+  };
+}
+
+test('R2d: a failed budget write fails closed and a stale file never lowers the in-memory count', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'media-lens-budget-write-fail-'));
+  const storePath = join(dir, 'typesafe-budget.json');
+  const fixedNow = () => Date.UTC(2026, 8, 25, 12, 0, 0);
+  const opts = { estimatedUsdPerCall: 1, warnUsd: 20, stopUsd: 30, storePath, now: fixedNow };
+  createTypesafeBudget(opts).recordCalls(10);
+
+  const budget = createTypesafeBudget({ ...opts, io: lockDeniedIo() });
+  assert.equal(budget.isStoreUnavailable(), false);
+  assert.equal(budget.isStopped(), false);
+
+  const result = budget.recordCalls(5);
+  assert.equal(result.calls, 15);
+  assert.equal(budget.isStoreUnavailable(), true);
+  assert.equal(budget.isStopped(), true);
+  assert.equal(budget.wouldExceed(1), true);
+  // The file still says 10; re-reading it must not erase the 5 unpersisted calls.
+  assert.equal(JSON.parse(await readFile(storePath, 'utf8')).calls, 10);
+  assert.equal(budget.getSnapshot().calls, 15);
+});
+
+test('R2e: a failed budget tmp write (disk full) fails closed', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'media-lens-budget-enospc-'));
+  const storePath = join(dir, 'typesafe-budget.json');
+  const opts = { estimatedUsdPerCall: 1, warnUsd: 20, stopUsd: 30, storePath, now: () => Date.UTC(2026, 8, 25) };
+  const budget = createTypesafeBudget({
+    ...opts,
+    io: {
+      writeFileSync(path, data, options) {
+        if (String(path) !== storePath) throw Object.assign(new Error('no space'), { code: 'ENOSPC' });
+        return fsWriteFileSync(path, data, options);
+      }
+    }
+  });
+  budget.recordCalls(3);
+  assert.equal(budget.isStoreUnavailable(), true);
+  assert.equal(budget.isStopped(), true);
+});
+
+test('R2f: a schema-invalid budget record fails closed', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'media-lens-budget-invalid-'));
+  const storePath = join(dir, 'typesafe-budget.json');
+  await writeFile(storePath, JSON.stringify({ version: 1, month: '2026-09', calls: -1, estimatedTokens: 0, warnEmitted: false }), 'utf8');
+  const budget = createTypesafeBudget({ estimatedUsdPerCall: 1, stopUsd: 30, storePath, now: () => Date.UTC(2026, 8, 25) });
+  assert.equal(budget.isStoreUnavailable(), true);
+  assert.equal(budget.isStopped(), true);
+});
+
+test('R2g: a budget record that becomes unreadable after startup fails closed', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'media-lens-budget-late-corrupt-'));
+  const storePath = join(dir, 'typesafe-budget.json');
+  const budget = createTypesafeBudget({ estimatedUsdPerCall: 1, stopUsd: 30, storePath, now: () => Date.UTC(2026, 8, 25) });
+  budget.recordCalls(2);
+  assert.equal(budget.isStopped(), false);
+  await writeFile(storePath, '{not-json', 'utf8');
+  assert.equal(budget.isStopped(), true);
+  assert.equal(budget.isStoreUnavailable(), true);
+});
+
+test('R2h: through the server, a budget write failure lets one analysis finish and stops the next before any provider call', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'media-lens-budget-e2e-'));
+  const storePath = join(dir, 'typesafe-budget.json');
+  let providerCalls = 0;
+  const provider = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => (body += c));
+    req.on('end', () => {
+      providerCalls += 1;
+      const options = ['loaded_moralized', 'fear_threat', 'urgency', 'false_dilemma', 'identity_ingroup', 'scapegoating_dehumanizing',
+        'certainty_beyond_evidence', 'vague_authority', 'anecdote_generalization', 'bandwagon', 'adversarial_conflict_framing', 'none'];
+      const probabilities = Object.fromEntries(options.map((o) => [o, o === 'none' ? 0.89 : 0.01]));
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        model: 'jev-1.13.0',
+        answers: {
+          influence_signal: { type: 'choice', choice: 'none', probabilities, confidence: 0.89 },
+          is_quoted_or_attributed: { type: 'noul', noul: 0.05 }
+        }
+      }));
+    });
+  });
+  await listen(provider);
+  const html = `<!doctype html><html lang="en"><head><title>Budget write failure page</title></head><body><main><article>
+    <p>The regional transport authority published its annual maintenance report on Tuesday, covering bridges, tunnels, and ferry piers across the district.</p>
+    <p>The report lists inspection dates for each structure and notes which repairs were completed during the year and which were moved to the next budget cycle.</p>
+    <p>Engineers inspected the main suspension cables twice and recorded the results in the authority's public asset register for the coming year.</p>
+  </article></main></body></html>`;
+  const config = liveUrlConfig({
+    MEDIA_LENS_TYPESAFE_BASE_URL: `http://127.0.0.1:${provider.address().port}`,
+    MEDIA_LENS_TYPESAFE_BUDGET_FILE: storePath,
+    MEDIA_LENS_MAX_ANALYSES_PER_MINUTE: '50',
+    MEDIA_LENS_MAX_LIVE_URL_PER_MINUTE: '50',
+    MEDIA_LENS_MAX_LIVE_URL_PER_HOST_PER_MINUTE: '50'
+  });
+  const server = await listen(
+    createServer(config, {
+      budgetIo: lockDeniedIo(),
+      auditLogger: createAuditLogger({ write: () => {} }),
+      fetchArticle: async () => ({ html, contentType: 'text/html', fetchStatus: '200', fetchedAt: new Date().toISOString() })
+    })
+  );
+  try {
+    const body = { user_asserted_public: true, mode: 'url', url: 'https://en.wikipedia.org/wiki/Budget_write_failure' };
+    const first = await requestJson(server, { method: 'POST', path: '/analyze', body });
+    assert.equal(first.status, 200);
+    const firstCalls = providerCalls;
+    assert.ok(firstCalls > 0, 'first analysis reaches the provider');
+
+    const second = await requestJson(server, { method: 'POST', path: '/analyze', body });
+    assert.equal(second.status, 200);
+    assert.equal(providerCalls, firstCalls, 'no provider call after the failed write');
+    const abstention = second.body.abstentions.find((a) => a.reason === 'engine_unavailable');
+    assert.ok(abstention);
+    assert.equal(abstention.message, 'The TypeSafe ESTIMATED budget record could not be read or updated, so no live Jev analysis was performed.');
+  } finally {
+    server.close();
+    provider.close();
+  }
+});
+
+test('R2i: invalid kind and live fixture requests are rejected before any fetch, provider call, or audit line', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'media-lens-kind-'));
+  const auditLines = [];
+  let fetches = 0;
+  const config = liveUrlConfig({ MEDIA_LENS_TYPESAFE_BUDGET_FILE: join(dir, 'typesafe-budget.json') });
+  const server = await listen(
+    createServer(config, {
+      auditLogger: createAuditLogger({ write: (line) => auditLines.push(line) }),
+      fetchArticle: async () => {
+        fetches += 1;
+        throw new Error('must not fetch');
+      }
+    })
+  );
+  try {
+    const badKind = await requestJson(server, {
+      method: 'POST',
+      path: '/analyze',
+      body: { user_asserted_public: true, mode: 'url', url: 'https://en.wikipedia.org/wiki/X', kind: 'x'.repeat(4000) }
+    });
+    assert.equal(badKind.status, 400);
+    assert.equal(badKind.body.error, 'invalid_kind');
+
+    const objectKind = await requestJson(server, {
+      method: 'POST',
+      path: '/analyze',
+      body: { user_asserted_public: true, mode: 'url', url: 'https://en.wikipedia.org/wiki/X', kind: { toString: 'article' } }
+    });
+    assert.equal(objectKind.status, 400);
+    assert.equal(objectKind.body.error, 'invalid_kind');
+
+    const fixture = await requestJson(server, {
+      method: 'POST',
+      path: '/analyze',
+      body: { user_asserted_public: true, mode: 'fixture', fixture_id: 'synthetic-01-quoted-vs-authorial' }
+    });
+    assert.equal(fixture.status, 400);
+    assert.equal(fixture.body.error, 'live_fixture_disabled');
+
+    assert.equal(fetches, 0);
+    assert.equal(auditLines.length, 0);
+  } finally {
+    server.close();
+  }
 });
 
 test('Fix 4: concurrent budget ledger warns at $20 and hard-stops at $30', async () => {

@@ -57,6 +57,15 @@ export function createTypesafeBudget({
 
   function syncFromRecord(record) {
     if (!record) return;
+    if (record.month === month) {
+      // Never lower same-month counters. The in-memory count can be ahead of
+      // the file after a failed durable write, and a stale file must not erase
+      // calls this process already made.
+      calls = Math.max(calls, record.calls);
+      estimatedTokens = Math.max(estimatedTokens, record.estimatedTokens);
+      warnEmitted = warnEmitted || record.warnEmitted;
+      return;
+    }
     month = record.month;
     calls = record.calls;
     estimatedTokens = record.estimatedTokens;
@@ -158,8 +167,9 @@ export function createTypesafeBudget({
         }
       };
     },
-    // Fail-closed state for an unreadable or invalid persisted record. It is
-    // reported separately so callers do not claim spend reached the stop.
+    // Fail-closed state for a persisted record that could not be read, was
+    // invalid, or could not be updated. It is reported separately so callers
+    // do not claim spend reached the stop.
     isStoreUnavailable() {
       if (!storeUnavailable) refreshFromStore();
       return storeUnavailable;
@@ -217,6 +227,10 @@ export function createTypesafeBudget({
           const priorUsd = estimatedUsdForCallCount(calls);
           calls += n;
           estimatedTokens += n * tokensPerCall;
+          // Fail closed: once the durable record cannot be updated, the stop
+          // can no longer be enforced across restarts or processes, so later
+          // live analyses abstain until an operator repairs it and restarts.
+          storeUnavailable = true;
           const estimatedUsd = estimatedUsdForCallCount(calls);
           const shouldWarn = estimatedUsd >= warnUsd && priorUsd < warnUsd;
           if (estimatedUsd >= warnUsd) warnEmitted = true;

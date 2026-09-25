@@ -220,7 +220,7 @@ export async function analyze({
     return buildAbstentionOnlyGraph({
       prepared,
       reason: 'engine_unavailable',
-      message: 'The TypeSafe ESTIMATED budget record could not be read, so no live Jev analysis was performed.',
+      message: 'The TypeSafe ESTIMATED budget record could not be read or updated, so no live Jev analysis was performed.',
       config,
       userAssertedPublic,
       consentAt

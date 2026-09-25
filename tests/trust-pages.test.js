@@ -77,6 +77,8 @@ test('changelog records the September 25, 2026 Media Lens disclosure entry above
   assert.match(entry, /experimental and not production-ready/);
   assert.match(entry, /Comparing coverage across outlets is not live/);
   assert.match(entry, /The retention period of the host's logs is not yet documented/);
+  assert.match(entry, /a page recognized as paywalled is analyzed from its visible excerpt only/);
+  assert.match(entry, /access log set in the host's own configuration/);
   assert.match(entry, /clarity-v37/);
   assert.doesNotMatch(entry, /accura|generally available|is production-ready/i);
 });

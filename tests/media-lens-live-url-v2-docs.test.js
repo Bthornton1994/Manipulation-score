@@ -212,7 +212,7 @@ test('frontend deployment budget checks mirror the budget store schema and lock 
     .sort()
     .join(',');
   assert.ok(doc.includes(`"${keys}"`), 'the doc validity check must list exactly the budget store keys');
-  const unreadableCopy = 'The TypeSafe ESTIMATED budget record could not be read, so no live Jev analysis was performed.';
+  const unreadableCopy = 'The TypeSafe ESTIMATED budget record could not be read or updated, so no live Jev analysis was performed.';
   const analyzeSrc = await readFile('media-lens/worker/analyze.js', 'utf8');
   assert.ok(analyzeSrc.includes(unreadableCopy), 'analyze.js must still use the documented abstention copy');
   assert.ok(doc.replace(/\s+/g, ' ').includes(unreadableCopy), 'the deploy doc must quote the abstention copy exactly');
@@ -250,7 +250,7 @@ test('media-lens/README.md quotes the worker copy for the #146 and #149 fixes ex
   const analyzeSrc = await readFile('media-lens/worker/analyze.js', 'utf8');
   const fixtureCopy =
     'Fixture examples are disabled in live mode. Use URL mode for approved public sources, or run a fixture-only worker for local development.';
-  const budgetCopy = 'The TypeSafe ESTIMATED budget record could not be read, so no live Jev analysis was performed.';
+  const budgetCopy = 'The TypeSafe ESTIMATED budget record could not be read or updated, so no live Jev analysis was performed.';
   assert.ok(serverSrc.includes(fixtureCopy));
   assert.ok(analyzeSrc.includes(budgetCopy));
   assert.ok(readme.includes(fixtureCopy));

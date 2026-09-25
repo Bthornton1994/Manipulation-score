@@ -139,7 +139,7 @@ Run these on `ml-jev` as an operator with sudo. Never print
      print `budget-record-valid`. This check mirrors
      `sanitizeBudgetStoreRecord` in `media-lens/worker/typesafe-budget-store.js`.
      After this release an unreadable or invalid record makes the worker refuse
-     all live Jev with "The TypeSafe ESTIMATED budget record could not be read,
+     all live Jev with "The TypeSafe ESTIMATED budget record could not be read or updated,
      so no live Jev analysis was performed." until it restarts with a valid
      file. A readable but unwritable file is worse: new calls stay in memory
      and the next read replaces them with the older count, so spend is

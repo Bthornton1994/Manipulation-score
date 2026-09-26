@@ -646,6 +646,127 @@ test('a byline absent from the extractor text is dropped and a kept byline is no
   assert.ok(jevTexts.some((text) => text.includes('council voted')));
 });
 
+test('leaf div/section article body is not silently dropped when headline still matches', async () => {
+  // Many CMS templates put paragraphs in <div> or <section>, not <p>. The walker
+  // previously only emitted h1/h2/h3/p/blockquote/figcaption/li. A matching <h1>
+  // kept contentBlocks non-empty, skipped the Trafilatura-line fallback, and
+  // omitted the entire div body from preparedText / Jev.
+  const headline = 'Company faces inquiry after safety report';
+  const para1 = 'The city council opened an inquiry after residents raised alarms about factory emissions near the river.';
+  const para2 =
+    'Investigators found that the company hid safety test failures from regulators for more than two years.';
+  const para3 = 'Officials said further hearings will examine whether criminal charges are warranted under state law.';
+  const html = `<!doctype html>
+<html lang="en"><head><title>Safety probe</title></head>
+<body>
+<nav>Home About Contact Privacy</nav>
+<article>
+<h1>${headline}</h1>
+<div class="article-body">
+<div>${para1}</div>
+<section>${para2}</section>
+<div>${para3}</div>
+</div>
+</article>
+</body></html>`;
+  const prepared = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/div-body',
+    inputMode: 'fixture',
+    extractImpl: async () => ({
+      status: 'ok',
+      extractor_version: TRAFILATURA_VERSION,
+      language_detector_version: PY3LANGID_VERSION,
+      detected_language: 'en',
+      html_lang: 'en',
+      title: headline,
+      author: null,
+      date: null,
+      // Include headline so the walked <h1> is kept (contentBlocks non-empty),
+      // which is exactly the path that previously skipped Trafilatura fallback.
+      text: [headline, para1, para2, para3].join('\n')
+    })
+  });
+  assert.equal(prepared.extraction.status, 'ok');
+  assert.match(prepared.preparedText, /Company faces inquiry/);
+  assert.match(prepared.preparedText, /Investigators found that the company hid safety test failures/);
+  assert.match(prepared.preparedText, /criminal charges are warranted/);
+  assert.match(prepared.preparedText, /city council opened an inquiry/);
+  assert.equal(prepared.preparedText.includes('Privacy'), false);
+  for (const span of prepared.spans) {
+    assert.equal(prepared.preparedText.slice(span.start, span.end), span.text);
+  }
+});
+
+test('nested CMS div paragraphs are kept under real Trafilatura extraction', async () => {
+  const headline = 'Company faces inquiry after safety report';
+  const para1 = 'The city council opened an inquiry after residents raised alarms about factory emissions near the river.';
+  const para2 =
+    'Investigators found that the company hid safety test failures from regulators for more than two years.';
+  const para3 = 'Officials said further hearings will examine whether criminal charges are warranted under state law.';
+  const html = `<!doctype html>
+<html lang="en"><head><title>Safety probe</title></head>
+<body>
+<nav>Home About Contact Privacy</nav>
+<article>
+<h1>${headline}</h1>
+<div class="article-body">
+<div>${para1}</div>
+<div>${para2}</div>
+<div>${para3}</div>
+</div>
+</article>
+</body></html>`;
+  const prepared = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/div-body-live-extract',
+    inputMode: 'fixture'
+  });
+  assert.equal(prepared.extraction.status, 'ok');
+  assert.match(prepared.preparedText, /Investigators found that the company hid safety test failures/);
+  assert.match(prepared.preparedText, /criminal charges are warranted/);
+  assert.match(prepared.preparedText, /city council opened an inquiry/);
+  assert.equal(prepared.preparedText.includes('Privacy'), false);
+});
+
+test('leaf div body between matching paragraphs is not silently dropped', async () => {
+  const headline = 'Company faces inquiry after safety report';
+  const lead = 'The city council opened an inquiry after residents raised alarms about factory emissions near the river.';
+  const middle =
+    'Investigators found that the company hid safety test failures from regulators for more than two years and officials demanded answers from corporate leadership.';
+  const close = 'A spokesperson declined to comment on the sealed documents cited by investigators.';
+  const html = `<!doctype html>
+<html lang="en"><head><title>Partial div</title></head>
+<body>
+<article>
+<h1>${headline}</h1>
+<p>${lead}</p>
+<div class="story-body">${middle}</div>
+<p>${close}</p>
+</article>
+</body></html>`;
+  const prepared = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/partial-div',
+    inputMode: 'fixture',
+    extractImpl: async () => ({
+      status: 'ok',
+      extractor_version: TRAFILATURA_VERSION,
+      language_detector_version: PY3LANGID_VERSION,
+      detected_language: 'en',
+      html_lang: 'en',
+      title: headline,
+      author: null,
+      date: null,
+      text: [headline, lead, middle, close].join('\n')
+    })
+  });
+  assert.equal(prepared.extraction.status, 'ok');
+  assert.match(prepared.preparedText, /Investigators found that the company hid safety test failures/);
+  assert.match(prepared.preparedText, /spokesperson declined/);
+  assert.match(prepared.preparedText, /city council opened an inquiry/);
+});
+
 test('architecture section 10.2 matches first-article Trafilatura matching', async () => {
   const doc = await readFile('docs/media-lens-live-url-v2-architecture.md', 'utf8');
   const section = doc.split('### 10.2 Preparation')[1].split('### 10.3')[0];

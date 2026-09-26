@@ -407,7 +407,7 @@ Implementation note: Node `fetch` may use environment proxies. The pinned client
 Block selection after Trafilatura returns text:
 
 1. Select the first `<article>` element, or the document root when the page has no `<article>`.
-2. Keep a walked block, including `byline_meta`, only when its normalized text appears in the Trafilatura paragraph text.
+2. Walk structural blocks (`h1`/`h2`/`h3`/`p`/`blockquote`/`figcaption`/`li`) and leaf CMS containers (`div`/`section` with no nested block, list, or table child). Keep a walked block, including `byline_meta`, only when its normalized text appears in the Trafilatura paragraph text.
 3. If no content blocks remain, fall back to one block per Trafilatura line. The first line is the headline and later lines are authorial.
 
 Existing behavior remains the contract:

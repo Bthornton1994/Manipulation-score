@@ -983,3 +983,9 @@ test('host-like outlet names with a trailing dot, a zone, or a path are refused'
   }
   for (const value of ['Inc.', 'St. Louis Post-Dispatch', 'Fox 5: News', 'BBC: Africa']) assert.equal(outletText(value), value, value);
 });
+
+test('host checks ignore combining marks and catch a bare www.', () => {
+  const acute = String.fromCharCode(0x301);
+  for (const value of ['www.', `169.254.169.254${acute}`, `local${acute}host:3000`]) assert.equal(outletText(value), '', JSON.stringify(value));
+  for (const value of ['Café Babel', 'Süddeutsche Zeitung', `Cafe${acute} Babel`]) assert.notEqual(outletText(value), '', value);
+});

@@ -216,12 +216,15 @@ function isPathLikeText(value) {
 // non-public name such as "localhost" or "printer.home.arpa". Ideographic
 // full stops count as dots. An email-like value is not an outlet name.
 function isHostLikeText(value) {
-  // A trailing dot before a port, a path, or the end is still the same host
-  // to a URL parser ("localhost.:3000", "evil.com./login").
-  const dotted = value.replace(/[\u3002\uff61]/g, '.').replace(/\.(?=[:/?#]|$)/g, '');
+  // Combining marks are ignored for the checks ("169.254.169.254" with an
+  // accent on a digit still reads as an address). A trailing dot before a
+  // port, a path, or the end is still the same host to a URL parser
+  // ("localhost.:3000", "evil.com./login").
+  const plain = value.replace(/\p{M}/gu, '').replace(/[\u3002\uff61]/g, '.');
+  const dotted = plain.replace(/\.(?=[:/?#]|$)/g, '');
   const bareHost = /^[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.?$/u.test(dotted) ? dotted.toLowerCase().replace(/\.$/, '') : null;
   return (
-    /^www\./i.test(dotted) ||
+    /^www\./i.test(plain) ||
     /^[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+(?:[/?#]|:\d)/u.test(dotted) ||
     // IPv4 in dotted, short, or hex form (with an optional trailing dot or
     // port), and IPv6 with or without brackets, a port, or an IPv4 tail. A

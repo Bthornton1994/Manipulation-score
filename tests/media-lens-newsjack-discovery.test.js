@@ -1017,6 +1017,52 @@ test('unrecognized artifact shapes and non-regular files are invalid, not empty 
   if (made) assert.equal((await artifactAdapter(fifo)).sources_checked[0].error, 'artifact_not_regular_file');
 });
 
+test('getStoryContext applies the same artifact guards as discovery (no OOM / symlink / JSON crash)', async () => {
+  const url = 'https://fictional-daily.example/a';
+  const empty = { story_origin: null, freshness_gate: null, cluster: null, provenance: 'none' };
+
+  const oversized = await mkdtemp(join(tmpdir(), 'newsjack-analyze-large-'));
+  await writeFile(
+    join(oversized, 'candidates.json'),
+    JSON.stringify([{ url, story_origin: { origin_url: url }, pad: 'x'.repeat(11 * 1024 * 1024) }])
+  );
+  assert.deepEqual(
+    await createNewsjackAdapter({ mode: 'artifacts', artifactsDir: oversized }).getStoryContext({ url }),
+    empty
+  );
+
+  const linked = await mkdtemp(join(tmpdir(), 'newsjack-analyze-symlink-'));
+  await writeFile(join(linked, 'secret.json'), JSON.stringify([{ url, story_origin: { origin_url: url, note: 'secret' } }]));
+  await symlink(join(linked, 'secret.json'), join(linked, 'candidates.json'));
+  assert.deepEqual(
+    await createNewsjackAdapter({ mode: 'artifacts', artifactsDir: linked }).getStoryContext({ url }),
+    empty
+  );
+
+  const badJson = await mkdtemp(join(tmpdir(), 'newsjack-analyze-badjson-'));
+  await writeFile(join(badJson, 'candidates.json'), '{not-json');
+  assert.deepEqual(
+    await createNewsjackAdapter({ mode: 'artifacts', artifactsDir: badJson }).getStoryContext({ url }),
+    empty
+  );
+
+  const badFixture = await mkdtemp(join(tmpdir(), 'newsjack-analyze-badfix-'));
+  await writeFile(join(badFixture, 'broken.json'), '{not-json');
+  assert.deepEqual(
+    await createNewsjackAdapter({ mode: 'fixture', fixtureId: 'broken', fixtureDir: badFixture }).getStoryContext({ url }),
+    empty
+  );
+
+  const ok = await mkdtemp(join(tmpdir(), 'newsjack-analyze-ok-'));
+  await writeFile(
+    join(ok, 'candidates.json'),
+    JSON.stringify([{ url, story_origin: { origin_url: url }, freshness_gate: { ok: true } }])
+  );
+  const ctx = await createNewsjackAdapter({ mode: 'artifacts', artifactsDir: ok }).getStoryContext({ url });
+  assert.equal(ctx.provenance, 'newsjack_artifacts');
+  assert.equal(ctx.story_origin.origin_url, url);
+});
+
 test('the mapper refuses malformed evidence shapes from direct callers', () => {
   for (const extra of [{ clusters: { a: 1 } }, { clusters: [{ members: 'x' }] }, { clusters: [42] }, { clusters: [{}] }]) {
     const document = mapHits([datedHit('Alpha Post', A_URL)], extra);

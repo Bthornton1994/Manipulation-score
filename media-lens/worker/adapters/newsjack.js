@@ -29,14 +29,11 @@ export function emptyStoryContext(provenance = 'none') {
 async function readFixture(fixtureDir, fixtureId, signal) {
   throwIfAborted(signal);
   const path = join(fixtureDir, `${fixtureId}.json`);
-  let raw;
-  try {
-    raw = await readFile(path, { encoding: 'utf8', signal });
-  } catch (err) {
-    if (err?.name === 'AbortError') throw err;
-    return emptyStoryContext('none');
-  }
-  const parsed = JSON.parse(raw);
+  // Same size / regular-file guards as discovery mapping. Oversized, symlink,
+  // FIFO, or invalid JSON must not crash /analyze or load unbounded bytes.
+  const read = await readJsonArtifact(path, `${fixtureId}.json`, signal, { allowArray: false });
+  if (!read.ok) return emptyStoryContext('none');
+  const parsed = read.value;
   return {
     story_origin: parsed.story_origin ?? null,
     freshness_gate: parsed.freshness_gate ?? null,
@@ -58,17 +55,32 @@ async function readArtifactsDir(artifactsDir, { url, canonical_url, signal }) {
   const clusterFile = entries.find((f) => f === 'cluster.json');
   if (!candidatesFile) return emptyStoryContext('none');
 
-  const candidates = JSON.parse(await readFile(join(artifactsDir, candidatesFile), { encoding: 'utf8', signal }));
+  const candidatesRead = await readJsonArtifact(
+    join(artifactsDir, candidatesFile),
+    candidatesFile,
+    signal,
+    { allowArray: true }
+  );
+  if (!candidatesRead.ok) return emptyStoryContext('none');
+  const candidates = candidatesRead.value;
   const targetKey = normalizedURLKey(canonical_url) || normalizedURLKey(url);
   const match = (Array.isArray(candidates) ? candidates : candidates.items || []).find((c) => normalizedURLKey(c.url) === targetKey);
   if (!match) return emptyStoryContext('none');
 
   let cluster = null;
   if (clusterFile) {
-    const clusterData = JSON.parse(await readFile(join(artifactsDir, clusterFile), { encoding: 'utf8', signal }));
-    cluster = (Array.isArray(clusterData) ? clusterData : clusterData.clusters || []).find(
-      (c) => (c.members || []).some((m) => normalizedURLKey(m.url) === targetKey)
-    ) || null;
+    const clusterRead = await readJsonArtifact(
+      join(artifactsDir, clusterFile),
+      clusterFile,
+      signal,
+      { allowArray: true }
+    );
+    if (clusterRead.ok) {
+      const clusterData = clusterRead.value;
+      cluster = (Array.isArray(clusterData) ? clusterData : clusterData.clusters || []).find(
+        (c) => (c.members || []).some((m) => normalizedURLKey(m.url) === targetKey)
+      ) || null;
+    }
   }
 
   return {

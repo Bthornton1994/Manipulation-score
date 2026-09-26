@@ -22,7 +22,7 @@ import {
   isRealDate,
   parseNewsjackClock
 } from '../schema/newsjack-capture.js';
-import { classifySourceUrl, parseProviderTimestamp } from '../worker/discovery/newsjack-discovery.js';
+import { parseProviderTimestamp, publicCitationUrl } from '../worker/discovery/newsjack-discovery.js';
 
 const HEX16 = /^[a-f0-9]{16}$/;
 const CLOCK_SLACK_MS = 2000;
@@ -452,14 +452,10 @@ function projectEvidence(item) {
   };
 }
 
-function publicCitation(value) {
-  if (typeof value !== 'string' || value.trim() === '') return { url: null, withheld: false };
-  const classified = classifySourceUrl(value);
-  // Search-result URLs carry the agent's query terms, which can name a
-  // client. A citation with any query string is withheld.
-  if (!classified.url || new URL(classified.url).search !== '') return { url: null, withheld: true };
-  return { url: classified.url, withheld: false };
-}
+// Search-result URLs carry the agent's query terms, which can name a
+// client, so a citation with a query string or fragment is withheld, as is a
+// non-public URL or a redirector. The converter applies the same rule.
+const publicCitation = publicCitationUrl;
 
 function projectClaim(clusterId, finding) {
   const origin = finding.story_origin;
@@ -504,6 +500,11 @@ function projectClaim(clusterId, finding) {
     timestampEvidence.push({ url: citation.url, published_at: published.value, precision: published.precision });
   }
   const basisField = NEWSJACK_BASIS_FIELDS.includes(gate.basis_field) ? gate.basis_field : null;
+  // Newsjack reads the date prefix of an unparseable value as midnight with
+  // precision "time". The precision kept here is Media Lens's own reading of
+  // the basis value, and null when Media Lens would refuse that value.
+  const basis = originTime(gate.basis_value);
+  const basisPrecision = (gate.basis_precision === 'time' || gate.basis_precision === 'date') && basis.ok && basis.value !== null ? basis.precision : null;
   return {
     cluster_id: clusterId,
     same_story_assessment: pickEnum(origin.same_story_assessment, NEWSJACK_SAME_STORY_ASSESSMENTS),
@@ -514,7 +515,7 @@ function projectClaim(clusterId, finding) {
     confidence: pickEnum(origin.confidence, NEWSJACK_CONFIDENCE_VALUES),
     freshness_status: gate.computed_status,
     freshness_basis_field: basisField,
-    freshness_basis_precision: gate.basis_precision === 'time' || gate.basis_precision === 'date' ? gate.basis_precision : null,
+    freshness_basis_precision: basisPrecision,
     freshness_window: {
       start: floorToMsIso(gate.freshness_cutoff),
       end: floorToMsIso(gate.run_generated_at),

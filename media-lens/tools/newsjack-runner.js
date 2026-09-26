@@ -27,7 +27,7 @@
 import { spawn as nodeSpawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { constants as fsConstants } from 'node:fs';
-import { access, chmod, copyFile, lstat, mkdir, mkdtemp, open, readFile, realpath, rename, rm, unlink } from 'node:fs/promises';
+import { access, chmod, lstat, mkdir, mkdtemp, open, readFile, realpath, rename, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -225,11 +225,12 @@ export async function checkRunRequest(opts, { repoRoot = DEFAULT_REPO_ROOT } = {
 }
 
 // Read a regular file without following a symlink swapped in after the
-// request check, and never more than maxBytes.
+// request check, and never more than maxBytes. O_NONBLOCK keeps a FIFO
+// swapped in from blocking the open; fstat then refuses it.
 async function readBoundedNoFollow(path, maxBytes) {
   let handle;
   try {
-    handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+    handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
     const info = await handle.stat();
     if (!info.isFile() || info.size > maxBytes) return null;
     const buffer = await handle.readFile();
@@ -420,7 +421,9 @@ export async function runNewsjackCapture(opts = {}) {
       await mkdir(join(privateDir, dir), { mode: 0o700 });
     }
     const binary = join(privateDir, 'bin', 'newsjack');
-    await copyFile(opts.binaryPath, binary);
+    const binaryBytes = await readBoundedNoFollow(opts.binaryPath, MAX_BINARY_BYTES);
+    if (!binaryBytes) fail('binary_path_invalid', EXIT.usage);
+    await writeFile(binary, binaryBytes, { mode: 0o700, flag: 'wx' });
     await chmod(binary, 0o500);
     const verifyBinary = async () => {
       if (sha256(await readFile(binary)) !== expectedHash) fail('binary_hash_mismatch', EXIT.refused);
@@ -438,8 +441,10 @@ export async function runNewsjackCapture(opts = {}) {
     const steps = [];
     const runPinnedStep = async (step) => {
       checkAbort();
-      // Re-verify the exact bytes before every execution.
+      // Re-verify the exact bytes before every execution. The hash read is
+      // async, so an abort that arrives meanwhile is checked again.
       await verifyBinary();
+      checkAbort();
       const result = await runStep({
         spawnImpl,
         binary,

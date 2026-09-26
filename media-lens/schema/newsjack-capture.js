@@ -129,7 +129,7 @@ function isHttpsNoQuery(value) {
   if (typeof value !== 'string' || value.length > NEWSJACK_CAPTURE_LIMITS.url_chars) return false;
   try {
     const url = new URL(value);
-    return url.href === value && url.protocol === 'https:' && url.search === '' && url.username === '' && url.password === '';
+    return url.href === value && url.protocol === 'https:' && url.search === '' && url.hash === '' && url.username === '' && url.password === '';
   } catch {
     return false;
   }
@@ -181,7 +181,15 @@ export function validateNewsjackCapture(value, { pin = NEWSJACK_PIN } = {}) {
   const topKeys = ['contract', 'capture_id', 'newsjack', 'runner', 'request', 'process', 'monitor', 'selection', 'sources', 'signals', 'clustering', 'origin'];
   if (!exactKeys(value, topKeys, '$')) return { ok: false, errors };
 
-  if (typeof value.capture_id !== 'string' || !HEX64.test(value.capture_id) || canonicalCaptureId(value) !== value.capture_id) {
+  let recomputedId = null;
+  try {
+    recomputedId = canonicalCaptureId(value);
+  } catch {
+    // Deeply nested JSON can overflow the stack; report it, never throw.
+    fail('capture_structure_invalid', '$');
+    return { ok: false, errors };
+  }
+  if (typeof value.capture_id !== 'string' || !HEX64.test(value.capture_id) || recomputedId !== value.capture_id) {
     fail('capture_id_mismatch', '$.capture_id');
   }
 
@@ -312,7 +320,8 @@ export function validateNewsjackCapture(value, { pin = NEWSJACK_PIN } = {}) {
       (Array.isArray(value.signals) && selection.total_emitted_signals !== value.signals.length) ||
       selection.total_scored_signals < selection.total_emitted_signals ||
       selection.signals_not_emitted !== selection.total_scored_signals - selection.total_emitted_signals ||
-      (isPlainObject(request) && selection.limit !== request.limit)
+      (isPlainObject(request) && selection.limit !== request.limit) ||
+      (isPlainObject(request) && Array.isArray(value.signals) && value.signals.length > request.limit)
     ) {
       fail('selection_invalid', '$.selection');
     }
@@ -340,6 +349,18 @@ export function validateNewsjackCapture(value, { pin = NEWSJACK_PIN } = {}) {
         fail('source_status_invalid', path);
       }
       if (entry.error_class !== null && !NEWSJACK_ERROR_CLASSES.includes(entry.error_class)) fail('error_class_invalid', `${path}.error_class`);
+      // The status must agree with its own flags, as Newsjack derives it.
+      const errored = entry.error_class !== null;
+      const count = entry.evidence_count;
+      const consistent = {
+        used: entry.requested === true && count > 0 && !errored,
+        no_results: entry.requested === true && entry.available === true && count === 0 && !errored,
+        unavailable: entry.requested === true && entry.available === false && count === 0 && !errored,
+        error: entry.requested === true && count === 0 && errored,
+        partial_error: entry.requested === true && count > 0 && errored,
+        not_requested: entry.requested === false && !errored
+      }[entry.status];
+      if (consistent === false) fail('source_status_inconsistent', path);
     }
   }
 

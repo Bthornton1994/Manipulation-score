@@ -16,8 +16,10 @@ import {
   NEWSJACK_INDEPENDENCE_NOTE,
   NEWSJACK_MEMBER_REJECTIONS,
   NEWSJACK_ORIGIN_NOTE,
+  NEWSJACK_SAME_STORY_NOTE,
   NEWSJACK_SOURCE_KINDS,
   NON_OUTLET_HOSTS,
+  REDIRECTOR_HOSTS,
   NON_PUBLIC_HOST_SUFFIXES,
   captureToStoryDiscovery,
   classifySourceUrl,
@@ -129,7 +131,14 @@ test('a fixture capture converts to labeled, uncertain story-discovery.v1 withou
   assert.equal(fare.grouping_note, NEWSJACK_GROUPING_NOTE);
   assert.match(NEWSJACK_GROUPING_NOTE, /snippets \(Jaccard 0\.32\)/);
   assert.equal(fare.independence_note, NEWSJACK_INDEPENDENCE_NOTE);
+  assert.equal(fare.same_story_note, NEWSJACK_SAME_STORY_NOTE);
   assert.doesNotMatch(document.message, /title words/);
+  // Pin the wording itself, not only the constants.
+  assert.equal(NEWSJACK_CLUSTER_BASIS, 'newsjack_detector_text_similarity_and_cluster_overlap');
+  assert.equal(NEWSJACK_INDEPENDENCE_NOTE, 'Text similarity is not evidence of independent reporting, so no member is labeled independent.');
+  assert.equal(NEWSJACK_SAME_STORY_NOTE, 'Similar text is same-story evidence only. It is not independent reporting.');
+  assert.match(NEWSJACK_ORIGIN_NOTE, /detector_timestamp_fallback/);
+  assert.doesNotMatch(JSON.stringify(document), /matching title/i);
   assert.deepEqual(fare.members.map((member) => [member.outlet, member.relation, member.published_at]), [
     ['Fictional Daily', 'same_story', '2026-09-25T12:00:00.000Z'],
     ['Harbor Times', 'same_story', '2026-09-25T09:15:00.000Z'],
@@ -733,4 +742,156 @@ test('rejected members are listed up to 200 per source while every rejection is 
   assert.equal(row.rejected_total, 400);
   assert.equal(row.rejected_non_https_url, 400);
   assert.equal(row.rejected_members.length, 200);
+});
+
+test('the host policy covers current social, short-link, and country search domains', () => {
+  for (const url of ['https://www.threads.com/@agency/post/1', 'https://bit.ly/abc', 'https://t.me/agency/1', 'https://vimeo.com/1', 'https://www.google.co.uk/search', 'https://news.google.de/articles/x', 'https://search.yahoo.com/search']) {
+    const capture = mutated((c) => {
+      c.signals.find((signal) => signal.id === STUDY_CLUSTER).evidence[0].url = url;
+    });
+    const document = captureToStoryDiscovery(capture, { now: NOW });
+    assert.equal(document.clusters.find((cluster) => cluster.cluster_id === STUDY_CLUSTER), undefined, url);
+    assert.equal(document.sources_checked[0].rejected_non_outlet_host, 1, url);
+  }
+  assert.ok(REDIRECTOR_HOSTS.every((host) => NON_OUTLET_HOSTS.includes(host)));
+});
+
+test('outlet names refuse link-like and blank text, and are cut without splitting a character', () => {
+  for (const value of ['tel:+15551234567', 'sms:5551234', 'user@evil.example', 'localhost', 'metadata.google.internal', 'printer.home.arpa', 'ｗｗｗ.evil.example/x', 'evil。example/x', 'ㅤ', '⠀⠀']) {
+    assert.equal(outletText(value), '', JSON.stringify(value));
+  }
+  assert.equal(outletText('Reuters.com'), 'Reuters.com');
+  const cut = outletText(`${'A'.repeat(199)}\u{1d4d5}B`);
+  assert.equal(Array.from(cut).length, 200);
+  assert.doesNotMatch(cut, /[\ud800-\udbff]$/);
+  assert.equal(displayText('ㅤ⠀ Fareᅟ vote'), 'Fare vote');
+
+  const capture = mutated((c) => {
+    const evidence = c.signals.find((signal) => signal.id === STUDY_CLUSTER).evidence[0];
+    evidence.container = 'O'.repeat(250);
+    evidence.title = 'T'.repeat(400);
+  });
+  const study = captureToStoryDiscovery(capture, { now: NOW }).clusters.find((cluster) => cluster.cluster_id === STUDY_CLUSTER);
+  assert.equal(study.members[0].outlet.length, 200);
+  assert.equal(study.members[0].article_title.length, 300);
+  const blank = mutated((c) => {
+    c.signals.find((signal) => signal.id === STUDY_CLUSTER).evidence[0].title = 'ㅤ⠀';
+  });
+  const blankDoc = captureToStoryDiscovery(blank, { now: NOW });
+  assert.equal(blankDoc.clusters.find((cluster) => cluster.cluster_id === STUDY_CLUSTER), undefined);
+});
+
+test('deeply nested capture JSON abstains instead of throwing', () => {
+  const text = JSON.stringify(buildFixtureCapture({ withOrigin: false }));
+  const deep = text.replace('"origin":null', `"origin":${'{"a":'.repeat(50000)}1${'}'.repeat(50000)}`);
+  assert.ok(deep.length < NEWSJACK_CAPTURE_MAX_TEXT_BYTES);
+  const document = captureToStoryDiscovery(deep, { now: NOW });
+  assert.equal(document.status, 'abstain');
+  assert.equal(document.sources_checked[0].error, 'capture_structure_invalid');
+  assert.deepEqual(codes(validateNewsjackCapture(JSON.parse(deep))), ['capture_structure_invalid']);
+});
+
+test('source status flags must agree with each other and signals must fit the limit', () => {
+  const cases = [
+    ['source_status_inconsistent', (c) => (c.sources.news_search.requested = false)],
+    ['source_status_inconsistent', (c) => (c.sources.news_search.error_class = 'timeout')],
+    ['source_status_inconsistent', (c) => Object.assign(c.sources.news_search, { status: 'error', error_class: null })],
+    ['selection_invalid', (c) => Object.assign(c.request, { limit: 3 }) && Object.assign(c.selection, { limit: 3 })]
+  ];
+  for (const [code, fn] of cases) assert.ok(codes(validateNewsjackCapture(mutated(fn))).includes(code), code);
+  const partial = captureToStoryDiscovery(
+    mutated((c) => Object.assign(c.sources.news_search, { status: 'partial_error', error_class: 'timeout' })),
+    { now: NOW }
+  );
+  assert.equal(partial.status, 'ok');
+  assert.equal(partial.sources_checked[0].outcome, 'partial');
+  assert.equal(partial.sources_checked[0].error, 'timeout');
+});
+
+test('an empty result says whether the search returned nothing or everything was dropped', () => {
+  const noResults = buildFixtureCapture({ withOrigin: false });
+  noResults.signals = [];
+  noResults.clustering.groups = [];
+  Object.assign(noResults.selection, { total_scored_signals: 0, total_emitted_signals: 0, signals_not_emitted: 0, evidence_truncated: 0 });
+  Object.assign(noResults.sources.news_search, { evidence_count: 0, status: 'no_results' });
+  withId(noResults);
+  const document = captureToStoryDiscovery(noResults, { now: NOW });
+  assert.equal(document.status, 'empty');
+  assert.equal(document.reason, 'no_results');
+  assert.match(document.message, /returned no results/);
+  // A partial source still counts as checked.
+  const allDropped = mutated((c) => {
+    Object.assign(c.sources.news_search, { status: 'partial_error', error_class: 'timeout' });
+    for (const signal of c.signals) for (const evidence of signal.evidence) evidence.url = evidence.url.replace('https:', 'http:');
+    c.origin = null;
+    c.request.origin_findings_sha256 = null;
+    c.process.steps.pop();
+  });
+  const dropped = captureToStoryDiscovery(allDropped, { now: NOW });
+  assert.equal(dropped.reason, 'no_accepted_members');
+});
+
+test('capture contract edge rules: step order, one claim per cluster, date and precision labels, window span', () => {
+  const cases = [
+    ['process_order_invalid', (c) => (c.process.steps[2].started_at = '2026-09-25T18:00:03.400Z')],
+    ['origin_invalid', (c) => c.origin.claims.push(structuredClone(c.origin.claims[0]))],
+    ['origin_invalid', (c) => (c.origin.claims[1].first_public_at = '2026-02-30')],
+    ['origin_invalid', (c) => (c.origin.claims[0].first_public_at_precision = 'date')],
+    ['origin_invalid', (c) => (c.origin.claims[0].timestamp_evidence[0].precision = 'date')],
+    ['origin_invalid', (c) => (c.origin.claims[0].freshness_window = { start: '2026-09-24T19:00:00.052Z', end: '2026-09-25T18:00:00.052Z', hours: 23 })],
+    ['origin_invalid', (c) => (c.origin.claims[0].freshness_window = { start: '2026-09-24T19:00:00.052Z', end: '2026-09-25T18:00:00.052Z', hours: 24 })],
+    ['origin_invalid', (c) => (c.origin.claims[0].original_url = 'https://harbor-times.example/local/transit-fare-vote#q=acme')],
+    ['evidence_invalid', (c) => (c.signals.flatMap((signal) => signal.evidence).find((evidence) => evidence.title_from_excerpt).title = 'copied snippet')]
+  ];
+  for (const [code, fn] of cases) {
+    const result = validateNewsjackCapture(mutated(fn));
+    assert.ok(codes(result).includes(code), `${code}: got ${codes(result).join(',')}`);
+  }
+});
+
+test('a published time at the retrieval bound is kept and one just after it is refused', () => {
+  for (const [time, kept] of [['2026-09-25T18:00:03.410Z', true], ['2026-09-25T18:00:03.411Z', false]]) {
+    const capture = mutated((c) => {
+      c.signals.find((signal) => signal.id === STUDY_CLUSTER).evidence[0].published_at = time;
+    });
+    const study = captureToStoryDiscovery(capture, { now: NOW }).clusters.find((cluster) => cluster.cluster_id === STUDY_CLUSTER);
+    assert.equal(Boolean(study), kept, time);
+  }
+});
+
+test('origin citations withhold redirectors and fragments, and a refused basis value carries no precision', () => {
+  const findings = raw('raw-origin.json');
+  const claim = findings.signals[0];
+  claim.story_origin.original_url = 'https://t.co/abc';
+  claim.story_origin.timestamp_evidence[0].url = 'https://harbor-times.example/local/transit-fare-vote#search=acme';
+  claim.story_origin.timestamp_evidence[1].published_at = 'garbage';
+  claim.freshness_gate.basis_value = '2026-09-25 (morning, approx)';
+  const steps = ['version', 'detector_run', 'cluster', 'origin_apply'].map((name) => ({
+    step: name,
+    started_at: FIXTURE_TIMINGS[name][0],
+    exited_at: FIXTURE_TIMINGS[name][1],
+    exit_code: 0,
+    timed_out: false,
+    stdout_bytes: 10,
+    stderr_bytes: 0
+  }));
+  const capture = projectCapture({
+    request: FIXTURE_REQUEST,
+    pin: NEWSJACK_PIN,
+    binarySha256: null,
+    mode: 'fixture',
+    steps,
+    candidates: raw('raw-detector.json'),
+    clustered: raw('raw-cluster.json'),
+    targeted: findings,
+    findingsSha256: 'b'.repeat(64)
+  });
+  assert.deepEqual(validateNewsjackCapture(capture), { ok: true, errors: [] });
+  const [projected] = capture.origin.claims;
+  assert.equal(projected.original_url, null);
+  assert.deepEqual(projected.timestamp_evidence, [{ url: 'https://valley-ledger.example/2026/09/25/fare-vote', published_at: null, precision: null }]);
+  assert.equal(projected.withheld.urls, 4);
+  assert.equal(projected.withheld.invalid_values, 2);
+  assert.equal(projected.freshness_basis_precision, null, 'Media Lens refuses the basis value, so it makes no precision claim');
+  assert.equal(projected.freshness_status, 'fresh', "Newsjack's own status is kept, labeled unverified");
 });

@@ -36,7 +36,7 @@
     "depth": "quick",
     "mock": false
   },
-  "signals": [],
+  "signals": null,
   "diagnostics": {
     "evidence_by_source": {},
     "hygiene_rejections": {},

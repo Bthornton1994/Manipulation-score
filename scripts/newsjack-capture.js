@@ -16,8 +16,8 @@
 // Exit codes: 0 ok, 1 convert abstained, 2 usage, 3 gate or pin refused,
 // 4 Newsjack process failure, 5 output validation failure, 6 write failure.
 
-import { realpathSync } from 'node:fs';
-import { lstat, readFile } from 'node:fs/promises';
+import { constants as fsConstants, realpathSync } from 'node:fs';
+import { lstat, open } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateStoryDiscovery } from '../media-lens/schema/story-discovery.js';
@@ -86,10 +86,20 @@ async function convert(path, { stdout, stderr, now, pin }) {
     write(stderr, { status: 'error', code: 'capture_not_regular_file' });
     return 1;
   }
-  let text;
+  // Open without following a symlink and without blocking on a FIFO swapped
+  // in after the lstat, then check the opened file itself.
+  let text = null;
+  let handle;
   try {
-    text = await readFile(path, { encoding: 'utf8', signal: AbortSignal.timeout(10000) });
+    handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
+    const opened = await handle.stat();
+    if (opened.isFile() && opened.size <= MAX_CAPTURE_BYTES) text = await handle.readFile({ encoding: 'utf8' });
   } catch {
+    text = null;
+  } finally {
+    await handle?.close().catch(() => {});
+  }
+  if (text === null) {
     write(stderr, { status: 'error', code: 'capture_unreadable' });
     return 1;
   }
@@ -129,8 +139,10 @@ export async function main(argv, deps = {}) {
   }
   const controller = new AbortController();
   const abort = () => controller.abort();
-  // A closed terminal must stop the child process group too.
-  for (const name of STOP_SIGNALS) process.once(name, abort);
+  // A closed terminal must stop the child process group too. Handlers stay
+  // installed for the whole run, so a repeated signal aborts again instead
+  // of killing this process before the runner cleans up.
+  for (const name of STOP_SIGNALS) process.on(name, abort);
   try {
     const result = await runCapture({
       ...opts,
@@ -157,13 +169,23 @@ export async function main(argv, deps = {}) {
   }
 }
 
+// Node resolves `node scripts/newsjack-capture` to the .js file but keeps the
+// path it was given in argv[1], so both spellings are checked.
 function isRunAsCli() {
   if (!process.argv[1]) return false;
+  let self;
   try {
-    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+    self = realpathSync(fileURLToPath(import.meta.url));
   } catch {
     return false;
   }
+  return [process.argv[1], `${process.argv[1]}.js`].some((candidate) => {
+    try {
+      return realpathSync(candidate) === self;
+    } catch {
+      return false;
+    }
+  });
 }
 
 if (isRunAsCli()) {

@@ -47,6 +47,12 @@ if (behavior.swapDir) {
   fs.mkdirSync(behavior.swapDir.target);
   fs.symlinkSync(behavior.swapDir.target, behavior.swapDir.path);
 }
+if (behavior.swapFile) {
+  // Replace a file the runner will read later with a symlink or a FIFO.
+  fs.renameSync(behavior.swapFile.path, behavior.swapFile.path + '-moved');
+  if (behavior.swapFile.kind === 'fifo') require('node:child_process').execFileSync(behavior.swapFile.mkfifo, [behavior.swapFile.path]);
+  else fs.symlinkSync(behavior.swapFile.path + '-moved', behavior.swapFile.path);
+}
 if (behavior.action === 'setsid') {
   // A descendant in its own session keeps the stdout pipe open after the
   // process group is killed.
@@ -90,10 +96,12 @@ if (stepName === 'detector_run') {
 if (stepName === 'cluster') {
   const candidates = JSON.parse(fs.readFileSync(flag('candidates'), 'utf8'));
   const signals = (candidates.signals || []).slice().sort((a, b) => (a.id < b.id ? -1 : 1));
+  const bands = {};
+  for (const s of signals) { const band = (s.story_size && s.story_size.band) || 'unknown'; bands[band] = (bands[band] || 0) + 1; }
   emit({
     version: 1, generated_at: nanoNow(), monitor: candidates.monitor,
     signals: signals.map((s, i) => Object.assign({}, s, { cluster: { cluster_id: s.id, cluster_index: i, cluster_size: 1, role: 'representative', member_count: 0, member_ids: [], duplicate_count: 0 } })),
-    clustering: { input_signal_count: signals.length, cluster_count: signals.length, representative_count: signals.length, duplicate_count: 0, pre_gated_count: 0, title_overlap: 0.6, min_shared_tokens: 2, drop_stale: false, stale_max_band: 'moderate', story_size_bands: {} },
+    clustering: { input_signal_count: signals.length, cluster_count: signals.length, representative_count: signals.length, duplicate_count: 0, pre_gated_count: 0, title_overlap: 0.6, min_shared_tokens: 2, drop_stale: false, stale_max_band: 'moderate', story_size_bands: bands },
     clustered_duplicates: [], pre_gated_stale: [], coarse_relevance: candidates.coarse_relevance === undefined ? null : candidates.coarse_relevance,
     detector_diagnostics: {}, source_errors: candidates.source_errors
   });
@@ -107,19 +115,23 @@ if (stepName === 'origin_apply') {
   const run = clustered.monitor.generated_at;
   const cutoff = new Date(Date.parse(run) - hours * 3600000).toISOString();
   const status = SCENARIO.originStatus || 'unverified_no_corroboration';
-  const selected = []; const rejected = []; const missing = [];
+  const selected = []; const rejected = []; const missing = []; const statusCounts = {};
   for (const s of clustered.signals) {
     const finding = findings.find((f) => f.signal_id === s.id);
     const urls = s.evidence.map((e) => e.url).filter(Boolean);
     const summary = { signal_id: s.id, signal_title: s.title, sources: s.sources, routing: s.routing, evidence_urls: urls.length ? urls.slice(0, 5) : null };
     if (!finding) { missing.push(summary); continue; }
-    const gate = { computed_status: status, worker_status: null, run_generated_at: run, freshness_cutoff: cutoff, freshness_window_hours: hours, basis_field: 'first_public_at', basis_value: finding.first_public_at || null, basis_precision: 'time', rationale: 'fake', deterministic_authority: true };
-    if (status === 'fresh' || status === 'fresh_new_development') selected.push(Object.assign({}, s, { story_origin: finding, freshness_gate: gate }));
+    // As in v0.1.19: no first_public_at means unverified_no_timestamp with an empty basis.
+    const timed = Boolean(finding.first_public_at);
+    const computed = timed ? status : 'unverified_no_timestamp';
+    statusCounts[computed] = (statusCounts[computed] || 0) + 1;
+    const gate = { computed_status: computed, worker_status: null, run_generated_at: run, freshness_cutoff: cutoff, freshness_window_hours: hours, basis_field: timed ? 'first_public_at' : null, basis_value: timed ? finding.first_public_at : null, basis_precision: timed ? 'time' : null, rationale: 'fake', deterministic_authority: true };
+    if (computed === 'fresh' || computed === 'fresh_new_development') selected.push(Object.assign({}, s, { story_origin: finding, freshness_gate: gate }));
     else rejected.push(Object.assign({}, summary, { story_origin: finding, freshness_gate: gate }));
   }
   emit({
     version: 1, generated_at: nanoNow(), monitor: clustered.monitor, signals: selected.length ? selected : null, coarse_relevance: null,
-    freshness_gate: { input_signal_count: clustered.signals.length, origin_finding_count: findings.length, selected_count: selected.length, rejected_count: rejected.length, missing_count: missing.length, status_counts: {}, freshness_window_hours: hours, run_generated_at: run, freshness_cutoff: cutoff, included_statuses: ['fresh', 'fresh_new_development'], rejected_signals: rejected.length ? rejected : null, missing_signals: missing.length ? missing : null, deterministic_authority: true },
+    freshness_gate: { input_signal_count: clustered.signals.length, origin_finding_count: findings.length, selected_count: selected.length, rejected_count: rejected.length, missing_count: missing.length, status_counts: statusCounts, freshness_window_hours: hours, run_generated_at: run, freshness_cutoff: cutoff, included_statuses: ['fresh', 'fresh_new_development'], rejected_signals: rejected.length ? rejected : null, missing_signals: missing.length ? missing : null, deterministic_authority: true },
     detector_diagnostics: {}, source_errors: clustered.source_errors
   });
   process.exit(0);

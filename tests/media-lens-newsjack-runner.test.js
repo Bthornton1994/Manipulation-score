@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn as nodeSpawn } from 'node:child_process';
 import { access, lstat, mkdir, mkdtemp, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -165,6 +165,7 @@ test('raw origin-apply output must use the run clock and window the runner set',
     ['origin_window_mismatch', (c) => (c.freshness_gate.deterministic_authority = false)],
     ['origin_finding_invalid', (c) => (c.signals[0].freshness_gate.computed_status = 'verified')],
     ['origin_finding_invalid', (c) => (c.signals[0].id = 'ffffffffffffffff')],
+    ['origin_finding_invalid', (c) => (c.signals[0].freshness_gate.run_generated_at = '2026-09-25T12:00:00Z')],
     ['origin_signal_mismatch', (c) => (c.signals[0].title = 'Edited title')],
     ['coarse_decisions_present', (c) => (c.coarse_relevance = {})]
   ];
@@ -338,20 +339,31 @@ test('a timeout kills the whole process group, including grandchildren', { timeo
   const ws = await workspace();
   const pidFile = join(ws.dir, 'grandchild.pid');
   const binary = await fake(ws, { steps: { detector_run: { action: 'grandchild', pidFile } } });
-  const result = await runNewsjackCapture(runOptions(ws, binary, { timeouts: { version: 5000, detector_run: 1500, cluster: 5000, origin_apply: 5000 } }));
+  // A long timeout leaves the fake ample time to write its pid file first.
+  const result = await runNewsjackCapture(runOptions(ws, binary, { timeouts: { version: 5000, detector_run: 4000, cluster: 5000, origin_apply: 5000 } }));
   assert.equal(result.code, 'newsjack_timeout:detector_run');
   const pid = await readPid(pidFile);
   let alive = true;
-  for (let i = 0; i < 40 && alive; i += 1) {
-    try {
-      process.kill(pid, 0);
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    } catch {
-      alive = false;
-    }
+  for (let i = 0; i < 100 && alive; i += 1) {
+    alive = await isRunning(pid);
+    if (alive) await new Promise((resolve) => setTimeout(resolve, 50));
   }
   assert.equal(alive, false, 'the grandchild was killed with the group');
 });
+
+// A killed grandchild whose parent also died is reparented and may stay a
+// zombie until PID 1 reaps it. kill(pid, 0) still succeeds on a zombie, so
+// its /proc state decides.
+async function isRunning(pid) {
+  try {
+    process.kill(pid, 0);
+  } catch {
+    return false;
+  }
+  const stat = await readFile(`/proc/${pid}/stat`, 'utf8').catch(() => null);
+  if (stat === null) return process.platform !== 'linux';
+  return stat.slice(stat.lastIndexOf(')') + 2, stat.lastIndexOf(')') + 3) !== 'Z';
+}
 
 async function readPid(pidFile) {
   for (let i = 0; i < 100; i += 1) {
@@ -405,6 +417,36 @@ test('an abort before or between steps stops the run without executing more', as
   assert.equal(await exists(ws.marker), false);
   assert.deepEqual(await readdir(ws.out), []);
   assert.deepEqual(await readdir(ws.work), []);
+});
+
+test('an abort between steps stops the run before the next step', async () => {
+  const ws = await workspace();
+  const binary = await fake(ws);
+  const controller = new AbortController();
+  let calls = 0;
+  const spawnImpl = (...args) => {
+    const child = nodeSpawn(...args);
+    calls += 1;
+    // Abort after the version step has fully settled.
+    if (calls === 1) child.on('close', () => setImmediate(() => controller.abort()));
+    return child;
+  };
+  const result = await runNewsjackCapture(runOptions(ws, binary, { signal: controller.signal, spawnImpl }));
+  assert.equal(result.code, 'newsjack_killed:aborted');
+  assert.deepEqual((await records(ws)).map((call) => call.argv[0]), ['version']);
+  assert.deepEqual(await readdir(ws.out), []);
+});
+
+test('origin findings swapped for a symlink or a FIFO during the run are refused without hanging', { timeout: 30000 }, async () => {
+  for (const kind of ['symlink', 'fifo']) {
+    const ws = await workspace();
+    const findings = join(ws.dir, 'findings.json');
+    await writeFile(findings, JSON.stringify({ findings: [] }));
+    const binary = await fake(ws, { steps: { cluster: { swapFile: { path: findings, kind, mkfifo: '/usr/bin/mkfifo' } } } });
+    const result = await runNewsjackCapture(runOptions(ws, binary, { originFindings: findings }));
+    assert.equal(result.code, 'origin_findings_invalid', kind);
+    assert.deepEqual(await readdir(ws.out), [], kind);
+  }
 });
 
 test('origin-apply output is validated in the run, not only in unit checks', async () => {
@@ -564,24 +606,30 @@ test('the capture CLI turns SIGINT, SIGTERM, and SIGHUP into an abort and remove
           signal.addEventListener('abort', () => resolve({ status: 'error', exitCode: 4, code: 'newsjack_killed:aborted' }), { once: true });
         })
     });
-    setImmediate(() => process.emit(name));
+    // A repeated signal aborts again; it must not kill the process.
+    setImmediate(() => {
+      process.emit(name);
+      process.emit(name);
+    });
     assert.equal(await pending, 4, name);
     assert.deepEqual(JSON.parse(err.text()), { status: 'error', code: 'newsjack_killed:aborted' });
     assert.equal(process.listenerCount(name), before, name);
   }
 });
 
-test('the capture CLI runs when invoked through a symlink', async () => {
+test('the capture CLI runs when invoked through a symlink or without the extension', async () => {
   const ws = await workspace();
   const link = join(ws.dir, 'newsjack-capture.js');
   await symlink(join(REPO_ROOT, 'scripts', 'newsjack-capture.js'), link);
-  let failure;
-  try {
-    execFileSync(process.execPath, [link], { stdio: ['ignore', 'pipe', 'pipe'] });
-  } catch (error) {
-    failure = error;
+  for (const entry of [link, join(REPO_ROOT, 'scripts', 'newsjack-capture')]) {
+    let failure;
+    try {
+      execFileSync(process.execPath, [entry], { stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch (error) {
+      failure = error;
+    }
+    assert.ok(failure, `${entry}: a usage error exits non-zero instead of silently doing nothing`);
+    assert.equal(failure.status, 2);
+    assert.deepEqual(JSON.parse(failure.stderr.toString()), { status: 'error', code: 'usage_invalid' });
   }
-  assert.ok(failure, 'a usage error exits non-zero instead of silently doing nothing');
-  assert.equal(failure.status, 2);
-  assert.deepEqual(JSON.parse(failure.stderr.toString()), { status: 'error', code: 'usage_invalid' });
 });

@@ -18,7 +18,7 @@ import {
   NEWSJACK_CAPTURE_MAX_TEXT_BYTES,
   validateNewsjackCapture
 } from '../../schema/newsjack-capture.js';
-import { FRAME_NOTE, OMISSION_NOTE, SAME_STORY_NOT_INDEPENDENT } from './cluster.js';
+import { FRAME_NOTE, OMISSION_NOTE } from './cluster.js';
 import { NEWSJACK_PIN } from './newsjack-pin.js';
 import { SEARCH_PROVIDER_MODE_STATUS } from './search-provider.js';
 
@@ -27,11 +27,12 @@ export const NEWSJACK_MEMBER_BASIS = 'newsjack_cluster_member';
 export const NEWSJACK_WINDOW_BASIS = 'media_lens_published_at_filter_from_max_age_hours';
 export const NEWSJACK_RETRIEVED_AT_BASIS = 'runner_observed_detector_exit_upper_bound';
 export const NEWSJACK_ORIGIN_NOTE =
-  "Written by an AI agent following Newsjack's story-origin-check skill. Newsjack checked the finding's structure and computed the freshness status from the agent's timestamps. Nobody verified the timestamps or URLs. This is not independent reporting and does not change the cluster.";
+  "Written by an AI agent following Newsjack's story-origin-check skill. Newsjack checked the finding's structure and computed the freshness status from the agent's timestamps, or from a provider-reported detector time when detector_timestamp_fallback is true. Nobody verified the timestamps or URLs. This is not independent reporting and does not change the cluster.";
 export const NEWSJACK_GROUPING_NOTE =
   "Newsjack's detector puts evidence in one signal when it shares an exact URL or enough words across titles and snippets (Jaccard 0.32), then its cluster step merges signals that share a URL or at least two significant title words (overlap 0.6). This is a text-similarity heuristic.";
 export const NEWSJACK_INDEPENDENCE_NOTE =
   'Text similarity is not evidence of independent reporting, so no member is labeled independent.';
+export const NEWSJACK_SAME_STORY_NOTE = 'Similar text is same-story evidence only. It is not independent reporting.';
 
 // Which Newsjack evidence kinds may become story members. news_search is the
 // only kind meant to return publisher articles, but its results are not
@@ -131,12 +132,38 @@ export const NON_OUTLET_HOSTS = Object.freeze([
   'youtube.com',
   'youtu.be',
   'linkedin.com',
+  'lnkd.in',
   'bsky.app',
+  'threads.com',
+  't.me',
+  'vimeo.com',
+  'bit.ly',
+  'tinyurl.com',
+  'ow.ly',
+  'buff.ly',
   'news.google.com',
   'google.com',
   'bing.com',
-  'duckduckgo.com'
+  'duckduckgo.com',
+  'search.yahoo.com',
+  'news.yahoo.com'
 ]);
+// Pure redirectors: the destination of such a link is never checked, so it
+// is not used as an origin citation either.
+export const REDIRECTOR_HOSTS = Object.freeze(['t.co', 'bit.ly', 'tinyurl.com', 'ow.ly', 'buff.ly', 'lnkd.in']);
+
+export function isRedirectorHost(url) {
+  let host;
+  try {
+    host = new URL(url).hostname.toLowerCase().replace(/\.$/, '');
+  } catch {
+    return false;
+  }
+  return REDIRECTOR_HOSTS.some((entry) => host === entry || host.endsWith(`.${entry}`));
+}
+
+// Google search and news on country domains (google.co.uk, google.de, ...).
+const GOOGLE_COUNTRY_HOST = /(?:^|\.)google\.(?:com?\.)?[a-z]{2}$/;
 
 export function isNonOutletHost(url) {
   let host;
@@ -145,7 +172,7 @@ export function isNonOutletHost(url) {
   } catch {
     return false;
   }
-  return NON_OUTLET_HOSTS.some((entry) => host === entry || host.endsWith(`.${entry}`));
+  return NON_OUTLET_HOSTS.some((entry) => host === entry || host.endsWith(`.${entry}`)) || GOOGLE_COUNTRY_HOST.test(host);
 }
 
 // Classify a candidate canonical source link. Only public https URLs can
@@ -171,7 +198,7 @@ export function classifySourceUrl(value) {
 }
 
 // Text that a URL parser or a browser would read as a link.
-const URL_SCHEME_TEXT = /^(?:https?|ftp|wss?|javascript|data|vbscript|file|mailto|blob):/i;
+const URL_SCHEME_TEXT = /^(?:https?|ftp|wss?|javascript|data|vbscript|file|mailto|blob|tel|sms):/i;
 
 export function isUrlLikeText(value) {
   return value.includes('://') || value.startsWith('//') || URL_SCHEME_TEXT.test(value);
@@ -185,28 +212,40 @@ function isPathLikeText(value) {
 
 // A host name with a path, query, or port, a www. name, or an IP address
 // reads as a link in many renderers even without a scheme.
+// A bare publication domain such as "Reuters.com" stays readable, but not a
+// non-public name such as "localhost" or "printer.home.arpa". Ideographic
+// full stops count as dots. An email-like value is not an outlet name.
 function isHostLikeText(value) {
+  const dotted = value.replace(/[\u3002\uff61]/g, '.');
+  const bareHost = /^[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.?$/u.test(dotted) ? dotted.toLowerCase().replace(/\.$/, '') : null;
   return (
-    /^www\./i.test(value) ||
-    /^[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+(?:[/?#]|:\d)/u.test(value) ||
-    /^\d{1,3}(?:\.\d{1,3}){3}$/.test(value) ||
-    /^\[?[0-9a-f]*:[0-9a-f:]+\]?$/i.test(value)
+    /^www\./i.test(dotted) ||
+    /^[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+(?:[/?#]|:\d)/u.test(dotted) ||
+    /^\d{1,3}(?:\.\d{1,3}){3}$/.test(dotted) ||
+    /^\[?[0-9a-f]*:[0-9a-f:]+\]?$/i.test(dotted) ||
+    /\S@\S/.test(dotted) ||
+    (bareHost !== null && (bareHost === 'localhost' || (bareHost.includes('.') && isNonPublicHostName(bareHost))))
   );
 }
 
-// Display text: control characters and invisible format characters
-// (including bidi overrides) are removed and whitespace is collapsed.
+// Display text: control characters, invisible format characters (including
+// bidi overrides), and blank-looking letters (Hangul fillers, the braille
+// blank) are removed and whitespace is collapsed.
 export function displayText(value) {
   if (typeof value !== 'string') return '';
-  return value.replace(/[\p{Cc}\p{Cf}]/gu, ' ').replace(/\s+/g, ' ').trim();
+  return value
+    .replace(/[\p{Cc}\p{Cf}\u115F\u1160\u3164\uFFA0\u2800]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 // Outlet names are display text. A value with no letter or digit, or one
 // that reads as a URL, a host name, or a file path, is not an outlet name.
 export function outletText(value) {
-  const normalized = displayText(typeof value === 'string' ? value.replace(/\p{Cf}/gu, '') : '');
+  // NFKC folds fullwidth look-alikes (for example "ｗｗｗ.") before the checks.
+  const normalized = displayText(typeof value === 'string' ? value.replace(/\p{Cf}/gu, '').normalize('NFKC') : '');
   if (!normalized || !/[\p{L}\p{N}]/u.test(normalized) || isUrlLikeText(normalized) || isPathLikeText(normalized) || isHostLikeText(normalized)) return '';
-  return normalized.slice(0, 200);
+  return truncateCodePoints(normalized, 200);
 }
 
 function outletSlug(outlet) {
@@ -330,10 +369,14 @@ function stepTime(capture, step, field) {
   return capture.process.steps.find((entry) => entry.step === step)?.[field] ?? null;
 }
 
-function publicCitationUrl(value) {
-  if (value === null) return { url: null, withheld: false };
+// Origin citations: public https only, no query string or fragment (search
+// terms can name a client), and no redirector.
+export function publicCitationUrl(value) {
+  if (typeof value !== 'string' || value.trim() === '') return { url: null, withheld: false };
   const classified = classifySourceUrl(value);
-  if (!classified.url || new URL(classified.url).search !== '') return { url: null, withheld: true };
+  if (!classified.url) return { url: null, withheld: true };
+  const parsed = new URL(classified.url);
+  if (parsed.search !== '' || parsed.hash !== '' || isRedirectorHost(classified.url)) return { url: null, withheld: true };
   return { url: classified.url, withheld: false };
 }
 
@@ -389,7 +432,13 @@ export function captureToStoryDiscovery(input, { now, pin = NEWSJACK_PIN, search
     return abstain('newsjack_capture_invalid', read.error, 'The Newsjack capture could not be read. No story members were checked.');
   }
   const capture = read.capture;
-  const validation = validateNewsjackCapture(capture, { pin });
+  let validation;
+  try {
+    validation = validateNewsjackCapture(capture, { pin });
+  } catch {
+    // For example a stack overflow on deeply nested JSON: abstain, never throw.
+    return abstain('newsjack_capture_invalid', 'capture_structure_invalid', 'The Newsjack capture could not be checked. No story members were checked.');
+  }
   if (!validation.ok) {
     return abstain('newsjack_capture_invalid', validation.errors[0].code, 'The Newsjack capture did not match media-lens.newsjack-capture.v1. No story members were checked.', {
       errors: validation.errors.slice(0, 20).map((error) => ({ code: error.code, path: error.path }))
@@ -582,7 +631,7 @@ export function captureToStoryDiscovery(input, { now, pin = NEWSJACK_PIN, search
       frame_note: FRAME_NOTE,
       coverage_gap: null,
       omission_note: OMISSION_NOTE,
-      same_story_note: SAME_STORY_NOT_INDEPENDENT
+      same_story_note: NEWSJACK_SAME_STORY_NOTE
     };
     const claim = originClaimFor(capture, group.cluster_id);
     if (claim) cluster.origin_claims = [claim];
@@ -594,17 +643,23 @@ export function captureToStoryDiscovery(input, { now, pin = NEWSJACK_PIN, search
   const status = clusters.length > 0 ? 'ok' : 'empty';
   // An empty result means something only when a member-eligible source was
   // actually checked. Otherwise say that nothing was checked.
-  const eligibleChecked = sourcesChecked.some((row) => row.member_eligible && (row.outcome === 'checked' || row.outcome === 'partial'));
+  const eligibleRows = sourcesChecked.filter((row) => row.member_eligible);
+  const eligibleChecked = eligibleRows.some((row) => row.outcome === 'checked' || row.outcome === 'partial');
+  const eligibleItems = eligibleRows.reduce((sum, row) => sum + row.item_count + row.rejected_total, 0);
+  const eligibleReported = eligibleRows.reduce((sum, row) => sum + row.newsjack_evidence_count, 0);
+  const emptyReason = !eligibleChecked ? 'no_member_source_checked' : eligibleReported === 0 && eligibleItems === 0 ? 'no_results' : 'no_accepted_members';
   const label = mode === 'mock' ? 'Newsjack mock run: synthetic data from a pinned binary, not live coverage.' : 'Newsjack fixture capture: hand-written example data, not live coverage.';
   const document = baseDocument({
     status,
-    reason: status === 'ok' ? 'newsjack_capture_converted' : eligibleChecked ? 'no_accepted_members' : 'no_member_source_checked',
+    reason: status === 'ok' ? 'newsjack_capture_converted' : emptyReason,
     message:
       status === 'ok'
         ? `${label} Members are grouped by Newsjack's text-similarity heuristics, and none is labeled independent. ${OMISSION_NOTE}`
-        : eligibleChecked
-          ? `${label} No evidence item met the member rules. Dropped items are counted by reason on each sources_checked row. ${OMISSION_NOTE}`
-          : `${label} No news-search results were returned, so nothing was checked. Each sources_checked row gives the outcome and error class. ${OMISSION_NOTE}`,
+        : {
+            no_accepted_members: `${label} No evidence item in the capture met the member rules. Dropped items are counted by reason on each sources_checked row, and signals Newsjack did not emit are counted in provenance.provider_selection. ${OMISSION_NOTE}`,
+            no_results: `${label} The news search returned no results in this run. ${OMISSION_NOTE}`,
+            no_member_source_checked: `${label} No news-search results were returned, so nothing was checked. Each sources_checked row gives the outcome and error class. ${OMISSION_NOTE}`
+          }[emptyReason],
     data_origin: 'fixture',
     fixture_labeled: true,
     retrieved_at: retrievedAt,

@@ -633,3 +633,36 @@ test('the capture CLI runs when invoked through a symlink or without the extensi
     assert.deepEqual(JSON.parse(failure.stderr.toString()), { status: 'error', code: 'usage_invalid' });
   }
 });
+
+test('a repeated real SIGINT aborts again instead of killing the CLI before cleanup', { timeout: 30000 }, async () => {
+  // process.emit cannot show this: only a real signal with no listener left
+  // triggers Node's default exit.
+  const script = `
+    import { main } from ${JSON.stringify(new URL('../scripts/newsjack-capture.js', import.meta.url).href)};
+    const code = await main(['run', '--binary', '/bin/true', '--query', 'transit fare vote', '--out-dir', '/tmp'], {
+      stdout: { write() {} },
+      stderr: { write() {} },
+      runCapture: ({ signal }) => new Promise((resolve) => {
+        // A real run is kept alive by its child process; stand in for it.
+        const keepAlive = setInterval(() => {}, 1000);
+        process.stdout.write('ready\\n');
+        signal.addEventListener('abort', () => {
+          // Stay busy past the second signal, as a runner cleaning up would.
+          setTimeout(() => {
+            clearInterval(keepAlive);
+            resolve({ status: 'error', exitCode: 4, code: 'newsjack_killed:aborted' });
+          }, 500);
+        });
+      })
+    });
+    process.exitCode = code;
+  `;
+  const child = nodeSpawn(process.execPath, ['--input-type=module', '-e', script], { stdio: ['ignore', 'pipe', 'pipe'] });
+  await new Promise((resolve) => child.stdout.once('data', resolve));
+  child.kill('SIGINT');
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  child.kill('SIGINT');
+  const [code, signal] = await new Promise((resolve) => child.on('close', (c, s) => resolve([c, s])));
+  assert.equal(signal, null, 'the second SIGINT must not kill the process');
+  assert.equal(code, 4);
+});

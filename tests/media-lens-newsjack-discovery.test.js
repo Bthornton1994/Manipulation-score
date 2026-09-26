@@ -757,11 +757,13 @@ test('the host policy covers current social, short-link, and country search doma
 });
 
 test('outlet names refuse link-like and blank text, and are cut without splitting a character', () => {
-  for (const value of ['tel:+15551234567', 'sms:5551234', 'user@evil.example', 'localhost', 'metadata.google.internal', 'printer.home.arpa', 'ｗｗｗ.evil.example/x', 'evil。example/x', 'ㅤ', '⠀⠀']) {
+  // The fullwidth cases without a path are caught only after NFKC folding.
+  for (const value of ['tel:+15551234567', 'sms:5551234', 'user@evil.example', 'localhost', 'metadata.google.internal', 'printer.home.arpa', 'ｗｗｗ.evil.example/x', 'ｗｗｗ.evil.example', 'ｈｔｔｐｓ：／／evil.example', 'evil。example/x', 'ㅤ', '⠀⠀']) {
     assert.equal(outletText(value), '', JSON.stringify(value));
   }
   assert.equal(outletText('Reuters.com'), 'Reuters.com');
-  const cut = outletText(`${'A'.repeat(199)}\u{1d4d5}B`);
+  // U+20000 is unchanged by NFKC, so the cut must not split its surrogate pair.
+  const cut = outletText(`${'A'.repeat(199)}\u{20000}B`);
   assert.equal(Array.from(cut).length, 200);
   assert.doesNotMatch(cut, /[\ud800-\udbff]$/);
   assert.equal(displayText('ㅤ⠀ Fareᅟ vote'), 'Fare vote');

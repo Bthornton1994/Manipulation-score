@@ -690,4 +690,6 @@ test('architecture section 10.2 matches first-article Trafilatura matching', asy
   assert.match(section, /first `<article>`/);
   assert.match(section, /Trafilatura paragraph/);
   assert.match(section, /fall back to one block per Trafilatura line/);
+  assert.match(section, /`<br>`-split paragraphs/);
+  assert.match(section, /leading list marker \(`-`, `\*`, or `•`\)/);
 });

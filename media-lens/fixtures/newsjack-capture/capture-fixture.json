@@ -1,0 +1,321 @@
+{
+  "contract": "media-lens.newsjack-capture.v1",
+  "capture_id": "d157e6a6a38ca1b8f60ae60da0b2b2e0967b47a50242de510933f132563062dd",
+  "newsjack": {
+    "version": "v0.1.19",
+    "commit": "bdb41b8d1f9a9e27221cc86102cbfe1a748fc123",
+    "binary_sha256": null
+  },
+  "runner": {
+    "mode": "fixture",
+    "argv_template": "media-lens.newsjack-argv.v1"
+  },
+  "request": {
+    "query": "transit fare vote",
+    "sources": [
+      "news_search"
+    ],
+    "depth": "quick",
+    "lookback_days": 1,
+    "max_age_hours": 24,
+    "limit": 20,
+    "origin_findings_sha256": "7a3c6fdbd686e22bd6b71a940db0e40c2a9757000601d2d52453f728e6a75731"
+  },
+  "process": {
+    "steps": [
+      {
+        "step": "version",
+        "started_at": "2026-09-25T17:59:59.900Z",
+        "exited_at": "2026-09-25T17:59:59.950Z",
+        "exit_code": 0,
+        "timed_out": false,
+        "stdout_bytes": 8,
+        "stderr_bytes": 0
+      },
+      {
+        "step": "detector_run",
+        "started_at": "2026-09-25T18:00:00.000Z",
+        "exited_at": "2026-09-25T18:00:03.410Z",
+        "exit_code": 0,
+        "timed_out": false,
+        "stdout_bytes": 14457,
+        "stderr_bytes": 0
+      },
+      {
+        "step": "cluster",
+        "started_at": "2026-09-25T18:00:03.420Z",
+        "exited_at": "2026-09-25T18:00:03.470Z",
+        "exit_code": 0,
+        "timed_out": false,
+        "stdout_bytes": 12814,
+        "stderr_bytes": 0
+      },
+      {
+        "step": "origin_apply",
+        "started_at": "2026-09-25T18:00:03.480Z",
+        "exited_at": "2026-09-25T18:00:03.520Z",
+        "exit_code": 0,
+        "timed_out": false,
+        "stdout_bytes": 8714,
+        "stderr_bytes": 0
+      }
+    ]
+  },
+  "monitor": {
+    "generated_at": "2026-09-25T18:00:00.052314Z"
+  },
+  "selection": {
+    "total_scored_signals": 4,
+    "total_emitted_signals": 4,
+    "signals_not_emitted": 0,
+    "hygiene_rejected_total": 1,
+    "evidence_truncated": 2,
+    "limit": 20
+  },
+  "sources": {
+    "news_search": {
+      "requested": true,
+      "available": true,
+      "attempted": true,
+      "evidence_count": 18,
+      "status": "used",
+      "error_class": null
+    }
+  },
+  "signals": [
+    {
+      "id": "8139e0b65e6da336",
+      "evidence": [
+        {
+          "source": "news_search",
+          "title": "Bus riders react to proposed fare increase",
+          "url": "https://riverside-post.example/riders-react",
+          "container": "Riverside Post",
+          "published_at": "2026-09-25T11:42:17.123456789Z",
+          "title_from_excerpt": false
+        },
+        {
+          "source": "news_search",
+          "title": "Riders push back on fare plan",
+          "url": "https://northern-chronicle.example/fare-reaction",
+          "container": "Northern Chronicle",
+          "published_at": "2026-09-25",
+          "title_from_excerpt": false
+        },
+        {
+          "source": "news_search",
+          "title": "Commuters weigh in on fares",
+          "url": "https://coast-herald.example/fares",
+          "container": "Coast Herald",
+          "published_at": null,
+          "title_from_excerpt": false
+        },
+        {
+          "source": "news_search",
+          "title": "Fare hike draws criticism",
+          "url": "https://inland-review.example/fare-hike",
+          "container": "Inland Review",
+          "published_at": "2026-02-30T12:00:00Z",
+          "title_from_excerpt": false
+        },
+        {
+          "source": "news_search",
+          "title": "Fare increase debate continues",
+          "url": "https://summit-news.example/fare",
+          "container": "Summit News",
+          "published_at": "2026-09-25T19:00:00Z",
+          "title_from_excerpt": false
+        },
+        {
+          "source": "news_search",
+          "title": "Earlier fare proposal recalled",
+          "url": "https://lakeside-gazette.example/fare",
+          "container": "Lakeside Gazette",
+          "published_at": "2026-09-24T18:00:02Z",
+          "title_from_excerpt": false
+        },
+        {
+          "source": "news_search",
+          "title": "Internal fare memo",
+          "url": "https://metro.internal/fare",
+          "container": "Metro Internal",
+          "published_at": "2026-09-25T10:10:00Z",
+          "title_from_excerpt": false
+        },
+        {
+          "source": "news_search",
+          "title": "",
+          "url": "https://snippet-source.example/riders",
+          "container": "Snippet Source",
+          "published_at": "2026-09-25T13:00:00Z",
+          "title_from_excerpt": true
+        }
+      ]
+    },
+    {
+      "id": "b1086c347b8d1334",
+      "evidence": [
+        {
+          "source": "news_search",
+          "title": "Transit agency publishes fare study",
+          "url": "https://capital-observer.example/fare-study",
+          "container": "Capital Observer",
+          "published_at": "2026-09-25T14:05:00.250Z",
+          "title_from_excerpt": false
+        }
+      ]
+    },
+    {
+      "id": "26027af283a9b76d",
+      "evidence": [
+        {
+          "source": "news_search",
+          "title": "City council sets date for transit fare vote",
+          "url": "https://fictional-daily.example/news/fare-vote-date",
+          "container": "Fictional Daily",
+          "published_at": "2026-09-25T12:00:00Z",
+          "title_from_excerpt": false
+        },
+        {
+          "source": "news_search",
+          "title": "Council schedules transit fare vote",
+          "url": "https://harbor-times.example/local/transit-fare-vote",
+          "container": "Harbor Times",
+          "published_at": "2026-09-25T09:15:00+00:00",
+          "title_from_excerpt": false
+        },
+        {
+          "source": "news_search",
+          "title": "Transit authority statement on fare vote",
+          "url": "https://www.prnewswire.example/news-releases/transit-fare-vote",
+          "container": "PR Newswire",
+          "published_at": "2026-09-25T10:00:00.000Z",
+          "title_from_excerpt": false
+        },
+        {
+          "source": "news_search",
+          "title": "City council sets date for transit fare vote",
+          "url": "https://fictional-daily.example/news/fare-vote-date/",
+          "container": "Fictional Daily Metro",
+          "published_at": "2026-09-25T12:05:00Z",
+          "title_from_excerpt": false
+        }
+      ]
+    },
+    {
+      "id": "eda7204ac3f2c7dc",
+      "evidence": [
+        {
+          "source": "news_search",
+          "title": "Transit fare vote date set by city council",
+          "url": "https://valley-ledger.example/2026/09/25/fare-vote",
+          "container": "Valley Ledger",
+          "published_at": "2026-09-25T08:30:00-04:00",
+          "title_from_excerpt": false
+        },
+        {
+          "source": "news_search",
+          "title": "Fare vote date set",
+          "url": "http://metro-digest.example/fare",
+          "container": "Metro Wire Digest",
+          "published_at": "2026-09-25T11:00:00Z",
+          "title_from_excerpt": false
+        },
+        {
+          "source": "news_search",
+          "title": "Fare vote set for next month",
+          "url": "https://fictional-daily.example/news/other",
+          "container": "https://fictional-daily.example",
+          "published_at": "2026-09-25T11:30:00Z",
+          "title_from_excerpt": false
+        }
+      ]
+    }
+  ],
+  "clustering": {
+    "title_overlap": 0.6,
+    "min_shared_tokens": 2,
+    "groups": [
+      {
+        "cluster_id": "26027af283a9b76d",
+        "signal_ids": [
+          "26027af283a9b76d",
+          "eda7204ac3f2c7dc"
+        ]
+      },
+      {
+        "cluster_id": "8139e0b65e6da336",
+        "signal_ids": [
+          "8139e0b65e6da336"
+        ]
+      },
+      {
+        "cluster_id": "b1086c347b8d1334",
+        "signal_ids": [
+          "b1086c347b8d1334"
+        ]
+      }
+    ]
+  },
+  "origin": {
+    "claims": [
+      {
+        "cluster_id": "26027af283a9b76d",
+        "same_story_assessment": "same_story",
+        "first_public_at": "2026-09-25T09:15:00.000Z",
+        "first_public_at_precision": "time",
+        "original_url": "https://harbor-times.example/local/transit-fare-vote",
+        "timestamp_evidence": [
+          {
+            "url": "https://harbor-times.example/local/transit-fare-vote",
+            "published_at": "2026-09-25T09:15:00.000Z",
+            "precision": "time"
+          },
+          {
+            "url": "https://valley-ledger.example/2026/09/25/fare-vote",
+            "published_at": "2026-09-25T12:30:00.000Z",
+            "precision": "time"
+          }
+        ],
+        "confidence": null,
+        "freshness_status": "fresh",
+        "freshness_basis_field": "first_public_at",
+        "freshness_basis_precision": "time",
+        "freshness_window": {
+          "start": "2026-09-24T18:00:00.052Z",
+          "end": "2026-09-25T18:00:00.052Z",
+          "hours": 24
+        },
+        "detector_timestamp_fallback": false,
+        "withheld": {
+          "urls": 2,
+          "invalid_values": 1,
+          "timestamp_evidence_truncated": 0
+        }
+      },
+      {
+        "cluster_id": "b1086c347b8d1334",
+        "same_story_assessment": "unclear",
+        "first_public_at": "2026-09-20",
+        "first_public_at_precision": "date",
+        "original_url": null,
+        "timestamp_evidence": [],
+        "confidence": "low",
+        "freshness_status": "stale",
+        "freshness_basis_field": "first_public_at",
+        "freshness_basis_precision": "date",
+        "freshness_window": {
+          "start": "2026-09-24T18:00:00.052Z",
+          "end": "2026-09-25T18:00:00.052Z",
+          "hours": 24
+        },
+        "detector_timestamp_fallback": false,
+        "withheld": {
+          "urls": 0,
+          "invalid_values": 0,
+          "timestamp_evidence_truncated": 0
+        }
+      }
+    ]
+  }
+}

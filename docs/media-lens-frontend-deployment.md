@@ -64,7 +64,6 @@ read it. It returns `publicConfig()` from `media-lens/worker/config.js`:
 - every numeric limit (analyses per minute, live URL rates, Jev call cap,
   timeouts, fetch caps)
 - the Jev model id and whether a key is present (never the key)
-- whether Newsjack artifacts are configured
 - classifier.dev settings and host
 - the ESTIMATED budget rate, warn and stop thresholds, and the budget file path
 - the alert recipient email address, which is already published in
@@ -232,7 +231,7 @@ match.
    Expect `"mode":"live"`, `"liveEnabled":true`, `"liveUrlEnabled":true`,
    `"killSwitch":false`, `"urlAllowlistConfigured":true`,
    `classifierDev.enabled` and `classifierDev.effectiveEnabled` false,
-   `newsjack.artifactsConfigured` false, `jev.modelRequested` `jev-1.13.0`
+   `jev.modelRequested` `jev-1.13.0`
    with `hasApiKey` true, `limits.maxAnalysesPerMinute` 5,
    `limits.perAnalysisTimeoutMs` 15000, and `typesafeBudget` warn 20 and
    stop 30.

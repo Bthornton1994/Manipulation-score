@@ -246,9 +246,6 @@ export function loadConfig(env = process.env) {
       }),
       ciDisablesNetwork: ciDisablesNarrowNetwork(env)
     },
-    newsjack: {
-      artifactsDir: env.MEDIA_LENS_NEWSJACK_ARTIFACTS_DIR || null
-    },
     // Exact string only. Does not enable Jev, live URL, or feed retrieval
     // until a registry entry is approved. The fixture flag is ignored in live mode.
     storyDiscoveryEnabled: readExactTrue(env, 'MEDIA_LENS_ENABLE_STORY_DISCOVERY'),
@@ -358,7 +355,6 @@ export function publicConfig(config) {
     urlAllowlistConfigured: Array.isArray(config.urlAllowlist) && config.urlAllowlist.length > 0,
     limits: config.limits,
     jev: { mode: config.mode === 'live' ? 'live' : 'fixture', modelRequested: config.jev.modelRequested, hasApiKey: config.jev.hasApiKey },
-    newsjack: { artifactsConfigured: Boolean(config.newsjack.artifactsDir) },
     storyDiscovery: {
       enabled: config.storyDiscoveryEnabled === true,
       approvedSourceCount: approvedSources().length,

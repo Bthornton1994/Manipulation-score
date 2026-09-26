@@ -10,6 +10,9 @@ export const MEDIALYST_NOT_IMPLEMENTED = SEARCH_PROVIDER_NOT_IMPLEMENTED;
 // shape and labels can be reviewed before any provider exists; using them
 // fails with NOT_IMPLEMENTED. The separate default-off approved-feed client
 // in discover.js is not a search provider and is not covered by rss_atom.
+// Newsjack has no host-search transport: its only article search is
+// Medialyst news_search, so SEARCH_PROVIDER_MODE_STATUS.medialyst is the one
+// approval point the Newsjack operator tool and converter consult.
 export const SEARCH_PROVIDER_MODE_STATUS = Object.freeze({
   fixture: 'implemented',
   host_web_search: 'planned_not_implemented',
@@ -40,7 +43,7 @@ export function assertSearchProviderModeImplemented(mode) {
 }
 
 /**
- * Hit shape shared by later Newsjack host-search and Medialyst results.
+ * Hit shape for a future approved search provider.
  * `published_at` stays null when the provider did not supply a parseable
  * time. `retrieved_at` is stamped by the caller at ingest.
  *
@@ -51,7 +54,6 @@ export function assertSearchProviderModeImplemented(mode) {
  * @property {string|null} [author]
  * @property {string|null} [published_at]
  * @property {string} [source_id]
- * @property {string} [relation] Newsjack cluster relation, when the hit came from a cluster artifact.
  */
 
 /**

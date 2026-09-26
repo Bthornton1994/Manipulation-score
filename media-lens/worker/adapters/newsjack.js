@@ -1,21 +1,21 @@
-// Newsjack substrate seam. `fixture` mode (the v1 default) reads
-// fixtures/newsjack/<id>.json. `artifacts` mode reads a Newsjack run
-// directory produced out-of-band by an operator running the Newsjack
-// detector/skills in their own agent, and matches by normalized URL. The
-// worker never spawns the Newsjack CLI and never calls Medialyst; `cli`
-// mode is intentionally unimplemented in v1 (see docs/media-lens-influence-graph-plan.md
-// section 6) so the seam exists without adding a supply-chain dependency.
+// Newsjack story-context seam for article analysis. `fixture` mode (the
+// fixture-worker default) reads the repository's labeled examples in
+// fixtures/newsjack/<id>.json. `disabled` returns an empty context and is
+// what a live worker uses: live analysis reads no Newsjack output.
 //
-// Contract shapes (story_origin, freshness_gate, cluster field names) are
-// reused verbatim from Newsjack (https://github.com/elvisun/newsjack) as
-// data contracts only; no Go code or skills prose is copied. See
+// The worker never spawns the Newsjack CLI and never calls Medialyst. Real
+// Newsjack runs happen only through the operator tool in media-lens/tools/,
+// outside the worker; see media-lens/docs/newsjack-discovery.md.
+//
+// The fixture field names (story_origin, freshness_gate, cluster) follow
+// Newsjack's data contract only; no Newsjack code is copied. See
 // docs/NEWSJACK-LICENSE.md.
 
-import { lstat, readFile, readdir } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { abortableDelay, throwIfAborted } from '../abort-utils.js';
-import { mapNewsjackEvidenceToStoryDiscovery, sanitizeWindow } from '../discovery/newsjack-discovery.js';
-import { normalizedURLKey } from '../url-key.js';
+import { throwIfAborted } from '../abort-utils.js';
+
+export const NEWSJACK_ADAPTER_MODES = Object.freeze(['fixture', 'disabled']);
 
 export function emptyStoryContext(provenance = 'none') {
   return {
@@ -24,6 +24,10 @@ export function emptyStoryContext(provenance = 'none') {
     cluster: null,
     provenance
   };
+}
+
+function objectOrNull(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
 }
 
 async function readFixture(fixtureDir, fixtureId, signal) {
@@ -36,7 +40,17 @@ async function readFixture(fixtureDir, fixtureId, signal) {
     if (err?.name === 'AbortError') throw err;
     return emptyStoryContext('none');
   }
-  const parsed = JSON.parse(raw);
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return emptyStoryContext('none');
+  }
+  if (!objectOrNull(parsed)) return emptyStoryContext('none');
+  const fields = ['story_origin', 'freshness_gate', 'cluster'];
+  if (fields.some((field) => parsed[field] !== undefined && parsed[field] !== null && !objectOrNull(parsed[field]))) {
+    return emptyStoryContext('none');
+  }
   return {
     story_origin: parsed.story_origin ?? null,
     freshness_gate: parsed.freshness_gate ?? null,
@@ -45,247 +59,20 @@ async function readFixture(fixtureDir, fixtureId, signal) {
   };
 }
 
-async function readArtifactsDir(artifactsDir, { url, canonical_url, signal }) {
-  throwIfAborted(signal);
-  let entries;
-  try {
-    entries = await readdir(artifactsDir, { signal });
-  } catch (err) {
-    if (err?.name === 'AbortError') throw err;
-    return emptyStoryContext('none');
-  }
-  const candidatesFile = entries.find((f) => f === 'candidates.json');
-  const clusterFile = entries.find((f) => f === 'cluster.json');
-  if (!candidatesFile) return emptyStoryContext('none');
-
-  const candidates = JSON.parse(await readFile(join(artifactsDir, candidatesFile), { encoding: 'utf8', signal }));
-  const targetKey = normalizedURLKey(canonical_url) || normalizedURLKey(url);
-  const match = (Array.isArray(candidates) ? candidates : candidates.items || []).find((c) => normalizedURLKey(c.url) === targetKey);
-  if (!match) return emptyStoryContext('none');
-
-  let cluster = null;
-  if (clusterFile) {
-    const clusterData = JSON.parse(await readFile(join(artifactsDir, clusterFile), { encoding: 'utf8', signal }));
-    cluster = (Array.isArray(clusterData) ? clusterData : clusterData.clusters || []).find(
-      (c) => (c.members || []).some((m) => normalizedURLKey(m.url) === targetKey)
-    ) || null;
-  }
-
-  return {
-    story_origin: match.story_origin || null,
-    freshness_gate: match.freshness_gate || null,
-    cluster,
-    provenance: 'newsjack_artifacts'
-  };
-}
-
 /**
- * Create a Newsjack adapter bound to a mode.
+ * Create a Newsjack adapter bound to a mode. Unknown modes, including the
+ * removed `artifacts` and `cli` modes, throw at construction.
  */
-export function createNewsjackAdapter({ mode, fixtureId = null, fixtureDir = null, artifactsDir = null }) {
-  async function getStoryContext({ url, canonical_url, title, published_at, signal } = {}) {
-    throwIfAborted(signal);
-    if (mode === 'disabled') return emptyStoryContext('none');
-    if (mode === 'fixture') {
-      if (!fixtureId) return emptyStoryContext('none');
-      return readFixture(fixtureDir, fixtureId, signal);
-    }
-    if (mode === 'artifacts') {
-      if (!artifactsDir) return emptyStoryContext('none');
-      await abortableDelay(0, signal);
-      return readArtifactsDir(artifactsDir, { url, canonical_url, title, published_at, signal });
-    }
-    if (mode === 'cli') {
-      throw new Error('Newsjack CLI mode is not implemented in v1 (see plan section 6 / 11)');
-    }
+export function createNewsjackAdapter({ mode, fixtureId = null, fixtureDir = null } = {}) {
+  if (!NEWSJACK_ADAPTER_MODES.includes(mode)) {
     throw new Error(`Unknown Newsjack adapter mode: ${mode}`);
   }
 
-  async function discoverStoryDocument({ retrievedAt, window, query = null, signal } = {}) {
+  async function getStoryContext({ signal } = {}) {
     throwIfAborted(signal);
-    if (mode === 'cli') {
-      throw new Error('Newsjack CLI mode is not implemented in v1 (see plan section 6 / 11)');
-    }
-    if (mode === 'disabled') {
-      return mapNewsjackEvidenceToStoryDiscovery({
-        retrievedAt,
-        window,
-        providerId: 'newsjack:disabled',
-        providerMode: 'fixture',
-        freshnessGrade: 'fixture',
-        query,
-        dataOrigin: 'fixture',
-        artifactRead: { ok: false, reason: 'not_live', error: 'discovery_disabled' }
-      });
-    }
-    if (mode === 'fixture') {
-      if (!fixtureId || !fixtureDir) {
-        return mapNewsjackEvidenceToStoryDiscovery({
-          retrievedAt,
-          window,
-          query,
-          dataOrigin: 'fixture',
-          artifactRead: { ok: false, reason: 'not_live', error: 'fixture_not_configured' }
-        });
-      }
-      const read = await readJsonArtifact(join(fixtureDir, `${fixtureId}.json`), `${fixtureId}.json`, signal, { allowArray: false });
-      if (!read.ok) {
-        return mapNewsjackEvidenceToStoryDiscovery({
-          retrievedAt,
-          window,
-          providerId: 'fixture:newsjack_shaped',
-          providerMode: 'fixture',
-          freshnessGrade: 'fixture',
-          query,
-          dataOrigin: 'fixture',
-          artifactRead: read
-        });
-      }
-      const parsed = read.value;
-      const fixtureClusters = discoveryClusters(parsed);
-      if (fixtureClusters === null) {
-        return mapNewsjackEvidenceToStoryDiscovery({
-          retrievedAt,
-          window,
-          providerId: 'fixture:newsjack_shaped',
-          providerMode: 'fixture',
-          freshnessGrade: 'fixture',
-          query,
-          dataOrigin: 'fixture',
-          artifactRead: { ok: false, reason: 'invalid', error: 'artifact_shape_invalid', file: `${fixtureId}.json` }
-        });
-      }
-      return mapNewsjackEvidenceToStoryDiscovery({
-        retrievedAt,
-        window: sanitizeWindow(parsed.window) || window,
-        providerId: 'fixture:newsjack_shaped',
-        providerMode: 'fixture',
-        freshnessGrade: 'fixture',
-        query,
-        clusters: fixtureClusters,
-        origin: parsed.story_origin || parsed.origin_findings || null,
-        dataOrigin: 'fixture'
-      });
-    }
-    if (mode === 'artifacts') {
-      const loaded = artifactsDir
-        ? await readDiscoveryArtifacts(artifactsDir, signal)
-        : { ok: false, error: 'artifacts_dir_missing', clusters: [], origin: null, window: null };
-      return mapNewsjackEvidenceToStoryDiscovery({
-        retrievedAt,
-        window: sanitizeWindow(loaded.window) || window,
-        providerId: 'newsjack:artifacts',
-        providerMode: 'fixture',
-        freshnessGrade: 'unknown',
-        query,
-        clusters: loaded.ok ? loaded.clusters : [],
-        origin: loaded.ok ? loaded.origin : null,
-        dataOrigin: 'newsjack_artifacts',
-        artifactRead: loaded.ok ? { ok: true } : { ok: false, reason: loaded.reason, error: loaded.error, file: loaded.file }
-      });
-    }
-    throw new Error(`Unknown Newsjack adapter mode: ${mode}`);
+    if (mode === 'disabled' || !fixtureId || !fixtureDir) return emptyStoryContext('none');
+    return readFixture(fixtureDir, fixtureId, signal);
   }
 
-  return { mode, getStoryContext, discoverStoryDocument };
-}
-
-function isPlainObject(value) {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-// Returns the cluster groups, or null when the shape is not usable: no
-// clusters, members, or cluster key, more than one of them, a group that is
-// not an object, or a group without a members array. Callers treat null as
-// an invalid artifact instead of guessing.
-function discoveryClusters(parsed) {
-  const has = (key) => Boolean(parsed) && Object.prototype.hasOwnProperty.call(parsed, key);
-  // More than one cluster key is ambiguous, so it is refused.
-  if (['clusters', 'members', 'cluster'].filter(has).length > 1) return null;
-  let groups;
-  if (has('clusters')) {
-    if (!Array.isArray(parsed.clusters)) return null;
-    groups = parsed.clusters;
-  } else if (has('members')) {
-    groups = [{ cluster_id: parsed.cluster_id || null, members: parsed.members }];
-  } else if (has('cluster')) {
-    const cluster = parsed.cluster;
-    if (Array.isArray(cluster)) groups = cluster;
-    else if (isPlainObject(cluster)) groups = [cluster];
-    else return null;
-  } else {
-    return null;
-  }
-  const out = [];
-  for (const item of groups) {
-    // A group must carry a members array. A bare member record or a group
-    // using another key would otherwise be read as empty.
-    if (!isPlainObject(item) || !Array.isArray(item.members)) return null;
-    out.push({ cluster_id: typeof item.cluster_id === 'string' ? item.cluster_id : null, members: item.members });
-  }
-  return out;
-}
-
-const MAX_ARTIFACT_BYTES = 10 * 1024 * 1024;
-
-// Read and parse one JSON artifact. Never throws for file or JSON problems:
-// a read error, a path that is not a regular file (a directory, symlink, or
-// FIFO), an oversized file, malformed JSON, or an unexpected top-level type
-// becomes a fail-closed result the mapper turns into an abstention. Aborts
-// still throw.
-async function readJsonArtifact(path, file, signal, { allowArray }) {
-  let text;
-  try {
-    throwIfAborted(signal);
-    const info = await lstat(path);
-    if (!info.isFile()) return { ok: false, reason: 'invalid', error: 'artifact_not_regular_file', file };
-    if (info.size > MAX_ARTIFACT_BYTES) return { ok: false, reason: 'invalid', error: 'artifact_too_large', file };
-    text = await readFile(path, { encoding: 'utf8', signal });
-  } catch (err) {
-    if (err?.name === 'AbortError') throw err;
-    return { ok: false, reason: 'unavailable', error: err?.code || 'artifact_unreadable', file };
-  }
-  let value;
-  try {
-    value = JSON.parse(text);
-  } catch {
-    return { ok: false, reason: 'invalid', error: 'artifact_json_invalid', file };
-  }
-  if (!(isPlainObject(value) || (allowArray && Array.isArray(value)))) {
-    return { ok: false, reason: 'invalid', error: 'artifact_shape_invalid', file };
-  }
-  return { ok: true, value };
-}
-
-async function readDiscoveryArtifacts(artifactsDir, signal) {
-  throwIfAborted(signal);
-  let entries;
-  try {
-    entries = await readdir(artifactsDir, { signal });
-  } catch (err) {
-    if (err?.name === 'AbortError') throw err;
-    return { ok: false, reason: 'unavailable', error: err?.code || 'artifacts_unreadable', clusters: [], origin: null, window: null };
-  }
-  const clusterName = ['clustered_candidates.json', 'cluster.json'].find((name) => entries.includes(name));
-  const originName = ['origin_findings.json', 'story_origin.json'].find((name) => entries.includes(name));
-  let clusters = [];
-  let window = null;
-  if (clusterName) {
-    const read = await readJsonArtifact(join(artifactsDir, clusterName), clusterName, signal, { allowArray: true });
-    if (!read.ok) return { ...read, clusters: [], origin: null, window: null };
-    const parsed = read.value;
-    window = isPlainObject(parsed) ? parsed.window || null : null;
-    clusters = Array.isArray(parsed) ? discoveryClusters({ cluster: parsed }) : discoveryClusters(parsed);
-    if (clusters === null) {
-      return { ok: false, reason: 'invalid', error: 'artifact_shape_invalid', file: clusterName, clusters: [], origin: null, window: null };
-    }
-  }
-  let origin = null;
-  if (originName) {
-    const read = await readJsonArtifact(join(artifactsDir, originName), originName, signal, { allowArray: false });
-    if (!read.ok) return { ...read, clusters: [], origin: null, window: null };
-    const candidate = isPlainObject(read.value.story_origin) ? read.value.story_origin : read.value;
-    origin = candidate;
-  }
-  return { ok: true, clusters, origin, window };
+  return { mode, getStoryContext };
 }

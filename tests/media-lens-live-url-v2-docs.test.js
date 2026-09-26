@@ -138,7 +138,7 @@ const OLD_BUDGET_UNAVAILABLE_COPY =
 // every place that explains why story discovery and coverage comparison are
 // not live, so a future edit cannot soften one copy.
 const COVERAGE_BLOCKER =
-  'Real story discovery, same-story clustering, and cross-outlet coverage comparison are not live. The worker can read allowlisted RSS or Atom feeds only when `MEDIA_LENS_ENABLE_STORY_DISCOVERY` is the exact value true and the source registry marks that feed approved. No feed is approved. Every named candidate stays `candidate_pending_owner_approval` and is not fetched. Fixture discovery is labeled and is refused by a live-mode worker. Operator Newsjack artifacts (`MEDIA_LENS_NEWSJACK_ARTIFACTS_DIR`) are still unapproved for ml-jev. Article URL analysis does not discover stories or compare outlet coverage.';
+  'Real story discovery, same-story clustering, and cross-outlet coverage comparison are not live. The worker can read allowlisted RSS or Atom feeds only when `MEDIA_LENS_ENABLE_STORY_DISCOVERY` is the exact value true and the source registry marks that feed approved. No feed is approved. Every named candidate stays `candidate_pending_owner_approval` and is not fetched. Fixture discovery is labeled and is refused by a live-mode worker. The worker reads no Newsjack output, and no Newsjack binary is approved for ml-jev. Article URL analysis does not discover stories or compare outlet coverage.';
 
 function caddyServedPatterns(caddy) {
   const patterns = [];

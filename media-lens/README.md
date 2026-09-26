@@ -11,7 +11,7 @@ The page leads with article URL entry. In local preview it also offers a labeled
 Live on the operator host (`ml-jev.manipulationscore.com`, per Issue #118 records):
 
 - URL analysis of one public `https://` page per request, from the operator URL allowlist (last recorded value: `en.wikipedia.org`). The page accepts only `https://`; the worker's own URL policy also accepts `http://` from a direct API caller, still subject to the allowlist, address checks, and redirect rules. The worker runs `MEDIA_LENS_MODE=live`, `MEDIA_LENS_ENABLE_LIVE=true`, and `MEDIA_LENS_ENABLE_LIVE_URL=true`. TypeSafe Jev (`jev-1.13.0`) is the only external classifier.
-- Off on that host: live pasted text (`400 live_pasted_text_disabled`), fixture analysis (`400 live_fixture_disabled`), classifier.dev, the Jev shadow flags, and Newsjack artifacts (no artifacts directory is set or approved as far as the records show).
+- Off on that host: live pasted text (`400 live_pasted_text_disabled`), fixture analysis (`400 live_fixture_disabled`), classifier.dev, the Jev shadow flags, and Newsjack: a live worker reads no Newsjack output, and no Newsjack binary is approved on that host.
 - Rejected by the worker: a request body `kind` that is not one of the `influence-graph.v1` artifact kinds (`article`, `headline`, `excerpt`, `speech`, `ad`, `campaign`, `other_public`) gets `400 invalid_kind` before any fetch or provider call.
 - Live results carry no coverage comparison. The page shows one plain coverage statement instead of empty comparison controls, and an abstention-only result says "No analysis was run".
 - The ESTIMATED TypeSafe budget (warn $20, hard stop $30) and the kill switch are active. Email budget alerts are waived by the owner on that host, so there is no email monitoring.
@@ -22,7 +22,7 @@ Fixture-only:
 - The static sample card on the landing page. It stays on every host and is labeled as a made-up example.
 - Everything under `fixtures/`: invented articles, recorded Jev answers, Newsjack-shaped records, and golden graphs. They are regression inputs, not accuracy evidence.
 
-Real story discovery, same-story clustering, and cross-outlet coverage comparison are not live. The worker can read allowlisted RSS or Atom feeds only when `MEDIA_LENS_ENABLE_STORY_DISCOVERY` is the exact value true and the source registry marks that feed approved. No feed is approved. Every named candidate stays `candidate_pending_owner_approval` and is not fetched. Fixture discovery is labeled and is refused by a live-mode worker. Operator Newsjack artifacts (`MEDIA_LENS_NEWSJACK_ARTIFACTS_DIR`) are still unapproved for ml-jev. Article URL analysis does not discover stories or compare outlet coverage. Owner decisions: `docs/media-lens-story-discovery-owner-decisions.md`.
+Real story discovery, same-story clustering, and cross-outlet coverage comparison are not live. The worker can read allowlisted RSS or Atom feeds only when `MEDIA_LENS_ENABLE_STORY_DISCOVERY` is the exact value true and the source registry marks that feed approved. No feed is approved. Every named candidate stays `candidate_pending_owner_approval` and is not fetched. Fixture discovery is labeled and is refused by a live-mode worker. The worker reads no Newsjack output, and no Newsjack binary is approved for ml-jev. Article URL analysis does not discover stories or compare outlet coverage. Owner decisions: `docs/media-lens-story-discovery-owner-decisions.md`.
 
 ## Architecture
 
@@ -42,7 +42,7 @@ media-lens/
 Set with `MEDIA_LENS_MODE` (default `fixture`):
 
 - **`fixture`** — the only mode automated tests and CI exercise. No outbound network at all. The Jev and Newsjack adapters read local JSON fixtures under `fixtures/jev/` and `fixtures/newsjack/`.
-- **`live`** — refuses to start unless **both** `MEDIA_LENS_ENABLE_LIVE=true` and `MEDIA_LENS_TYPESAFE_API_KEY` are set. Live pasted-text analysis is disabled and is rejected before any external request. Live URL fetch is experimental, **disabled by default**, and additionally requires `MEDIA_LENS_ENABLE_LIVE_URL=true`. It is not production-ready. When those gates pass, prepared public span text from a fetched URL may be sent to TypeSafe's Jev classifier over HTTPS. Newsjack provenance in live mode is read from an **operator-provided artifacts directory** (`MEDIA_LENS_NEWSJACK_ARTIFACTS_DIR`) — the worker never spawns the Newsjack CLI and never calls a live news-search service. A live worker rejects `mode: "fixture"` with `400 live_fixture_disabled`; fixture examples need a fixture-mode worker.
+- **`live`** — refuses to start unless **both** `MEDIA_LENS_ENABLE_LIVE=true` and `MEDIA_LENS_TYPESAFE_API_KEY` are set. Live pasted-text analysis is disabled and is rejected before any external request. Live URL fetch is experimental, **disabled by default**, and additionally requires `MEDIA_LENS_ENABLE_LIVE_URL=true`. It is not production-ready. When those gates pass, prepared public span text from a fetched URL may be sent to TypeSafe's Jev classifier over HTTPS. Live mode reads no Newsjack output; the worker never spawns the Newsjack CLI and never calls a live news-search service. A live worker rejects `mode: "fixture"` with `400 live_fixture_disabled`; fixture examples need a fixture-mode worker.
 
 ### Worker fixes in the 2026-09 release (PRs #146, #145, #149, and release review)
 
@@ -85,7 +85,6 @@ Worker environment variables (read only by `worker/config.js`, never logged, nev
 | `MEDIA_LENS_HOST` / `MEDIA_LENS_PORT` | worker bind address (default `127.0.0.1:8787`) |
 | `MEDIA_LENS_TYPESAFE_API_KEY` | Jev API key; required for `live` mode together with `MEDIA_LENS_ENABLE_LIVE=true`; also required for isolated pin-verify |
 | `MEDIA_LENS_TYPESAFE_BASE_URL` | Jev API base URL override (used by tests to point at a mock server) |
-| `MEDIA_LENS_NEWSJACK_ARTIFACTS_DIR` | directory of operator-produced Newsjack run artifacts for `live` mode coverage |
 | `MEDIA_LENS_ENABLE_STORY_DISCOVERY` | exact value `true` required before any live feed retrieval; default unset/false. Pending candidate feeds are still not fetched |
 | `MEDIA_LENS_STORY_DISCOVERY_FIXTURES` | exact value `true` serves labeled fixture feeds from a fixture-mode worker only; ignored when `MEDIA_LENS_MODE=live`; default unset/false |
 | `MEDIA_LENS_MAX_STORY_DISCOVERY_PER_MINUTE` | per-process `GET /stories` budget (default 6) |
@@ -142,4 +141,4 @@ MEDIA_LENS_JEV_VERIFY=true MEDIA_LENS_TYPESAFE_API_KEY=... node scripts/jev-pin-
 
 ## Out of scope for v1
 
-No score/rank/leaderboard of any kind; no live Jev/Newsjack calls in CI or by default; no server-side deployment of the worker beyond the one owner-authorized operator host (ml-jev, Issue #118); no fact-checking (every claim's `support` is always `not_checked` in this preview; fusion never sets any other value); no third-party outlet ratings; no spawning the Newsjack CLI; no history, accounts, or persistence beyond the in-memory response; English text only. See `docs/media-lens-influence-graph-plan.md` section 11 for the full list.
+No score/rank/leaderboard of any kind; no live Jev/Newsjack calls in CI or by default; no server-side deployment of the worker beyond the one owner-authorized operator host (ml-jev, Issue #118); no fact-checking (every claim's `support` is always `not_checked` in this preview; fusion never sets any other value); no third-party outlet ratings; the worker never spawns the Newsjack CLI (a pinned-binary operator tool outside the worker is described in `media-lens/docs/newsjack-discovery.md` and cannot run until the owner records a binary hash); no history, accounts, or persistence beyond the in-memory response; English text only. See `docs/media-lens-influence-graph-plan.md` section 11 for the full list.

@@ -1,0 +1,45 @@
+{
+  "findings": [
+    {
+      "signal_id": "26027af283a9b76d",
+      "same_story_assessment": "same_story",
+      "first_public_at": "2026-09-25T09:15:00Z",
+      "original_url": "https://harbor-times.example/local/transit-fare-vote",
+      "original_source": "Harbor Times",
+      "canonical_coverage_url": "https://harbor-times.example/local/transit-fare-vote",
+      "same_story_basis": "SENTINEL-BASIS",
+      "confidence": "very-high",
+      "rationale": "SENTINEL-RATIONALE",
+      "timestamp_evidence": [
+        {
+          "url": "https://harbor-times.example/local/transit-fare-vote",
+          "published_at": "2026-09-25T09:15:00Z"
+        },
+        {
+          "url": "https://valley-ledger.example/2026/09/25/fare-vote",
+          "published_at": "2026-09-25T12:30:00Z"
+        },
+        {
+          "url": "https://news.google.example/search?q=transit+fare+vote",
+          "published_at": "2026-09-25T09:00:00Z"
+        },
+        {
+          "url": "http://fictional-daily.example/news/fare-vote-date",
+          "published_at": "2026-09-25T12:00:00Z"
+        }
+      ],
+      "evidence_urls": [
+        "https://harbor-times.example/local/transit-fare-vote"
+      ]
+    },
+    {
+      "signal_id": "b1086c347b8d1334",
+      "same_story_assessment": "unclear",
+      "first_public_at": "2026-09-20",
+      "original_url": null,
+      "confidence": "low",
+      "rationale": "SENTINEL-RATIONALE-2",
+      "timestamp_evidence": []
+    }
+  ]
+}

@@ -252,11 +252,11 @@ test('R1: per-analysis timeout return prevents newsjack and downstream adapter w
   };
 
   const newsjackAdapter = {
-    mode: 'artifacts',
+    mode: 'fixture',
     getStoryContext: async () => {
       newsjackCalls += 1;
       await new Promise((resolve) => setTimeout(resolve, 200));
-      return { story_origin: null, freshness_gate: null, cluster: null, provenance: 'newsjack_artifacts' };
+      return { story_origin: null, freshness_gate: null, cluster: null, provenance: 'fixture' };
     }
   };
 
@@ -315,7 +315,7 @@ test('Fix 1: in-flight newsjack observes shared AbortSignal when per-analysis ti
   };
 
   const newsjackAdapter = {
-    mode: 'artifacts',
+    mode: 'fixture',
     getStoryContext: async ({ signal } = {}) => {
       newsjackStarted = true;
       try {
@@ -324,7 +324,7 @@ test('Fix 1: in-flight newsjack observes shared AbortSignal when per-analysis ti
         if (err?.name === 'AbortError') newsjackAborted = true;
         throw err;
       }
-      return { story_origin: null, freshness_gate: null, cluster: null, provenance: 'newsjack_artifacts' };
+      return { story_origin: null, freshness_gate: null, cluster: null, provenance: 'fixture' };
     }
   };
 
@@ -379,10 +379,10 @@ test('timeout after live Jev still exposes calls for ESTIMATED budget accounting
   };
 
   const newsjackAdapter = {
-    mode: 'artifacts',
+    mode: 'fixture',
     getStoryContext: async ({ signal } = {}) => {
       await abortableDelay(5000, signal);
-      return { story_origin: null, freshness_gate: null, cluster: null, provenance: 'newsjack_artifacts' };
+      return { story_origin: null, freshness_gate: null, cluster: null, provenance: 'fixture' };
     }
   };
 

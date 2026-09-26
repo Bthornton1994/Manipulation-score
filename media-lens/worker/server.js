@@ -145,13 +145,12 @@ async function buildAdapters({ config, payload, classifierDevFetch }) {
     maxCallsPerAnalysis: config.limits.maxJevCallsPerAnalysis
   });
 
-  let newsjackMode = 'fixture';
-  if (config.mode === 'live') newsjackMode = config.newsjack.artifactsDir ? 'artifacts' : 'disabled';
+  // Live analysis reads no Newsjack output. Real Newsjack runs happen only
+  // through the operator tool outside the worker.
   const newsjackAdapter = createNewsjackAdapter({
-    mode: newsjackMode,
+    mode: config.mode === 'live' ? 'disabled' : 'fixture',
     fixtureId: payload.fixture_id || null,
-    fixtureDir: join(FIXTURES_DIR, 'newsjack'),
-    artifactsDir: config.newsjack.artifactsDir
+    fixtureDir: join(FIXTURES_DIR, 'newsjack')
   });
 
   const classifierDevAdapter = createClassifierDevAdapter({

@@ -1,23 +1,73 @@
-// Map fixture or operator Newsjack-shaped search/origin/cluster evidence
-// into story-discovery.v1. No network, no Medialyst, no Jev, no CLI.
+// Convert a validated Newsjack capture (media-lens.newsjack-capture.v1) into
+// story-discovery.v1. Pure and synchronous: no network, no child process,
+// no environment, and no clock except the `now` the caller passes in.
+//
+// A capture is produced only by the operator tool in media-lens/tools/,
+// which runs a pinned Newsjack binary outside the worker. The worker never
+// imports that tool, never spawns Newsjack, and no route serves captures.
+//
+// Newsjack is a separate MIT-licensed project
+// (https://github.com/elvisun/newsjack). This file shares no code with it.
+// See docs/NEWSJACK-LICENSE.md and media-lens/docs/newsjack-discovery.md.
 
-import { createHash } from 'node:crypto';
 import { parseArticleUrl } from '../address-policy.js';
 import { isPartnerRepublicationHost, isWireOrAdvocacyUrl } from '../fusion.js';
-import { registrableHostKey } from '../host-key.js';
 import { normalizedURLKey } from '../url-key.js';
-import { FRAME_NOTE, OMISSION_NOTE, SAME_STORY_NOT_INDEPENDENT } from './cluster.js';
-import { assertSearchProviderModeImplemented } from './search-provider.js';
+import {
+  NEWSJACK_CAPTURE_CONTRACT,
+  NEWSJACK_CAPTURE_MAX_TEXT_BYTES,
+  validateNewsjackCapture
+} from '../../schema/newsjack-capture.js';
+import { FRAME_NOTE, OMISSION_NOTE } from './cluster.js';
+import { NEWSJACK_PIN } from './newsjack-pin.js';
+import { SEARCH_PROVIDER_MODE_STATUS } from './search-provider.js';
 
-export const CLUSTER_BASIS = 'newsjack_cluster_same_public_event';
-export const INDEPENDENCE_BASIS = 'newsjack_origin_distinct_independent_outlets';
-export const SAME_OUTLET_ADDITIONAL_URL_BASIS = 'same_outlet_additional_url';
+export const NEWSJACK_CLUSTER_BASIS = 'newsjack_detector_text_similarity_and_cluster_overlap';
+export const NEWSJACK_MEMBER_BASIS = 'newsjack_cluster_member';
+export const NEWSJACK_WINDOW_BASIS = 'media_lens_published_at_filter_from_max_age_hours';
+export const NEWSJACK_RETRIEVED_AT_BASIS = 'runner_observed_detector_exit_upper_bound';
+export const NEWSJACK_ORIGIN_NOTE =
+  "Written by an AI agent following Newsjack's story-origin-check skill. Newsjack checked the finding's structure and computed the freshness status from the agent's timestamps, or from a provider-reported detector time when detector_timestamp_fallback is true. Nobody verified the timestamps or URLs. This is not independent reporting and does not change the cluster.";
+export const NEWSJACK_GROUPING_NOTE =
+  "Newsjack's detector puts evidence in one signal when it shares an exact URL or enough words across titles and snippets (Jaccard 0.32), then its cluster step merges signals that share a URL or at least two significant title words (overlap 0.6). This is a text-similarity heuristic.";
+export const NEWSJACK_INDEPENDENCE_NOTE =
+  'Text similarity is not evidence of independent reporting, so no member is labeled independent.';
+export const NEWSJACK_SAME_STORY_NOTE = 'Similar text is same-story evidence only. It is not independent reporting.';
 
-// Reasons a Newsjack-shaped member is dropped before it can become a story
-// member. Every drop is counted on the sources_checked row and listed in
-// rejected_members, so nothing disappears silently.
-export const REJECTION_REASONS = Object.freeze(['incomplete', 'non_https_url', 'non_public_url', 'different_story']);
+// Which Newsjack evidence kinds may become story members. news_search is the
+// only kind meant to return publisher articles, but its results are not
+// trusted to be outlets: hosts are checked too (NON_OUTLET_HOSTS). Feeds are
+// served by the approved feed client in discover.js instead, and forum,
+// social, and trend kinds are not outlet articles.
+export const NEWSJACK_SOURCE_KINDS = Object.freeze({
+  news_search: Object.freeze({ member_eligible: true, live_search_provider_mode: 'medialyst' }),
+  major_feed: Object.freeze({ member_eligible: false, reason: 'served_by_approved_feed_client' }),
+  reddit: Object.freeze({ member_eligible: false, reason: 'forum_not_outlet' }),
+  hackernews: Object.freeze({ member_eligible: false, reason: 'forum_not_outlet' }),
+  x: Object.freeze({ member_eligible: false, reason: 'social_post_not_outlet' }),
+  x_news: Object.freeze({ member_eligible: false, reason: 'synthetic_search_url' }),
+  x_trends: Object.freeze({ member_eligible: false, reason: 'fetch_time_as_published_at' })
+});
+
+export const NEWSJACK_MEMBER_REJECTIONS = Object.freeze([
+  'incomplete',
+  'non_https_url',
+  'non_public_url',
+  'non_outlet_host',
+  'duplicate_url',
+  'title_from_excerpt',
+  'source_kind_excluded',
+  'published_at_missing',
+  'published_at_date_only',
+  'published_at_precision',
+  'published_at_unparseable',
+  'published_at_rolled',
+  'published_at_after_retrieval',
+  'outside_window'
+]);
 const MAX_REJECTED_MEMBERS_LISTED = 200;
+const STALE_AFTER_MS = 48 * 60 * 60 * 1000;
+const FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
 
 // Names that point at private networks, metadata services, or special-use
 // namespaces. parseArticleUrl already refuses loopback and the exact
@@ -60,31 +110,76 @@ export const NON_PUBLIC_HOST_SUFFIXES = Object.freeze([
   '.metadata.tencentyun.com'
 ]);
 
-const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
-
-function clusterIdFor(key) {
-  return createHash('sha256').update(key).digest('hex').slice(0, 16);
-}
-
-function knownPublishedAt(value) {
-  if (typeof value !== 'string' || !ISO_TIME.test(value)) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  const iso = parsed.toISOString();
-  // Date rolls impossible days forward (2026-02-30 becomes 2026-03-02).
-  // Refuse the value instead of copying a different date.
-  return iso.slice(0, 19) === value.slice(0, 19) ? iso : null;
-}
-
 function isNonPublicHostName(host) {
   return NON_PUBLIC_HOST_SUFFIXES.some((suffix) => host === suffix.slice(1) || host.endsWith(suffix));
+}
+
+// Forum, social, video, short-link, and aggregator hosts. A news-search
+// result on one of these is not an outlet article, whatever its evidence
+// kind says, matching the source-kind policy above.
+export const NON_OUTLET_HOSTS = Object.freeze([
+  'reddit.com',
+  'redd.it',
+  'news.ycombinator.com',
+  'x.com',
+  'twitter.com',
+  't.co',
+  'facebook.com',
+  'fb.watch',
+  'instagram.com',
+  'threads.net',
+  'tiktok.com',
+  'youtube.com',
+  'youtu.be',
+  'linkedin.com',
+  'lnkd.in',
+  'bsky.app',
+  'threads.com',
+  't.me',
+  'vimeo.com',
+  'bit.ly',
+  'tinyurl.com',
+  'ow.ly',
+  'buff.ly',
+  'news.google.com',
+  'google.com',
+  'bing.com',
+  'duckduckgo.com',
+  'search.yahoo.com',
+  'news.yahoo.com'
+]);
+// Pure redirectors: the destination of such a link is never checked, so it
+// is not used as an origin citation either.
+export const REDIRECTOR_HOSTS = Object.freeze(['t.co', 'bit.ly', 'tinyurl.com', 'ow.ly', 'buff.ly', 'lnkd.in']);
+
+export function isRedirectorHost(url) {
+  let host;
+  try {
+    host = new URL(url).hostname.toLowerCase().replace(/\.$/, '');
+  } catch {
+    return false;
+  }
+  return REDIRECTOR_HOSTS.some((entry) => host === entry || host.endsWith(`.${entry}`));
+}
+
+// Google search and news on country domains (google.co.uk, google.de, ...).
+const GOOGLE_COUNTRY_HOST = /(?:^|\.)google\.(?:com?\.)?[a-z]{2}$/;
+
+export function isNonOutletHost(url) {
+  let host;
+  try {
+    host = new URL(url).hostname.toLowerCase().replace(/\.$/, '');
+  } catch {
+    return false;
+  }
+  return NON_OUTLET_HOSTS.some((entry) => host === entry || host.endsWith(`.${entry}`)) || GOOGLE_COUNTRY_HOST.test(host);
 }
 
 // Classify a candidate canonical source link. Only public https URLs can
 // become user-facing links. Nothing here fetches the URL.
 export function classifySourceUrl(value) {
   if (typeof value !== 'string' || value.trim() === '') return { url: null, reason: 'incomplete' };
-  let raw = value.trim();
+  const raw = value.trim();
   let scheme;
   try {
     scheme = new URL(raw).protocol;
@@ -102,61 +197,98 @@ export function classifySourceUrl(value) {
   return { url: checked.parsed.toString(), reason: null };
 }
 
-// Judged on the host alone: a wire path marker such as /statement on an
-// outlet's own site does not make that site a shared host.
-function sharedSyndicationHost(url) {
-  try {
-    const host = new URL(url).hostname.toLowerCase();
-    return isWireOrAdvocacyUrl(`https://${host}/`) || isPartnerRepublicationHost(url);
-  } catch {
-    return false;
-  }
-}
-
-function outletDomain(url) {
-  try {
-    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
-    return registrableHostKey(host) || host;
-  } catch {
-    return null;
-  }
-}
-
-// A stated source_id is kept only when it is a short opaque token. Anything
-// URL-shaped or free-form is replaced by an id derived from the outlet name.
-const SAFE_SOURCE_ID = /^[A-Za-z0-9][A-Za-z0-9:_.-]{0,79}$/;
-const SAFE_CLUSTER_ID = /^[A-Za-z0-9][A-Za-z0-9:_.-]{0,119}$/;
 // Text that a URL parser or a browser would read as a link.
-const URL_SCHEME_TEXT = /^(?:https?|ftp|wss?|javascript|data|vbscript|file|mailto|blob):/i;
+const URL_SCHEME_TEXT = /^(?:https?|ftp|wss?|javascript|data|vbscript|file|mailto|blob|tel|sms|about):/i;
 
-function isUrlLikeText(value) {
-  return value.includes('://') || value.startsWith('//') || URL_SCHEME_TEXT.test(value);
+// Host, URL, and path checks ignore combining marks. NFD runs first because
+// outlet text is NFKC-folded, and NFKC composes a mark into a letter
+// ("www" + U+0301 + "." is "wwẃ."). Decomposing turns that letter back into
+// a base plus \p{M}, and the strip removes the mark. The name shown to
+// readers stays the NFKC text, marks included.
+function ignoringCombiningMarks(value) {
+  return value.normalize('NFD').replace(/\p{M}/gu, '');
 }
 
-// Placeholders that name no outlet. They can be shown as given, but they do
-// not identify an outlet and cannot grant independence.
-const PLACEHOLDER_OUTLETS = new Set([
-  'unknown',
-  'unknown outlet',
-  'unknown source',
-  'unknown publisher',
-  'n/a',
-  'na',
-  'none',
-  'null',
-  'undefined',
-  'anonymous',
-  'not available',
-  'not applicable'
-]);
+export function isUrlLikeText(value) {
+  const plain = ignoringCombiningMarks(value);
+  return plain.includes('://') || plain.startsWith('//') || URL_SCHEME_TEXT.test(plain);
+}
 
-// Letters and digits of each listed placeholder, so fullwidth forms, symbol
-// wrappers, and internal punctuation or spacing still match. `N.A.` and
-// `n / a` share `na` with `n/a`. `not-available` shares `notavailable` with
-// `not available`.
-const PLACEHOLDER_COMPACT = new Set(
-  [...PLACEHOLDER_OUTLETS].map((name) => name.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ''))
-);
+// Upstream falls back to a feed URL or local file path when a feed has no
+// title. A path is not an outlet name.
+function isPathLikeText(value) {
+  const plain = ignoringCombiningMarks(value);
+  return /^(?:\/|~|\.{1,2}\/|[A-Za-z]:[\\/])/.test(plain) || plain.includes('\\');
+}
+
+// A host name with a path, query, or port, a www. name, or an IP address
+// reads as a link in many renderers even without a scheme.
+// A bare publication domain such as "Reuters.com" stays readable, but not a
+// non-public name such as "localhost" or "printer.home.arpa". Ideographic
+// full stops count as dots. An email-like value is not an outlet name.
+function isHostLikeText(value) {
+  // Combining marks are ignored ("169.254.169.254" with an accent on a digit
+  // still reads as an address, and "www" + U+0301 + "." still reads as "www.").
+  // A trailing dot before a port, a path, or the end is still the same host
+  // to a URL parser ("localhost.:3000", "evil.com./login").
+  const plain = ignoringCombiningMarks(value).replace(/[\u3002\uff61]/g, '.');
+  const dotted = plain.replace(/\.(?=[:/?#]|$)/g, '');
+  const bareHost = /^[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.?$/u.test(dotted) ? dotted.toLowerCase().replace(/\.$/, '') : null;
+  return (
+    /^www\./i.test(plain) ||
+    /^[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+(?:[/?#]|:\d)/u.test(dotted) ||
+    // IPv4 in dotted, short, or hex form (with an optional trailing dot or
+    // port), and IPv6 with or without brackets, a port, or an IPv4 tail. A
+    // plain number stays readable: "1843" and "360" are publication names.
+    /^(?:0x[0-9a-f]+|\d+)(?:\.(?:0x[0-9a-f]+|\d+)){1,3}(?::\d+)?(?:[/?#].*)?$/i.test(dotted) ||
+    /^0x[0-9a-f]+(?:[:/?#].*)?$/i.test(dotted) ||
+    /^\[?[0-9a-f]*:[0-9a-f:.]+(?:%[\w.-]+)?\]?(?::\d+)?(?:[/?#].*)?$/i.test(dotted) ||
+    // A single-label name with a port, or a non-public single label with a path.
+    /^[\p{L}\p{N}-]+:\d+(?:[/?#].*)?$/u.test(dotted) ||
+    /^(?:localhost|instance-data|metadata)(?:[/?#:]|$)/i.test(dotted) ||
+    /\S@\S/.test(dotted) ||
+    (bareHost !== null &&
+      (bareHost === 'localhost' ||
+        bareHost === 'instance-data' ||
+        /\.(?:local|localhost)$/.test(bareHost) ||
+        (bareHost.includes('.') && isNonPublicHostName(bareHost))))
+  );
+}
+
+// Lone surrogate halves are removed first, on the original text. Removing
+// anything else first could bring two halves together into a character the
+// provider never sent.
+function removeLoneSurrogates(value) {
+  return value.replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, '');
+}
+
+// Display text: lone surrogates are removed; control characters and
+// blank-looking letters (Hangul fillers, the braille blank) become spaces;
+// other default-ignorable code points (format characters, bidi overrides,
+// variation selectors, joiners, tag characters) are removed without adding a
+// space, so a word is not split; whitespace is collapsed.
+export function displayText(value) {
+  if (typeof value !== 'string') return '';
+  return removeLoneSurrogates(value)
+    .replace(/[\p{Cc}\u115F\u1160\u3164\uFFA0\u2800]/gu, ' ')
+    .replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Outlet names are display text. A value with no letter or digit, or one
+// that reads as a URL, a host name, or a file path, is not an outlet name.
+export function outletText(value) {
+  // NFKC folds fullwidth look-alikes (for example "ｗｗｗ.") before the checks,
+  // and invisible characters are removed rather than spaced so they cannot
+  // split a URL or host name. The cut comes first, so the checks see exactly
+  // the text that is shown.
+  const stripped =
+    typeof value === 'string' ? removeLoneSurrogates(value).replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu, '').normalize('NFKC') : '';
+  const normalized = truncateCodePoints(displayText(stripped), 200).trim();
+  if (!normalized || !/[\p{L}\p{N}]/u.test(normalized) || isUrlLikeText(normalized) || isPathLikeText(normalized) || isHostLikeText(normalized)) return '';
+  return normalized;
+}
 
 function outletSlug(outlet) {
   return String(outlet || '')
@@ -165,47 +297,48 @@ function outletSlug(outlet) {
     .replace(/^-|-$/g, '');
 }
 
-// Letters and digits only, after compatibility normalization, so spacing,
-// punctuation, invisible characters, and fullwidth forms do not split an
-// outlet. Works for non-Latin names too.
-function outletCompactKey(outlet) {
-  return String(outlet || '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
-}
-
-function statedSourceId(hit) {
-  const raw = typeof hit.source_id === 'string' ? hit.source_id.trim() : '';
-  return raw && SAFE_SOURCE_ID.test(raw) && !isUrlLikeText(raw) ? raw : null;
-}
-
-function statedClusterId(group) {
-  const raw = typeof group?.cluster_id === 'string' ? group.cluster_id.trim() : '';
-  return raw && SAFE_CLUSTER_ID.test(raw) && !isUrlLikeText(raw) ? raw : null;
-}
-
-function sourceIdFor(hit, outlet) {
-  const stated = statedSourceId(hit);
-  if (stated) return stated;
-  const slug = outletSlug(outlet);
-  return slug ? `newsjack:${slug}` : 'newsjack:unknown_outlet';
-}
-
-// Outlet names are display text. Invisible format characters are removed. A
-// value with no letter or digit, or one that reads as a URL, is not an
-// outlet name.
-function outletText(hit) {
-  const raw = typeof hit.outlet === 'string' ? hit.outlet : typeof hit.source === 'string' ? hit.source : '';
-  const normalized = raw.replace(/\p{Cf}/gu, '').trim().replace(/\s+/g, ' ');
-  if (!normalized || !/[\p{L}\p{N}]/u.test(normalized) || isUrlLikeText(normalized)) return '';
-  return normalized.slice(0, 200);
-}
-
-function titleText(hit) {
-  const raw = typeof hit.title === 'string' ? hit.title : typeof hit.article_title === 'string' ? hit.article_title : '';
-  return raw.trim();
-}
-
 function truncateCodePoints(value, max) {
   return Array.from(value).slice(0, max).join('');
+}
+
+const PROVIDER_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|([+-])(\d{2}):(\d{2}))$/;
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+// Parse a provider-reported time. Accepts only a full date and time with Z
+// or a numeric offset and at most millisecond precision, and returns UTC
+// milliseconds as ISO text. Newsjack turns relative dates such as
+// "3 hours ago" into clock estimates with nanosecond digits, so more than
+// three fractional digits is refused rather than trusted. A date without a
+// time, an impossible calendar date, or anything else is refused with a
+// reason. Nothing is rolled over or filled in.
+export function parseProviderTimestamp(value) {
+  if (value === null || value === undefined || value === '') return { value: null, reason: 'missing' };
+  if (typeof value !== 'string') return { value: null, reason: 'unparseable' };
+  // No trimming: surrounding text means the value is not a clean time.
+  const raw = value;
+  if (DATE_ONLY.test(raw)) return { value: null, reason: 'date_only' };
+  const match = PROVIDER_TIME.exec(raw);
+  if (!match) return { value: null, reason: 'unparseable' };
+  if (match[7] && match[7].length - 1 > 3) return { value: null, reason: 'precision' };
+  const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number);
+  if (month < 1 || month > 12 || hour > 23 || minute > 59 || second > 59) return { value: null, reason: 'unparseable' };
+  if (match[9] !== undefined && (Number(match[10]) > 23 || Number(match[11]) > 59)) return { value: null, reason: 'unparseable' };
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (day < 1 || day > daysInMonth) return { value: null, reason: 'rolled' };
+  const ms = Date.parse(raw);
+  if (!Number.isFinite(ms)) return { value: null, reason: 'unparseable' };
+  return { value: new Date(ms).toISOString(), reason: null };
+}
+
+// Judged on the host alone: a wire path marker such as /statement on an
+// outlet's own site does not make that site a shared host.
+function isSharedSyndicationHost(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return isWireOrAdvocacyUrl(`https://${host}/`) || isPartnerRepublicationHost(url);
+  } catch {
+    return false;
+  }
 }
 
 function baseDocument(extra) {
@@ -215,450 +348,395 @@ function baseDocument(extra) {
     privacy: {
       full_text_persisted: false,
       article_pages_fetched: false,
-      retention: 'none',
-      jev_used: false
+      retention: 'operator_capture_file',
+      jev_used: false,
+      provider_article_pages_fetched: false
     },
     omission_note: OMISSION_NOTE,
     ...extra
   };
 }
 
-function outletIdentity(value) {
-  if (typeof value !== 'string') return null;
-  const normalized = value.normalize('NFKC').replace(/\p{Cf}/gu, '').trim().replace(/\s+/g, ' ').toLowerCase();
-  if (!normalized || !/[\p{L}\p{N}]/u.test(normalized)) return null;
-  const bare = normalized.replace(/^[\p{P}\p{S}\s]+|[\p{P}\p{S}\s]+$/gu, '');
-  const compact = bare.replace(/[^\p{L}\p{N}]+/gu, '');
-  if (!compact || PLACEHOLDER_OUTLETS.has(bare) || PLACEHOLDER_OUTLETS.has(normalized) || PLACEHOLDER_COMPACT.has(compact)) return null;
-  return normalized;
-}
-
-function datedSameStoryKeys(origin) {
-  const keys = new Set();
-  if (!origin || typeof origin !== 'object' || origin.same_story_assessment !== 'same_story') return keys;
-  for (const item of Array.isArray(origin.timestamp_evidence) ? origin.timestamp_evidence : []) {
-    const key = normalizedURLKey(item?.url_key || item?.url);
-    if (!key || !knownPublishedAt(item?.published_at)) continue;
-    if (isWireOrAdvocacyUrl(key) || isPartnerRepublicationHost(key)) continue;
-    keys.add(key);
-  }
-  return keys;
-}
-
-// Identity keys that tie records to one outlet: the normalized name, its
-// letters-and-digits form, the registrable domain, and a stated source_id.
-// Records sharing any key are joined transitively (union-find), so an outlet
-// that publishes on two domains, or under two spellings, is still one outlet.
-// A placeholder name contributes no name keys. Wire, press
-// release, and partner republication hosts carry many outlets' copy, so their
-// domain does not identify an outlet.
-function identityKeys(entry) {
-  const keys = [];
-  const name = outletIdentity(entry.outlet);
-  if (name) {
-    keys.push(`name:${name}`);
-    const compact = outletCompactKey(entry.outlet);
-    if (compact) keys.push(`compact:${compact}`);
-  }
-  const domain = sharedSyndicationHost(entry.url) ? null : outletDomain(entry.url);
-  if (domain) keys.push(`domain:${domain}`);
-  const stated = statedSourceId(entry.hit);
-  if (stated) keys.push(`sid:${stated.toLowerCase()}`);
-  return keys;
-}
-
-function groupOutlets(entries) {
-  const parent = entries.map((_, index) => index);
-  const find = (index) => {
-    while (parent[index] !== index) {
-      parent[index] = parent[parent[index]];
-      index = parent[index];
-    }
-    return index;
-  };
-  const owner = new Map();
-  entries.forEach((entry, index) => {
-    for (const key of identityKeys(entry)) {
-      if (owner.has(key)) {
-        const a = find(owner.get(key));
-        const b = find(index);
-        if (a !== b) parent[Math.max(a, b)] = Math.min(a, b);
-      } else {
-        owner.set(key, index);
+function abstain(reason, code, message, extra = {}) {
+  return baseDocument({
+    status: 'abstain',
+    reason,
+    message,
+    data_origin: 'newsjack_capture',
+    fixture_labeled: false,
+    retrieved_at: null,
+    window: null,
+    sources_checked: [
+      {
+        source_id: 'newsjack:capture',
+        provider: 'newsjack:capture',
+        provider_mode: null,
+        outlet: null,
+        query: null,
+        feed_url: null,
+        checked_at: null,
+        outcome: 'failed',
+        item_count: 0,
+        freshness_grade: null,
+        error: code
       }
-    }
+    ],
+    ...extra
   });
-  return entries.map((_, index) => find(index));
 }
 
-function recordRejection(rejected, reason, groupIndex, clusterId, outlet) {
-  rejected[reason] += 1;
-  if (rejected.members.length < MAX_REJECTED_MEMBERS_LISTED) {
-    // No URL is listed: a rejected URL may be non-public, and it must not
-    // become a user-facing link through diagnostics either.
-    const entry = { cluster_id: clusterId, group_index: groupIndex, reason, outlet: outlet ? truncateCodePoints(outlet, 120) : null };
-    rejected.members.push(entry);
-    return entry;
+const SOURCE_OUTCOMES = Object.freeze({
+  used: 'checked',
+  no_results: 'checked',
+  partial_error: 'partial',
+  error: 'failed',
+  unavailable: 'not_checked',
+  not_requested: 'not_requested'
+});
+
+function readCapture(input) {
+  if (typeof input === 'string') {
+    if (Buffer.byteLength(input, 'utf8') > NEWSJACK_CAPTURE_MAX_TEXT_BYTES) return { error: 'capture_too_large' };
+    try {
+      input = JSON.parse(input);
+    } catch {
+      return { error: 'capture_json_invalid' };
+    }
   }
-  return null;
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return { error: 'capture_not_object' };
+  return { capture: input };
 }
 
-const CANDIDATE_RELATIONS = new Set(['surfaced', 'same_story']);
-
-function isCandidateRelation(relation) {
-  return relation == null || CANDIDATE_RELATIONS.has(relation);
+function stepTime(capture, step, field) {
+  return capture.process.steps.find((entry) => entry.step === step)?.[field] ?? null;
 }
 
-function sourceUrlKey(hit) {
-  const classified = classifySourceUrl(hit.url || hit.canonical_url);
-  return classified.url ? normalizedURLKey(classified.url) : null;
+// Origin citations: public https only, no query string or fragment (search
+// terms can name a client), and no redirector.
+export function publicCitationUrl(value) {
+  if (typeof value !== 'string' || value.trim() === '') return { url: null, withheld: false };
+  const classified = classifySourceUrl(value);
+  if (!classified.url) return { url: null, withheld: true };
+  const parsed = new URL(classified.url);
+  if (parsed.search !== '' || parsed.hash !== '' || isRedirectorHost(classified.url)) return { url: null, withheld: true };
+  return { url: classified.url, withheld: false };
 }
 
-// Decide every record's fate in one pass, then compute independence only from
-// members that will be shown and can be labeled independent. A record that is
-// dropped (incomplete, non-https, non-public, different_story) or whose
-// relation is never labeled independent cannot satisfy the two-outlet rule.
-// Dropped records still count as identity evidence: they can join outlets,
-// which only lowers the independent count.
-function clusterFromGroup(group, groupIndex, { retrievedAt, window, sourcesChecked, origin, originUncertain, rejected }) {
-  const hits = Array.isArray(group?.members) ? group.members : [];
-  const statedId = statedClusterId(group);
-  const eligible = datedSameStoryKeys(origin);
-  // A URL that any record in the group marks as syndicated, unclear,
-  // different_story, or another non-candidate relation cannot qualify, so the
-  // result does not depend on record order.
-  const blockedUrlKeys = new Set();
-  for (const hit of hits) {
-    if (!hit || typeof hit !== 'object' || Array.isArray(hit) || isCandidateRelation(hit.relation)) continue;
-    const key = sourceUrlKey(hit);
-    if (key) blockedUrlKeys.add(key);
+function originClaimFor(capture, clusterId) {
+  const claim = capture.origin?.claims.find((entry) => entry.cluster_id === clusterId);
+  if (!claim) return null;
+  // The capture validator checks shape only; URLs go through the same public
+  // link policy as member URLs before they are shown.
+  let withheldUrls = claim.withheld.urls;
+  const original = publicCitationUrl(claim.original_url);
+  if (original.withheld) withheldUrls += 1;
+  const timestampEvidence = [];
+  for (const entry of claim.timestamp_evidence) {
+    const citation = publicCitationUrl(entry.url);
+    if (!citation.url) {
+      withheldUrls += 1;
+      continue;
+    }
+    timestampEvidence.push({ url: citation.url, published_at: entry.published_at, precision: entry.precision });
   }
-  const linkers = [];
-  const groupRejections = [];
-  const reject = (reason, outlet) => {
-    const entry = recordRejection(rejected, reason, groupIndex, statedId, outlet);
-    if (entry) groupRejections.push(entry);
+  return {
+    authored_by: 'ai_agent_via_story_origin_skill',
+    verification: 'unverified',
+    checked_by: 'newsjack origin-apply: structure and timestamp arithmetic only',
+    note: NEWSJACK_ORIGIN_NOTE,
+    same_story_assessment: claim.same_story_assessment,
+    first_public_at: claim.first_public_at,
+    first_public_at_precision: claim.first_public_at_precision,
+    original_url: original.url,
+    timestamp_evidence: timestampEvidence,
+    confidence: claim.confidence,
+    freshness_status: claim.freshness_status,
+    freshness_basis_field: claim.freshness_basis_field,
+    freshness_basis_precision: claim.freshness_basis_precision,
+    freshness_window: { ...claim.freshness_window },
+    detector_timestamp_fallback: claim.detector_timestamp_fallback,
+    withheld: { ...claim.withheld, urls: withheldUrls }
   };
+}
 
-  const kept = [];
-  const seenUrlKeys = new Set();
-  for (const hit of hits) {
-    if (!hit || typeof hit !== 'object' || Array.isArray(hit)) {
-      reject('incomplete', null);
-      continue;
-    }
-    const outlet = outletText(hit);
-    const title = titleText(hit);
-    const classified = classifySourceUrl(hit.url || hit.canonical_url);
-    const drop = (reason) => {
-      reject(reason, outlet);
-      linkers.push({ hit, outlet, url: classified.url });
-    };
-    if (!outlet || !title || classified.reason === 'incomplete') {
-      drop('incomplete');
-      continue;
-    }
-    if (!classified.url) {
-      drop(classified.reason);
-      continue;
-    }
-    // A Newsjack different_story assessment wins over wire, partner, and
-    // repeated-URL rules: that record is not coverage of this story.
-    if (hit.relation === 'different_story') {
-      drop('different_story');
-      continue;
-    }
-    const url = classified.url;
-    const urlKey = normalizedURLKey(url);
-    let label;
-    if (isWireOrAdvocacyUrl(url) || isPartnerRepublicationHost(url)) {
-      label = { relation: 'syndicated', labeling_basis: 'wire_press_release_or_partner_url' };
-    } else if (urlKey && seenUrlKeys.has(urlKey)) {
-      label = { relation: 'syndicated', labeling_basis: 'same_canonical_url' };
-    } else if (hit.relation === 'syndicated') {
-      label = { relation: 'syndicated', labeling_basis: 'newsjack_relation_syndicated' };
-    } else if (originUncertain || hit.relation === 'unclear') {
-      label = { relation: 'same_story', labeling_basis: 'newsjack_origin_uncertain' };
-    } else if (hit.relation === 'surfaced' || hit.relation == null) {
-      label = { relation: 'same_story', labeling_basis: 'newsjack_relation_surfaced' };
-    } else {
-      label = { relation: 'same_story', labeling_basis: 'newsjack_relation_same_story' };
-    }
-    const candidate =
-      label.relation === 'same_story' &&
-      label.labeling_basis !== 'newsjack_origin_uncertain' &&
-      isCandidateRelation(hit.relation) &&
-      Boolean(urlKey) &&
-      eligible.has(urlKey) &&
-      !blockedUrlKeys.has(urlKey) &&
-      Boolean(outletIdentity(outlet));
-    if (urlKey) seenUrlKeys.add(urlKey);
-    kept.push({ hit, outlet, title, url, urlKey, label, candidate });
+/**
+ * Convert a Newsjack capture into story-discovery.v1.
+ *
+ * @param {object|string} input capture object or its JSON text
+ * @param {{ now: number, pin?: object, searchProviderStatus?: object }} options
+ */
+export function captureToStoryDiscovery(input, { now, pin = NEWSJACK_PIN, searchProviderStatus = SEARCH_PROVIDER_MODE_STATUS } = {}) {
+  if (typeof now !== 'number' || !Number.isFinite(now)) {
+    throw new TypeError('captureToStoryDiscovery requires a numeric now');
   }
-
-  // Independence: one row per distinct outlet among candidates, with outlet
-  // identity grouped transitively over every kept and dropped record.
-  const roots = groupOutlets([...kept, ...linkers]).slice(0, kept.length);
-  const candidateRoots = new Set(kept.flatMap((entry, index) => (entry.candidate ? [roots[index]] : [])));
-  if (candidateRoots.size >= 2) {
-    const chosenRoots = new Set();
-    kept.forEach((entry, index) => {
-      if (!entry.candidate) return;
-      if (chosenRoots.has(roots[index])) {
-        entry.label = { relation: 'same_story', labeling_basis: SAME_OUTLET_ADDITIONAL_URL_BASIS };
-        return;
-      }
-      chosenRoots.add(roots[index]);
-      entry.label = { relation: 'independent_reporting', labeling_basis: INDEPENDENCE_BASIS };
+  const read = readCapture(input);
+  if (read.error) {
+    return abstain('newsjack_capture_invalid', read.error, 'The Newsjack capture could not be read. No story members were checked.');
+  }
+  const capture = read.capture;
+  let validation;
+  try {
+    validation = validateNewsjackCapture(capture, { pin });
+  } catch {
+    // For example a stack overflow on deeply nested JSON: abstain, never throw.
+    return abstain('newsjack_capture_invalid', 'capture_structure_invalid', 'The Newsjack capture could not be checked. No story members were checked.');
+  }
+  if (!validation.ok) {
+    return abstain('newsjack_capture_invalid', validation.errors[0].code, 'The Newsjack capture did not match media-lens.newsjack-capture.v1. No story members were checked.', {
+      errors: validation.errors.slice(0, 20).map((error) => ({ code: error.code, path: error.path }))
     });
   }
 
-  if (kept.length === 0) return { cluster: null };
-  const members = kept.map((entry) => ({
-    outlet: entry.outlet,
-    article_title: truncateCodePoints(entry.title, 300),
-    published_at: knownPublishedAt(entry.hit.published_at),
-    canonical_url: entry.url,
-    retrieved_at: retrievedAt,
-    source_id: sourceIdFor(entry.hit, entry.outlet),
-    relation: entry.label.relation,
-    labeling_basis: entry.label.labeling_basis,
-    independent_reporting: entry.label.relation === 'independent_reporting'
-  }));
-  const independent = members.filter((member) => member.independent_reporting);
-  const title = members[0].article_title;
-  const clusterId = statedId || clusterIdFor(String(`${title}|${window.start}`));
-  for (const entry of groupRejections) entry.cluster_id = clusterId;
-  return {
-    cluster: {
-      cluster_id: clusterId,
-      title,
-      cluster_basis: CLUSTER_BASIS,
+  const mode = capture.runner.mode;
+  if (mode === 'live') {
+    const code = searchProviderStatus?.medialyst === 'implemented' ? 'newsjack_live_capture_not_supported' : 'no_approved_transport';
+    return abstain('newsjack_live_capture_not_supported', code, 'Live Newsjack captures are not supported. No approved news-search transport or live labels exist.');
+  }
+
+  const retrievedAt = stepTime(capture, 'detector_run', 'exited_at');
+  const exitedMs = Date.parse(retrievedAt);
+  if (exitedMs > now + FUTURE_TOLERANCE_MS) {
+    return abstain('newsjack_capture_invalid', 'capture_from_future', 'The Newsjack capture ends in the future. No story members were checked.');
+  }
+  if (mode === 'mock' && now - exitedMs > STALE_AFTER_MS) {
+    return abstain('newsjack_capture_stale', 'newsjack_capture_stale', 'The Newsjack capture is more than 48 hours old. No story members were checked.');
+  }
+
+  const hours = capture.request.max_age_hours;
+  const window = { start: new Date(exitedMs - hours * 60 * 60 * 1000).toISOString(), end: retrievedAt, hours };
+  const windowStartMs = Date.parse(window.start);
+  const signalsById = new Map(capture.signals.map((signal) => [signal.id, signal]));
+  const providerId = `newsjack:${mode}`;
+
+  const rows = new Map();
+  for (const [kind, status] of Object.entries(capture.sources)) {
+    const policy = NEWSJACK_SOURCE_KINDS[kind];
+    rows.set(kind, {
+      source_id: `newsjack:${kind}`,
+      provider: providerId,
+      provider_mode: 'fixture',
+      outlet: null,
+      query: capture.request.query,
+      feed_url: null,
+      checked_at: retrievedAt,
+      outcome: SOURCE_OUTCOMES[status.status],
+      item_count: 0,
+      freshness_grade: 'fixture',
+      error: status.error_class,
+      newsjack_status: status.status,
+      newsjack_requested: status.requested,
+      newsjack_available: status.available,
+      newsjack_attempted: status.attempted,
+      newsjack_evidence_count: status.evidence_count,
+      member_eligible: policy.member_eligible,
+      ...Object.fromEntries(NEWSJACK_MEMBER_REJECTIONS.map((reason) => [`rejected_${reason}`, 0])),
+      rejected_total: 0,
+      rejected_members: []
+    });
+  }
+  const rowFor = (kind) => {
+    if (!rows.has(kind)) {
+      rows.set(kind, {
+        source_id: `newsjack:${kind}`,
+        provider: providerId,
+        provider_mode: 'fixture',
+        outlet: null,
+        query: capture.request.query,
+        feed_url: null,
+        checked_at: retrievedAt,
+        outcome: 'not_requested',
+        item_count: 0,
+        freshness_grade: 'fixture',
+        error: null,
+        newsjack_status: null,
+        newsjack_requested: false,
+        newsjack_available: false,
+        newsjack_attempted: false,
+        newsjack_evidence_count: 0,
+        member_eligible: NEWSJACK_SOURCE_KINDS[kind].member_eligible,
+        ...Object.fromEntries(NEWSJACK_MEMBER_REJECTIONS.map((reason) => [`rejected_${reason}`, 0])),
+        rejected_total: 0,
+        rejected_members: []
+      });
+    }
+    return rows.get(kind);
+  };
+  const reject = (kind, reason, clusterId, signalId, outlet, detail = reason) => {
+    const row = rowFor(kind);
+    row[`rejected_${reason}`] += 1;
+    row.rejected_total += 1;
+    if (row.rejected_members.length < MAX_REJECTED_MEMBERS_LISTED) {
+      // No URL is listed: a rejected URL may be non-public, and it must not
+      // become a user-facing link through diagnostics either.
+      row.rejected_members.push({ cluster_id: clusterId, newsjack_signal_id: signalId, reason: detail, outlet: outlet || null });
+    }
+  };
+
+  const clusters = [];
+  let clustersWithoutMembers = 0;
+  // A URL is considered once across the whole document: later copies, in
+  // any cluster and whatever time they report, are counted as duplicates.
+  const seenUrlKeys = new Set();
+  for (const group of capture.clustering.groups) {
+    const members = [];
+    for (const signalId of group.signal_ids) {
+      const signal = signalsById.get(signalId);
+      for (const evidence of signal.evidence) {
+        const kind = evidence.source;
+        const outlet = outletText(evidence.container);
+        if (!NEWSJACK_SOURCE_KINDS[kind].member_eligible) {
+          reject(kind, 'source_kind_excluded', group.cluster_id, signalId, outlet, `source_kind_excluded:${kind}`);
+          continue;
+        }
+        if (evidence.title_from_excerpt) {
+          reject(kind, 'title_from_excerpt', group.cluster_id, signalId, outlet);
+          continue;
+        }
+        const title = displayText(evidence.title);
+        const classified = classifySourceUrl(evidence.url);
+        if (!outlet || !title || classified.reason === 'incomplete') {
+          reject(kind, 'incomplete', group.cluster_id, signalId, outlet);
+          continue;
+        }
+        if (!classified.url) {
+          reject(kind, classified.reason, group.cluster_id, signalId, outlet);
+          continue;
+        }
+        const urlKey = normalizedURLKey(classified.url);
+        if (seenUrlKeys.has(urlKey)) {
+          reject(kind, 'duplicate_url', group.cluster_id, signalId, outlet);
+          continue;
+        }
+        seenUrlKeys.add(urlKey);
+        if (isNonOutletHost(classified.url)) {
+          reject(kind, 'non_outlet_host', group.cluster_id, signalId, outlet);
+          continue;
+        }
+        const published = parseProviderTimestamp(evidence.published_at);
+        if (!published.value) {
+          reject(kind, `published_at_${published.reason}`, group.cluster_id, signalId, outlet);
+          continue;
+        }
+        const publishedMs = Date.parse(published.value);
+        if (publishedMs > exitedMs) {
+          reject(kind, 'published_at_after_retrieval', group.cluster_id, signalId, outlet);
+          continue;
+        }
+        if (publishedMs < windowStartMs) {
+          reject(kind, 'outside_window', group.cluster_id, signalId, outlet);
+          continue;
+        }
+        const syndicated = isSharedSyndicationHost(classified.url);
+        members.push({
+          outlet,
+          outlet_basis: 'provider_reported_publication_name',
+          article_title: truncateCodePoints(title, 300).trim(),
+          published_at: published.value,
+          published_at_basis: 'provider_reported_via_newsjack_unverified',
+          canonical_url: classified.url,
+          url_basis: 'provider_surfaced_url_not_canonicalized',
+          retrieved_at: retrievedAt,
+          retrieved_at_basis: NEWSJACK_RETRIEVED_AT_BASIS,
+          source_id: `newsjack:${kind}:${outletSlug(outlet) || 'unknown_outlet'}`,
+          source_kind: kind,
+          newsjack_signal_id: signalId,
+          relation: syndicated ? 'syndicated' : 'same_story',
+          labeling_basis: syndicated ? 'wire_press_release_or_partner_url' : NEWSJACK_MEMBER_BASIS,
+          independent_reporting: false
+        });
+        rowFor(kind).item_count += 1;
+      }
+    }
+    if (members.length === 0) {
+      clustersWithoutMembers += 1;
+      continue;
+    }
+    const cluster = {
+      cluster_id: group.cluster_id,
+      title: members[0].article_title,
+      cluster_basis: NEWSJACK_CLUSTER_BASIS,
+      cluster_params: {
+        title_overlap: capture.clustering.title_overlap,
+        min_shared_tokens: capture.clustering.min_shared_tokens,
+        detector_jaccard: 0.32,
+        detector_text: 'title_and_snippet',
+        basis: 'pinned_source_review'
+      },
+      grouping_note: NEWSJACK_GROUPING_NOTE,
       window,
-      sources_checked: sourcesChecked.map((source) => source.source_id),
+      sources_checked: [...rows.values()].map((row) => row.source_id),
       members,
-      // One row per distinct qualifying outlet (see groupOutlets).
-      independent_reporting: independent.map((member) => ({
-        outlet: member.outlet,
-        canonical_url: member.canonical_url,
-        labeling_basis: member.labeling_basis
-      })),
-      independent_outlet_count: independent.length,
+      independent_reporting: [],
+      independent_outlet_count: 0,
+      independence_note: NEWSJACK_INDEPENDENCE_NOTE,
       frames: [],
       frame_note: FRAME_NOTE,
       coverage_gap: null,
       omission_note: OMISSION_NOTE,
-      same_story_note: SAME_STORY_NOT_INDEPENDENT
-    }
-  };
-}
-
-const MAX_WINDOW_HOURS = 24 * 366;
-const DATA_ORIGINS = new Set(['fixture', 'newsjack_artifacts']);
-const FRESHNESS_GRADES = new Set(['fixture', 'unknown']);
-// The adapter's own provider ids. A free-form tail could suggest a planned
-// source such as newsjack:medialyst.
-const PROVIDER_IDS = new Set(['fixture:newsjack_shaped', 'newsjack:artifacts', 'newsjack:disabled']);
-
-// Copy only a well-formed window: ISO UTC start no later than end, and a
-// positive, bounded hour count. Anything else is treated as no window.
-export function sanitizeWindow(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const start = knownPublishedAt(value.start);
-  const end = knownPublishedAt(value.end);
-  const hours = value.hours;
-  if (!start || !end || start > end) return null;
-  if (typeof hours !== 'number' || !Number.isFinite(hours) || hours <= 0 || hours > MAX_WINDOW_HOURS) return null;
-  return { start, end, hours };
-}
-
-// Labels come from the adapter, not from evidence. Refuse values that would
-// present mapped fixture or artifact evidence as another kind of source.
-function assertDocumentLabels({ providerId, freshnessGrade, dataOrigin }) {
-  const fail = (field, value) => {
-    throw Object.assign(new Error(`Unsupported story-discovery ${field}: ${String(value)}`), { code: 'INVALID_DISCOVERY_LABEL', field });
-  };
-  if (typeof dataOrigin !== 'string' || !DATA_ORIGINS.has(dataOrigin)) fail('data_origin', dataOrigin);
-  if (typeof freshnessGrade !== 'string' || !FRESHNESS_GRADES.has(freshnessGrade)) fail('freshness_grade', freshnessGrade);
-  if (typeof providerId !== 'string' || !PROVIDER_IDS.has(providerId)) fail('provider_id', providerId);
-}
-
-// Direct callers pass arrays. A cluster list that is not an array of objects
-// with member arrays, or hits that are not an array, is refused rather than
-// read as empty.
-function evidenceShapeValid(hits, clusters) {
-  if (hits != null && !Array.isArray(hits)) return false;
-  if (clusters == null) return true;
-  if (!Array.isArray(clusters)) return false;
-  return clusters.every((group) => group && typeof group === 'object' && !Array.isArray(group) && Array.isArray(group.members));
-}
-
-export function mapNewsjackEvidenceToStoryDiscovery({
-  retrievedAt,
-  window = null,
-  providerId = 'fixture:newsjack_shaped',
-  providerMode = 'fixture',
-  freshnessGrade = 'fixture',
-  query = null,
-  hits = null,
-  clusters = null,
-  origin = null,
-  dataOrigin = 'fixture',
-  artifactRead = null
-} = {}) {
-  // Only fixture evidence is implemented. A caller cannot label mapped output
-  // as host web search, RSS/Atom, or Medialyst results, and the data origin,
-  // provider id, and freshness grade must be one of the adapter's own values.
-  assertSearchProviderModeImplemented(providerMode);
-  assertDocumentLabels({ providerId, freshnessGrade, dataOrigin });
-  window = sanitizeWindow(window);
-  if (artifactRead === null && !evidenceShapeValid(hits, clusters)) {
-    artifactRead = { ok: false, reason: 'invalid', error: 'evidence_shape_invalid' };
+      same_story_note: NEWSJACK_SAME_STORY_NOTE
+    };
+    const claim = originClaimFor(capture, group.cluster_id);
+    if (claim) cluster.origin_claims = [claim];
+    clusters.push(cluster);
   }
-  const readFailed = (dataOrigin === 'newsjack_artifacts' && artifactRead?.ok !== true) || artifactRead?.ok === false;
-  if (readFailed && artifactRead?.reason === 'not_live') {
-    const stamp = knownPublishedAt(retrievedAt);
-    return baseDocument({
-      status: 'not_live',
-      reason: artifactRead.error === 'discovery_disabled' ? 'discovery_disabled' : 'fixture_not_configured',
-      message: artifactRead.error === 'discovery_disabled'
-        ? 'Newsjack discovery is disabled. Nothing was read or checked. This is not a live provider result.'
-        : 'No Newsjack fixture is configured. Nothing was read or checked. This is not a live provider result.',
-      data_origin: dataOrigin,
-      fixture_labeled: dataOrigin === 'fixture',
-      retrieved_at: stamp,
-      window,
-      sources_checked: [{
-        source_id: providerId,
-        provider: providerId,
-        provider_mode: providerMode,
-        outlet: null,
-        query: query || null,
-        feed_url: null,
-        checked_at: stamp,
-        outcome: 'not_checked',
-        item_count: 0,
-        freshness_grade: freshnessGrade,
-        error: artifactRead.error
-      }]
-    });
-  }
-  if (readFailed) {
-    const stamp = knownPublishedAt(retrievedAt);
-    const statedWindow = window;
-    const invalid = artifactRead?.reason === 'invalid';
-    const what = dataOrigin === 'fixture' ? 'fixture file' : 'artifact file';
-    const invalidMessage = artifactRead?.error === 'evidence_shape_invalid'
-      ? 'The Newsjack evidence did not have the expected shape. No story members were checked. This is not a live provider result.'
-      : `A Newsjack ${what} could not be parsed as the expected JSON shape. No story members were checked. This is not a live provider result.`;
-    const unreadMessage = dataOrigin === 'fixture'
-      ? 'The Newsjack fixture file was not read. No story members were checked. This is not a live provider result.'
-      : 'The Newsjack artifact directory or file was not read. No story members were checked. This is not a live provider result.';
-    return baseDocument({
-      status: 'abstain',
-      reason: invalid ? 'artifacts_invalid' : 'artifacts_unavailable',
-      message: invalid ? invalidMessage : unreadMessage,
-      data_origin: dataOrigin,
-      fixture_labeled: dataOrigin === 'fixture',
-      retrieved_at: stamp,
-      window: statedWindow,
-      sources_checked: [{
-        source_id: providerId,
-        provider: providerId,
-        provider_mode: providerMode,
-        outlet: null,
-        query: query || null,
-        feed_url: null,
-        checked_at: stamp,
-        outcome: 'failed',
-        item_count: 0,
-        freshness_grade: freshnessGrade,
-        error: artifactRead?.error || 'artifacts_unreadable',
-        ...(artifactRead?.file ? { error_file: artifactRead.file } : {})
-      }]
-    });
-  }
-  if (typeof retrievedAt !== 'string' || !knownPublishedAt(retrievedAt)) {
-    return baseDocument({
-      status: 'abstain',
-      reason: 'retrieved_at_missing',
-      message: 'No retrieval time was supplied, so no story-discovery document was built. Published times were not copied into retrieved_at.',
-      data_origin: dataOrigin,
-      fixture_labeled: dataOrigin === 'fixture',
-      retrieved_at: null,
-      window: null,
-      sources_checked: []
-    });
-  }
-  if (!window) {
-    return baseDocument({
-      status: 'abstain',
-      reason: 'window_missing',
-      message: 'No valid search or cluster window was supplied. A window was not invented from publication times.',
-      data_origin: dataOrigin,
-      fixture_labeled: dataOrigin === 'fixture',
-      retrieved_at: retrievedAt,
-      window: null,
-      sources_checked: []
-    });
-  }
+  const sourcesChecked = [...rows.values()];
+  for (const cluster of clusters) cluster.sources_checked = sourcesChecked.map((row) => row.source_id);
 
-  const originUncertain = Boolean(origin) && (typeof origin !== 'object' || origin.same_story_assessment !== 'same_story');
-  const groups = Array.isArray(clusters) && clusters.length > 0
-    ? clusters
-    : [{ cluster_id: null, members: Array.isArray(hits) ? hits : [] }];
-
-  const checked = {
-    source_id: providerId,
-    provider: providerId,
-    provider_mode: providerMode,
-    outlet: null,
-    query: query || null,
-    feed_url: null,
-    checked_at: retrievedAt,
-    outcome: dataOrigin === 'newsjack_artifacts' ? 'artifacts_read' : 'fixture_checked',
-    item_count: 0,
-    freshness_grade: freshnessGrade,
-    error: null
-  };
-
-  const built = [];
-  const rejected = { incomplete: 0, non_https_url: 0, non_public_url: 0, different_story: 0, members: [] };
-  for (const [groupIndex, group] of groups.entries()) {
-    const result = clusterFromGroup(group, groupIndex, {
-      retrievedAt,
-      window,
-      sourcesChecked: [checked],
-      origin,
-      originUncertain,
-      rejected
-    });
-    if (result.cluster) built.push(result.cluster);
-  }
-  checked.item_count = built.reduce((sum, cluster) => sum + cluster.members.length, 0);
-  checked.rejected_incomplete = rejected.incomplete;
-  checked.rejected_non_https_url = rejected.non_https_url;
-  checked.rejected_non_public_url = rejected.non_public_url;
-  checked.rejected_different_story = rejected.different_story;
-  checked.rejected_total = REJECTION_REASONS.reduce((sum, reason) => sum + rejected[reason], 0);
-  checked.rejected_members = rejected.members;
-
-  const fixtureLabeled = dataOrigin === 'fixture';
-  const freshnessNote = freshnessGrade === 'fixture'
-    ? 'Fixture evidence only. This is not a live provider result and not Medialyst-grade attribution.'
-    : 'Freshness is best-effort for this provider mode. Medialyst-grade attribution is not claimed.';
-  const status = built.length > 0 ? 'ok' : 'empty';
-  return baseDocument({
+  const status = clusters.length > 0 ? 'ok' : 'empty';
+  // An empty result means something only when a member-eligible source was
+  // actually checked. Otherwise say that nothing was checked.
+  const eligibleRows = sourcesChecked.filter((row) => row.member_eligible);
+  const eligibleChecked = eligibleRows.some((row) => row.outcome === 'checked' || row.outcome === 'partial');
+  const eligibleItems = eligibleRows.reduce((sum, row) => sum + row.item_count + row.rejected_total, 0);
+  const eligibleReported = eligibleRows.reduce((sum, row) => sum + row.newsjack_evidence_count, 0);
+  const emptyReason = !eligibleChecked ? 'no_member_source_checked' : eligibleReported === 0 && eligibleItems === 0 ? 'no_results' : 'no_accepted_members';
+  const label = mode === 'mock' ? 'Newsjack mock run: synthetic data from a pinned binary, not live coverage.' : 'Newsjack fixture capture: hand-written example data, not live coverage.';
+  const document = baseDocument({
     status,
-    reason: status === 'ok' ? 'clusters_from_newsjack_shaped_evidence' : 'no_usable_members',
-    message: built.length
-      ? `Fixture or artifact clusters only. ${freshnessNote} ${OMISSION_NOTE}`
-      : `No usable story members were present. Dropped records were not filled in; the sources_checked row counts them by reason. ${freshnessNote} ${OMISSION_NOTE}`,
-    data_origin: dataOrigin,
-    fixture_labeled: fixtureLabeled,
+    reason: status === 'ok' ? 'newsjack_capture_converted' : emptyReason,
+    message:
+      status === 'ok'
+        ? `${label} Members are grouped by Newsjack's text-similarity heuristics, and none is labeled independent. ${OMISSION_NOTE}`
+        : {
+            no_accepted_members: `${label} No evidence item in the capture met the member rules. Dropped items are counted by reason on each sources_checked row, and signals Newsjack did not emit are counted in provenance.provider_selection. ${OMISSION_NOTE}`,
+            no_results: `${label} Newsjack kept no news-search items after its own age, hygiene, and syndication filters. ${OMISSION_NOTE}`,
+            no_member_source_checked: `${label} No news-search results were returned, so nothing was checked. Each sources_checked row gives the outcome and error class. ${OMISSION_NOTE}`
+          }[emptyReason],
+    data_origin: 'fixture',
+    fixture_labeled: true,
     retrieved_at: retrievedAt,
+    retrieved_at_basis: NEWSJACK_RETRIEVED_AT_BASIS,
     window,
-    sources_checked: [checked],
-    clusters: built
+    window_basis: NEWSJACK_WINDOW_BASIS,
+    sources_checked: sourcesChecked,
+    clusters,
+    provenance: {
+      tool: 'newsjack',
+      version: capture.newsjack.version,
+      commit: capture.newsjack.commit,
+      binary_sha256: capture.newsjack.binary_sha256,
+      binary_check: mode === 'mock' ? 'recorded_in_pin' : 'fixture_unhashed',
+      capture_id: capture.capture_id,
+      capture_contract: NEWSJACK_CAPTURE_CONTRACT,
+      runner_mode: mode,
+      argv_template: capture.runner.argv_template,
+      retrieval_interval: {
+        not_before: stepTime(capture, 'detector_run', 'started_at'),
+        not_after: retrievedAt,
+        basis: 'runner_observed_detector_start_and_exit'
+      },
+      newsjack_generated_at: capture.monitor.generated_at,
+      provider_selection: {
+        ...capture.selection,
+        lookback_days: capture.request.lookback_days,
+        depth: capture.request.depth,
+        min_queue_priority: 0,
+        min_major_news: 0,
+        evidence_cap_per_signal: 8
+      },
+      clusters_without_members: clustersWithoutMembers
+    }
   });
+  if (capture.origin) document.privacy.provider_article_pages_fetched = 'unknown_agent_retrieval';
+  return document;
 }

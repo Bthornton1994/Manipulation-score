@@ -407,8 +407,8 @@ Implementation note: Node `fetch` may use environment proxies. The pinned client
 Block selection after Trafilatura returns text:
 
 1. Select the first `<article>` element, or the document root when the page has no `<article>`.
-2. Keep a walked block, including `byline_meta`, when its normalized text exactly matches a Trafilatura paragraph line, contains a Trafilatura paragraph line (`<br>`-split paragraphs), is contained in a Trafilatura paragraph line, or matches after a leading list marker (`-`, `*`, or `•`) is removed.
-3. If no content blocks remain, fall back to one block per Trafilatura line. The first line is the headline and later lines are authorial.
+2. Keep a walked block, including `byline_meta`, only when its normalized text exactly equals one Trafilatura paragraph line or a run of consecutive Trafilatura paragraph lines (`<br>`-split paragraphs, multi-paragraph quotes, nested list items). The comparison ignores whitespace because the walker joins nested elements without a space where Trafilatura starts a new line. Only a walked `<li>` may also match after the leading `- ` list marker, which Trafilatura 2.2.0 writes for list items, is removed from each line. A block that only contains a line, or only appears inside one, is not a match. Matching uses lookups built once from the extracted lines.
+3. If no content blocks remain, fall back to one block per Trafilatura line. The first line is the headline and later lines are authorial. Menu items, page numbers, and fragments that only appear inside a line are not matches, so they cannot prevent this fallback. When other blocks match, an extracted line that no walked block equals is not added back.
 
 Existing behavior remains the contract:
 

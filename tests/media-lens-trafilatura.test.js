@@ -853,5 +853,9 @@ test('architecture section 10.2 matches first-article Trafilatura matching', asy
   assert.match(section, /Trafilatura paragraph/);
   assert.match(section, /fall back to one block per Trafilatura line/);
   assert.match(section, /`<br>`-split paragraphs/);
-  assert.match(section, /leading list marker \(`-`, `\*`, or `•`\)/);
+  assert.match(section, /exactly equals one Trafilatura paragraph line or a run of consecutive Trafilatura paragraph lines/);
+  assert.match(section, /Only a walked `<li>` may also match after the leading `- ` list marker/);
+  assert.match(section, /only contains a line, or only appears inside one, is not a match/);
+  assert.equal(/contains a Trafilatura paragraph line|is contained in a Trafilatura paragraph line/.test(section), false);
+  assert.equal(section.includes('`•`'), false);
 });

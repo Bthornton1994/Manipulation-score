@@ -669,7 +669,11 @@ test('abstain errors name unknown keys generically, never by their text', () => 
 });
 
 test('titles and outlet names are display text; host-like names are not outlets', () => {
-  assert.equal(displayText('Fare‮vote\u0007  set\u009b'), 'Fare vote set');
+  // Controls become spaces; invisible format characters are removed without
+  // splitting a word.
+  assert.equal(displayText('Fare ‮vote\u0007  set\u009b'), 'Fare vote set');
+  assert.equal(displayText('葛\u{e0100}飾区'), '葛飾区');
+  assert.equal(displayText('❤️Love'), '❤Love');
   for (const value of ['www.evil.example/path', '169.254.169.254', '169.254.169.254/latest/meta-data', 'metro.internal/admin?token=abc', 'harbor-times.example:8080', '[fd00::1]', 'fd00::1']) {
     assert.equal(outletText(value), '', value);
   }
@@ -928,11 +932,20 @@ test('a search that reported items but emitted no signals is not called a search
 });
 
 test('outlet names also refuse .local, short or hex IP forms, invisible splitters, and a cut that would expose a host', () => {
-  for (const value of ['printer.local', 'app.localhost', 'foo。local', 'instance-data', '127.1', '0x7f.0.0.1', '2130706433', '::ffff:10.0.0.1', 'evil͏.com/login', 'javascript️:alert(1)', 'about:blank', `${'a'.repeat(191)}.internal Daily`]) {
+  for (const value of ['printer.local', 'app.localhost', 'foo。local', 'instance-data', '127.1', '0x7f.0.0.1', '::ffff:10.0.0.1', 'evil͏.com/login', 'javascript️:alert(1)', 'about:blank', `${'a'.repeat(191)}.internal Daily`]) {
     assert.equal(outletText(value), '', JSON.stringify(value));
   }
   assert.equal(outletText('Harbor Times'), 'Harbor Times');
   assert.equal(outletText(`${'O'.repeat(199)} X`), 'O'.repeat(199), 'a cut never ends in a space');
+  for (const value of ['1843', '360', '2130706433', '20 Minutes', 'AP/NORC']) assert.equal(outletText(value), value, 'plain numbers and ordinary names stay readable');
+  for (const value of ['127.0.0.1.', '0x7f.1.', '0x7f000001', '[::1]:80', 'localhost:3000', 'intranet:8080', 'localhost/admin', 'instance-data/latest']) {
+    assert.equal(outletText(value), '', value);
+  }
+  const titled = mutated((c) => {
+    c.signals.find((signal) => signal.id === STUDY_CLUSTER).evidence[0].title = `${'T'.repeat(299)} tail`;
+  });
+  const titledStudy = captureToStoryDiscovery(titled, { now: NOW }).clusters.find((cluster) => cluster.cluster_id === STUDY_CLUSTER);
+  assert.equal(titledStudy.members[0].article_title, 'T'.repeat(299), 'a title cut never ends in a space');
   for (const title of ['͏️', '\u{e0100}឴', '\ud800']) {
     const capture = mutated((c) => {
       c.signals.find((signal) => signal.id === STUDY_CLUSTER).evidence[0].title = title;

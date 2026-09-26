@@ -350,7 +350,7 @@ function runStep({ spawnImpl, binary, argv, env, cwd, timeoutMs, maxStdoutBytes,
   });
 }
 
-async function writeAtomic(path, text) {
+export async function writeAtomic(path, text) {
   // An existing entry must be a regular file with the same content; it is
   // read without following a symlink or blocking on a FIFO.
   const info = await lstat(path).catch(() => null);

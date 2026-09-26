@@ -221,10 +221,15 @@ function isHostLikeText(value) {
   return (
     /^www\./i.test(dotted) ||
     /^[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+(?:[/?#]|:\d)/u.test(dotted) ||
-    // IPv4 in any dotted, short, decimal, or hex form, and IPv6 (with an
-    // embedded IPv4 tail).
-    /^(?:0x[0-9a-f]+|\d+)(?:\.(?:0x[0-9a-f]+|\d+)){0,3}$/i.test(dotted) ||
-    /^\[?[0-9a-f]*:[0-9a-f:.]+\]?$/i.test(dotted) ||
+    // IPv4 in dotted, short, or hex form (with an optional trailing dot or
+    // port), and IPv6 with or without brackets, a port, or an IPv4 tail. A
+    // plain number stays readable: "1843" and "360" are publication names.
+    /^(?:0x[0-9a-f]+|\d+)(?:\.(?:0x[0-9a-f]+|\d+)){1,3}\.?(?::\d+)?$/i.test(dotted) ||
+    /^0x[0-9a-f]+$/i.test(dotted) ||
+    /^\[?[0-9a-f]*:[0-9a-f:.]+\]?(?::\d+)?$/i.test(dotted) ||
+    // A single-label name with a port, or a non-public single label with a path.
+    /^[\p{L}\p{N}-]+:\d+(?:[/?#].*)?$/u.test(dotted) ||
+    /^(?:localhost|instance-data|metadata)(?:[/?#:]|$)/i.test(dotted) ||
     /\S@\S/.test(dotted) ||
     (bareHost !== null &&
       (bareHost === 'localhost' ||
@@ -234,15 +239,18 @@ function isHostLikeText(value) {
   );
 }
 
-// Display text: control characters, default-ignorable code points (format
-// characters, bidi overrides, variation selectors, combining grapheme
-// joiners), blank-looking letters (Hangul fillers, the braille blank), and
-// lone surrogates are removed and whitespace is collapsed.
+// Display text: control characters become spaces; default-ignorable code
+// points (format characters, bidi overrides, variation selectors, joiners)
+// and lone surrogates are removed without adding a space, so a word is not
+// split; blank-looking letters (Hangul fillers, the braille blank) become
+// spaces; whitespace is collapsed.
 export function displayText(value) {
   if (typeof value !== 'string') return '';
   return value
-    .replace(/[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\u115F\u1160\u3164\uFFA0\u2800]/gu, ' ')
-    .replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, ' ')
+    .replace(/\p{Cc}/gu, ' ')
+    .replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu, '')
+    .replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, '')
+    .replace(/[\u115F\u1160\u3164\uFFA0\u2800]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }

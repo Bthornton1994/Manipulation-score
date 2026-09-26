@@ -17,7 +17,7 @@ import {
   validateRawDetectorOutput,
   validateRawOriginOutput
 } from '../media-lens/tools/newsjack-raw.js';
-import { CHILD_ENV_KEYS, CREDENTIAL_PASSTHROUGH, DEAD_PROXY, buildArgv, runNewsjackCapture } from '../media-lens/tools/newsjack-runner.js';
+import { CHILD_ENV_KEYS, CREDENTIAL_PASSTHROUGH, DEAD_PROXY, buildArgv, runNewsjackCapture, writeAtomic } from '../media-lens/tools/newsjack-runner.js';
 import { SEARCH_PROVIDER_MODE_STATUS } from '../media-lens/worker/discovery/search-provider.js';
 import { main as captureCli } from '../scripts/newsjack-capture.js';
 import { makeFakeNewsjack, mockSignalId } from './helpers/fake-newsjack.js';
@@ -703,4 +703,26 @@ test('a repeated real SIGINT aborts again instead of killing the CLI before clea
   const [code, signal] = await new Promise((resolve) => child.on('close', (c, s) => resolve([c, s])));
   assert.equal(signal, null, 'the second SIGINT must not kill the process');
   assert.equal(code, 4);
+});
+
+test('output writes are idempotent for identical content and refuse anything else at the path', { timeout: 30000 }, async () => {
+  const ws = await workspace();
+  const target = join(ws.out, 'story-discovery-0000000000000000.json');
+  await writeAtomic(target, 'same\n');
+  assert.equal((await lstat(target)).mode & 0o777, 0o600);
+  await writeAtomic(target, 'same\n');
+  const collision = (error) => error.code === 'output_collision' && error.exitCode === 6;
+  await assert.rejects(writeAtomic(target, 'different\n'), collision);
+  assert.equal(await readFile(target, 'utf8'), 'same\n', 'an existing file is never overwritten');
+  const copy = join(ws.dir, 'copy.json');
+  await writeFile(copy, 'same\n');
+  const link = join(ws.out, 'linked.json');
+  await symlink(copy, link);
+  await assert.rejects(writeAtomic(link, 'same\n'), collision, 'a symlink is not followed even to identical content');
+  const fifo = join(ws.out, 'fifo.json');
+  execFileSync('mkfifo', [fifo]);
+  await assert.rejects(writeAtomic(fifo, 'same\n'), collision, 'a FIFO is refused without blocking');
+  const dir = join(ws.out, 'dir.json');
+  await mkdir(dir);
+  await assert.rejects(writeAtomic(dir, 'same\n'), collision);
 });

@@ -1,0 +1,25 @@
+{
+  "label": "Fixture discovery. Not live coverage.",
+  "sources": [
+    {
+      "source_id": "fixture-daily",
+      "outlet": "Fixture Daily",
+      "feed_url": "https://feeds.fixture.test/daily.xml",
+      "feed_host": "feeds.fixture.test",
+      "approval_status": "approved",
+      "permission_basis": "in-repo fixture only"
+    },
+    {
+      "source_id": "fixture-wire",
+      "outlet": "Fixture Wire",
+      "feed_url": "https://feeds.fixture.test/wire.xml",
+      "feed_host": "feeds.fixture.test",
+      "approval_status": "approved",
+      "permission_basis": "in-repo fixture only"
+    }
+  ],
+  "feeds": [
+    { "source_id": "fixture-daily", "file": "fixture-daily.xml" },
+    { "source_id": "fixture-wire", "file": "fixture-wire.xml" }
+  ]
+}

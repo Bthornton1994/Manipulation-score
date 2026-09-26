@@ -85,6 +85,10 @@
   text-wrap: balance;
 }
 
+.ml-story-discovery {
+  margin-top: var(--space-5, 1.5rem);
+}
+
 .ml-coverage-status {
   margin: 0 0 16px;
   padding: 12px 14px;

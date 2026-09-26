@@ -22,7 +22,7 @@ Fixture-only:
 - The static sample card on the landing page. It stays on every host and is labeled as a made-up example.
 - Everything under `fixtures/`: invented articles, recorded Jev answers, Newsjack-shaped records, and golden graphs. They are regression inputs, not accuracy evidence.
 
-Blocked: real story discovery, same-story clustering, and cross-outlet coverage comparison. The only coverage input the worker supports is operator-provided Newsjack run artifacts (`MEDIA_LENS_NEWSJACK_ARTIFACTS_DIR`), and none are approved for ml-jev. Producing those artifacts needs a Medialyst news-search login, an LLM agent runtime with web retrieval, a TypeSafe key for Newsjack's coarse filter, and a supply-chain and trademark review. The alternative is a new news API or RSS provider plus an owner data-rights decision about storing and showing third-party outlet URLs, titles, and timestamps. No such provider is approved, so Media Lens adds no provider, network call, or fixture substitute for live coverage.
+Real story discovery, same-story clustering, and cross-outlet coverage comparison are not live. The worker can read allowlisted RSS or Atom feeds only when `MEDIA_LENS_ENABLE_STORY_DISCOVERY` is the exact value true and the source registry marks that feed approved. No feed is approved. Every named candidate stays `candidate_pending_owner_approval` and is not fetched. Fixture discovery is labeled and is refused by a live-mode worker. Operator Newsjack artifacts (`MEDIA_LENS_NEWSJACK_ARTIFACTS_DIR`) are still unapproved for ml-jev. Article URL analysis does not discover stories or compare outlet coverage. Owner decisions: `docs/media-lens-story-discovery-owner-decisions.md`.
 
 ## Architecture
 
@@ -86,6 +86,9 @@ Worker environment variables (read only by `worker/config.js`, never logged, nev
 | `MEDIA_LENS_TYPESAFE_API_KEY` | Jev API key; required for `live` mode together with `MEDIA_LENS_ENABLE_LIVE=true`; also required for isolated pin-verify |
 | `MEDIA_LENS_TYPESAFE_BASE_URL` | Jev API base URL override (used by tests to point at a mock server) |
 | `MEDIA_LENS_NEWSJACK_ARTIFACTS_DIR` | directory of operator-produced Newsjack run artifacts for `live` mode coverage |
+| `MEDIA_LENS_ENABLE_STORY_DISCOVERY` | exact value `true` required before any live feed retrieval; default unset/false. Pending candidate feeds are still not fetched |
+| `MEDIA_LENS_STORY_DISCOVERY_FIXTURES` | exact value `true` serves labeled fixture feeds from a fixture-mode worker only; ignored when `MEDIA_LENS_MODE=live`; default unset/false |
+| `MEDIA_LENS_MAX_STORY_DISCOVERY_PER_MINUTE` | per-process `GET /stories` budget (default 6) |
 | `MEDIA_LENS_JEV_VERIFY` | exact value `true` required before `scripts/jev-pin-verify.js` may call TypeSafe; does not enable live URL or live pasted-text (default: unset/false) |
 | `MEDIA_LENS_JEV_SHADOW` | exact value `true` enables fixture replay in `scripts/jev-usage-lab.js` and shadow observation on `/analyze`; default unset/false; the `/analyze` response is unchanged; shadow errors are not part of that response; no extra TypeSafe call; does not ask `media-lens-narrow.v1`; does not enable live URL, live pasted-text, or live Jev |
 | `MEDIA_LENS_JEV_SHADOW_NARROW` | exact value `true` arms a separate, non-authoritative comparison that can ask `media-lens-narrow.v1` after the `/analyze` response is sent; default unset/false; does not change the HTTP body; not model accuracy; not production-ready; see `docs/jev-usage-lab/10-narrow-shadow-execution.md` |

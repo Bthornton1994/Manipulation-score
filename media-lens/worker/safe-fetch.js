@@ -23,7 +23,7 @@ import {
   taggedError
 } from './address-policy.js';
 import { hostIsAllowlisted } from './host-key.js';
-import { finalizePinnedResponse, headerValue, performPinnedGet } from './pinned-http.js';
+import { feedRequestHeaders, finalizePinnedResponse, headerValue, performPinnedGet } from './pinned-http.js';
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const DEFAULT_CONNECT_TIMEOUT_MS = 3000;
@@ -170,9 +170,22 @@ let fetchGate = Promise.resolve();
  * fetch(userUrl). Concurrent fetches are serialized per process.
  */
 export function fetchArticleSafely(targetUrl, options) {
+  return enqueuePinnedGet(targetUrl, { ...options, profile: 'article' });
+}
+
+/**
+ * Fetch an approved https feed. Same pin, redirect, allowlist, and userinfo
+ * rules as article fetch. Allows RSS/Atom XML types only and returns `body`.
+ * Does not accept HTML article types.
+ */
+export function fetchFeedSafely(targetUrl, options) {
+  return enqueuePinnedGet(targetUrl, { ...options, profile: 'feed' });
+}
+
+function enqueuePinnedGet(targetUrl, options) {
   const run = fetchGate.then(
-    () => fetchArticleSafelyUnlocked(targetUrl, options),
-    () => fetchArticleSafelyUnlocked(targetUrl, options)
+    () => fetchPinnedGetUnlocked(targetUrl, options),
+    () => fetchPinnedGetUnlocked(targetUrl, options)
   );
   fetchGate = run.then(
     () => undefined,
@@ -181,7 +194,7 @@ export function fetchArticleSafely(targetUrl, options) {
   return run;
 }
 
-async function fetchArticleSafelyUnlocked(
+async function fetchPinnedGetUnlocked(
   targetUrl,
   {
     timeoutMs,
@@ -200,12 +213,19 @@ async function fetchArticleSafelyUnlocked(
     createConnectionImpl = null,
     tlsCa = null,
     urlAllowlist = null,
-    signal: outerSignal = null
+    signal: outerSignal = null,
+    profile = 'article'
   } = {}
 ) {
   let currentUrl = targetUrl;
   let previousScheme = null;
   const request = requestImpl || defaultRequestImpl;
+  if (profile === 'feed') {
+    const { parsed } = parseArticleUrl(targetUrl);
+    if (parsed.protocol !== 'https:') {
+      throw taggedError('Feed URL must be https', 'BAD_SCHEME');
+    }
+  }
 
   for (let hop = 0; hop <= maxRedirects; hop++) {
     const { parsed } = parseArticleUrl(currentUrl);
@@ -231,6 +251,7 @@ async function fetchArticleSafelyUnlocked(
           parsed,
           pin,
           method: 'GET',
+          headers: profile === 'feed' ? feedRequestHeaders(parsed) : undefined,
           signal: timeout.signal,
           timeoutMs,
           connectTimeoutMs,
@@ -270,6 +291,17 @@ async function fetchArticleSafelyUnlocked(
         throw taggedError(`Fetch returned HTTP ${finalized.status}`, 'FETCH_ERROR');
       }
 
+      if (profile === 'feed') {
+        const body = await finalized.readFeed();
+        return {
+          body,
+          finalUrl: currentUrl,
+          pin,
+          contentType: headerValue(finalized.headers, 'content-type') || null,
+          fetchedAt: new Date().toISOString(),
+          fetchStatus: '200'
+        };
+      }
       const html = await finalized.readHtml();
       return {
         html,

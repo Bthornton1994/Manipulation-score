@@ -359,15 +359,17 @@ test('index.html uses the v2 consent checkbox and keeps the full live-URL disclo
 
 test('public landing leads with URL analysis, describes only what works, and keeps a labeled sample card', async () => {
   const html = await readFile('media-lens/index.html', 'utf8');
-  assert.match(html, /<h1[^>]*>Analyze one public article<\/h1>/);
+  assert.match(html, /<h1[^>]*>Discover how outlets cover a story<\/h1>/);
   assert.match(html, /Limited Jev-only experimental preview/);
   const lede = html.match(/<p class="ml-lede">([\s\S]*?)<\/p>/)[1].replace(/\s+/g, ' ');
-  assert.match(lede, /one public page from a short list of sites the operator approves/);
-  assert.match(lede, /language, claims, coverage, and source context separate/);
-  assert.match(lede, /no score for the article, a person, or an outlet/);
+  assert.match(lede, /compares only retrieved reports/);
+  assert.match(lede, /Live discovery is off until the owner approves named feeds/);
+  assert.match(lede, /no score for an article, a person, or an outlet/);
   assert.doesNotMatch(html, /media-intelligence workspace|fixture-first/i);
   const compare = html.match(/<ul class="ml-compare">([\s\S]*?)<\/ul>/)[1].replace(/\s+/g, ' ');
-  assert.match(compare, /does not yet find other reports of the same story or compare how outlets covered it/);
+  assert.match(compare, /does not yet check live feeds or compare how outlets covered a story/);
+  assert.match(compare, /Analyzing one article URL does not do that/);
+  assert.ok(html.indexOf('id="story-discovery-heading"') < html.indexOf('id="url-entry-heading"'));
   assert.match(compare, /Examples on this page are made up and labeled/);
   assert.match(compare, /<strong>Clarity<\/strong> reviews a private message on your device\./);
   // The URL entry comes first in the DOM, then the Coverage context section.

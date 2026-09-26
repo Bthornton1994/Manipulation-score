@@ -2069,6 +2069,121 @@ function setup() {
   byId('loading-panel').setAttribute('tabindex', '-1');
   applyDisclosure();
   checkHealth();
+  if (CATALOG_MODE) loadStoryDiscovery();
+}
+
+function discoveryStatus(message) {
+  const status = byId('story-discovery-status');
+  if (status) status.textContent = message;
+}
+
+async function loadStoryDiscovery() {
+  const status = byId('story-discovery-status');
+  if (!status) return;
+  try {
+    const response = await fetch(`${WORKER_BASE_URL}/stories`);
+    if (!response.ok) return;
+    const discovery = await response.json();
+    renderStoryDiscovery(discovery);
+  } catch {
+    discoveryStatus(
+      'Story discovery is not live on this host. No feeds were checked. Analyzing one article URL does not discover stories or compare outlet coverage.'
+    );
+  }
+}
+
+function clearChildren(el) {
+  if (!el) return;
+  if (typeof el.replaceChildren === 'function') el.replaceChildren();
+  else el.innerHTML = '';
+}
+
+function renderStoryDiscovery(discovery) {
+  const badge = byId('story-discovery-fixture-badge');
+  const list = byId('story-discovery-list');
+  const detail = byId('story-cluster-detail');
+  if (badge) badge.hidden = discovery?.fixture_labeled !== true;
+  if (discovery?.data_origin === 'fixture') {
+    discoveryStatus(`Fixture discovery. Not live coverage. ${discovery.message || ''}`.trim());
+  } else {
+    discoveryStatus(discovery?.message || 'Story discovery is not live. No feeds were checked.');
+  }
+  if (!list) return;
+  clearChildren(list);
+  if (detail) {
+    detail.hidden = true;
+    clearChildren(detail);
+  }
+  const clusters = Array.isArray(discovery?.clusters) ? discovery.clusters : [];
+  for (const cluster of clusters) {
+    const item = document.createElement('li');
+    item.className = 'ml-cluster-item';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'button button-secondary';
+    button.setAttribute('data-cluster-id', cluster.cluster_id);
+    button.textContent = cluster.title;
+    button.addEventListener('click', () => openStoryCluster(cluster.cluster_id));
+    item.appendChild(button);
+    list.appendChild(item);
+  }
+}
+
+async function openStoryCluster(clusterId) {
+  const detail = byId('story-cluster-detail');
+  if (!detail || !clusterId) return;
+  try {
+    const response = await fetch(`${WORKER_BASE_URL}/stories/cluster/${encodeURIComponent(clusterId)}`);
+    if (!response.ok) return;
+    const discovery = await response.json();
+    const cluster = discovery.clusters?.[0];
+    const comparison = discovery.comparison;
+    if (!cluster || !comparison) {
+      detail.hidden = false;
+      clearChildren(detail);
+      const paragraph = document.createElement('p');
+      paragraph.textContent = discovery.message || 'This cluster was not in the retrieved set.';
+      detail.appendChild(paragraph);
+      return;
+    }
+    clearChildren(detail);
+    const checked = (discovery.sources_checked || [])
+      .map((source) => `${source.outlet}: ${source.outcome}`)
+      .join('; ');
+    const windowText = discovery.window ? `${discovery.window.start} to ${discovery.window.end}` : 'not recorded';
+    const lines = [
+      discovery.fixture_labeled ? 'Fixture discovery. Not live coverage.' : '',
+      `Sources checked: ${checked || 'none'}. Window: ${windowText}.`,
+      comparison.omission_note,
+      `${comparison.frame_note} Article pages were not fetched.`
+    ].filter(Boolean);
+    for (const line of lines) {
+      const paragraph = document.createElement('p');
+      paragraph.textContent = line;
+      detail.appendChild(paragraph);
+    }
+    const members = document.createElement('ul');
+    members.className = 'ml-cluster-list';
+    for (const member of comparison.retrieved_reports) {
+      const item = document.createElement('li');
+      item.className = 'ml-cluster-item';
+      const link = document.createElement('a');
+      link.href = member.canonical_url;
+      link.textContent = member.article_title;
+      item.appendChild(link);
+      const meta = document.createElement('span');
+      meta.textContent = ` · ${member.outlet} · ${String(member.relation).replaceAll('_', ' ')} · ${String(
+        member.labeling_basis
+      ).replaceAll('_', ' ')}`;
+      item.appendChild(meta);
+      members.appendChild(item);
+    }
+    detail.appendChild(members);
+    detail.hidden = false;
+  } catch {
+    detail.hidden = false;
+    detail.textContent = 'The cluster could not be loaded. No coverage comparison was added.';
+  }
 }
 
 if (typeof document !== 'undefined') {

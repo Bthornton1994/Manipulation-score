@@ -76,7 +76,18 @@ test('every asset referenced by media-lens/index.html resolves to a path the Cad
 test('page code requests fixture graphs only from inside the catalog-mode guard', async () => {
   const js = await readFile('media-lens/media-lens.js', 'utf8');
   const fetches = [...js.matchAll(/fetch\(([^,)]+)/g)].map((m) => m[1].trim());
-  assert.deepEqual(fetches.sort(), ['`${WORKER_BASE_URL}/analyze`', '`${WORKER_BASE_URL}/health`', 'url'].sort());
+  assert.deepEqual(
+    fetches.sort(),
+    [
+      '`${WORKER_BASE_URL}/analyze`',
+      '`${WORKER_BASE_URL}/health`',
+      '`${WORKER_BASE_URL}/stories`',
+      '`${WORKER_BASE_URL}/stories/cluster/${encodeURIComponent(clusterId',
+      'url'
+    ].sort()
+  );
+  assert.equal(js.split('loadStoryDiscovery()').length - 1, 2);
+  assert.match(js, /if \(CATALOG_MODE\) loadStoryDiscovery\(\)/);
   const loader = js.slice(js.indexOf('async function loadFixtureGraph'), js.indexOf('function setupResultControls'));
   assert.match(loader, /^async function loadFixtureGraph\(id\) \{[\s\S]*?if \(!CATALOG_MODE\) return;[\s\S]*?const url = fixtureGraphUrl\(id\);/);
   assert.match(loader, /fetch\(url, \{ method: 'GET', credentials: 'same-origin'/);

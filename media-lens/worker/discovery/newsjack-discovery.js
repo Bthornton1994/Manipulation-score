@@ -216,7 +216,9 @@ function isPathLikeText(value) {
 // non-public name such as "localhost" or "printer.home.arpa". Ideographic
 // full stops count as dots. An email-like value is not an outlet name.
 function isHostLikeText(value) {
-  const dotted = value.replace(/[\u3002\uff61]/g, '.');
+  // A trailing dot before a port, a path, or the end is still the same host
+  // to a URL parser ("localhost.:3000", "evil.com./login").
+  const dotted = value.replace(/[\u3002\uff61]/g, '.').replace(/\.(?=[:/?#]|$)/g, '');
   const bareHost = /^[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.?$/u.test(dotted) ? dotted.toLowerCase().replace(/\.$/, '') : null;
   return (
     /^www\./i.test(dotted) ||
@@ -224,9 +226,9 @@ function isHostLikeText(value) {
     // IPv4 in dotted, short, or hex form (with an optional trailing dot or
     // port), and IPv6 with or without brackets, a port, or an IPv4 tail. A
     // plain number stays readable: "1843" and "360" are publication names.
-    /^(?:0x[0-9a-f]+|\d+)(?:\.(?:0x[0-9a-f]+|\d+)){1,3}\.?(?::\d+)?$/i.test(dotted) ||
-    /^0x[0-9a-f]+$/i.test(dotted) ||
-    /^\[?[0-9a-f]*:[0-9a-f:.]+\]?(?::\d+)?$/i.test(dotted) ||
+    /^(?:0x[0-9a-f]+|\d+)(?:\.(?:0x[0-9a-f]+|\d+)){1,3}(?::\d+)?(?:[/?#].*)?$/i.test(dotted) ||
+    /^0x[0-9a-f]+(?:[:/?#].*)?$/i.test(dotted) ||
+    /^\[?[0-9a-f]*:[0-9a-f:.]+(?:%[\w.-]+)?\]?(?::\d+)?(?:[/?#].*)?$/i.test(dotted) ||
     // A single-label name with a port, or a non-public single label with a path.
     /^[\p{L}\p{N}-]+:\d+(?:[/?#].*)?$/u.test(dotted) ||
     /^(?:localhost|instance-data|metadata)(?:[/?#:]|$)/i.test(dotted) ||
@@ -239,18 +241,23 @@ function isHostLikeText(value) {
   );
 }
 
-// Display text: control characters become spaces; default-ignorable code
-// points (format characters, bidi overrides, variation selectors, joiners)
-// and lone surrogates are removed without adding a space, so a word is not
-// split; blank-looking letters (Hangul fillers, the braille blank) become
-// spaces; whitespace is collapsed.
+// Lone surrogate halves are removed first, on the original text. Removing
+// anything else first could bring two halves together into a character the
+// provider never sent.
+function removeLoneSurrogates(value) {
+  return value.replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, '');
+}
+
+// Display text: lone surrogates are removed; control characters and
+// blank-looking letters (Hangul fillers, the braille blank) become spaces;
+// other default-ignorable code points (format characters, bidi overrides,
+// variation selectors, joiners, tag characters) are removed without adding a
+// space, so a word is not split; whitespace is collapsed.
 export function displayText(value) {
   if (typeof value !== 'string') return '';
-  return value
-    .replace(/\p{Cc}/gu, ' ')
+  return removeLoneSurrogates(value)
+    .replace(/[\p{Cc}\u115F\u1160\u3164\uFFA0\u2800]/gu, ' ')
     .replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu, '')
-    .replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, '')
-    .replace(/[\u115F\u1160\u3164\uFFA0\u2800]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -262,7 +269,8 @@ export function outletText(value) {
   // and invisible characters are removed rather than spaced so they cannot
   // split a URL or host name. The cut comes first, so the checks see exactly
   // the text that is shown.
-  const stripped = typeof value === 'string' ? value.replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu, '').normalize('NFKC') : '';
+  const stripped =
+    typeof value === 'string' ? removeLoneSurrogates(value).replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu, '').normalize('NFKC') : '';
   const normalized = truncateCodePoints(displayText(stripped), 200).trim();
   if (!normalized || !/[\p{L}\p{N}]/u.test(normalized) || isUrlLikeText(normalized) || isPathLikeText(normalized) || isHostLikeText(normalized)) return '';
   return normalized;

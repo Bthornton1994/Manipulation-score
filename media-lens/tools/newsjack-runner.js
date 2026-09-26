@@ -27,7 +27,7 @@
 import { spawn as nodeSpawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { constants as fsConstants } from 'node:fs';
-import { access, chmod, lstat, mkdir, mkdtemp, open, realpath, rename, rm, unlink, writeFile } from 'node:fs/promises';
+import { access, chmod, link, lstat, mkdir, mkdtemp, open, realpath, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -359,20 +359,26 @@ export async function writeAtomic(path, text) {
     if (existing !== null && existing.toString('utf8') === text) return;
     fail('output_collision', EXIT.write);
   }
+  // Write a private temp file, then hard-link it into place: link() fails if
+  // anything appeared at the path meanwhile, so an existing file is never
+  // replaced. Only a temp file this call created is removed.
   const temp = `${path}.${process.pid}.tmp`;
   let handle;
+  let created = false;
   try {
     handle = await open(temp, 'wx', 0o600);
+    created = true;
     await handle.writeFile(text, 'utf8');
     await handle.sync();
     await handle.close();
     handle = null;
-    await rename(temp, path);
+    await link(temp, path);
   } catch (error) {
     if (handle) await handle.close().catch(() => {});
-    await unlink(temp).catch(() => {});
     if (error instanceof RunnerError) throw error;
-    fail('write_failed', EXIT.write);
+    fail(created && error?.code === 'EEXIST' ? 'output_collision' : 'write_failed', EXIT.write);
+  } finally {
+    if (created) await unlink(temp).catch(() => {});
   }
 }
 

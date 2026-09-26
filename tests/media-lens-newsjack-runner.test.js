@@ -726,3 +726,13 @@ test('output writes are idempotent for identical content and refuse anything els
   await mkdir(dir);
   await assert.rejects(writeAtomic(dir, 'same\n'), collision);
 });
+
+test('output writes never replace a file that appears mid-write and never delete a temp file they did not create', { timeout: 30000 }, async () => {
+  const ws = await workspace();
+  const target = join(ws.out, 'newsjack-capture-1111111111111111.json');
+  const foreignTemp = `${target}.${process.pid}.tmp`;
+  await writeFile(foreignTemp, 'someone else');
+  await assert.rejects(writeAtomic(target, 'mine\n'), (error) => error.code === 'write_failed' && error.exitCode === 6);
+  assert.equal(await readFile(foreignTemp, 'utf8'), 'someone else', 'a pre-existing temp entry is left alone');
+  assert.equal(await exists(target), false);
+});

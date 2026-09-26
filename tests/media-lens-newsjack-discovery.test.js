@@ -954,3 +954,32 @@ test('outlet names also refuse .local, short or hex IP forms, invisible splitter
     assert.equal(study, undefined, JSON.stringify(title));
   }
 });
+
+test('display text removes lone surrogate halves first, so removing invisible characters cannot rejoin them', () => {
+  const cu = (...units) => String.fromCharCode(...units);
+  const ZWSP = cu(0x200b);
+  // A high half, an invisible character, a low half: never a new character.
+  assert.equal(displayText(`Vote${cu(0xdb40)}${ZWSP}${cu(0xdc01)} now`), 'Vote now');
+  assert.equal(displayText(`Vote${cu(0xd83d)}${ZWSP}${cu(0xde00)}`), 'Vote');
+  assert.equal(displayText(`Fa${cu(0xd800)}re`), 'Fare', 'a lone half is removed without a space');
+  assert.equal(outletText(`169.254.169.254${cu(0xdb40, 0xdb40)}${ZWSP}${cu(0xdc01, 0xdc01)}`), '');
+  assert.equal(outletText(`evil${cu(0xdb40, 0xdb40)}${ZWSP}${cu(0xdc01, 0xdc01)}.com/login`), '');
+  // Tag characters (used to hide ASCII text) never survive.
+  const hidden = 'HIDDEN'.split('').map((c) => String.fromCodePoint(0xe0000 + c.charCodeAt(0))).join('');
+  assert.equal(displayText(`Study ${hidden}`), 'Study');
+  // Controls and blank-looking letters become spaces; words stay whole.
+  assert.equal(displayText('Breaking\nNews'), 'Breaking News');
+  assert.equal(displayText(`${cu(0x3164)}Fare${cu(0x115f)}vote${cu(0x2800)}set`), 'Fare vote set');
+  const capture = mutated((c) => {
+    c.signals.find((signal) => signal.id === STUDY_CLUSTER).evidence[0].title = `${cu(0xdb40)}${ZWSP}${cu(0xdc01)}`;
+  });
+  const study = captureToStoryDiscovery(capture, { now: NOW }).clusters.find((cluster) => cluster.cluster_id === STUDY_CLUSTER);
+  assert.equal(study, undefined, 'a title that reduces to nothing is dropped');
+});
+
+test('host-like outlet names with a trailing dot, a zone, or a path are refused', () => {
+  for (const value of ['localhost.:3000', 'localhost./admin', 'intranet.:8080', 'evil.com.:8080', 'evil.com./login', '127.0.0.1./x', '127.0.0.1:80/x', '0x7f000001.', '[::1]/x', '::1/x', 'fe80::1%eth0', 'printer.local./x', 'foo.internal./x', 'instance-data./latest']) {
+    assert.equal(outletText(value), '', value);
+  }
+  for (const value of ['Inc.', 'St. Louis Post-Dispatch', 'Fox 5: News', 'BBC: Africa']) assert.equal(outletText(value), value, value);
+});

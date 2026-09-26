@@ -34,6 +34,11 @@ const VOID_ELEMENTS = new Set([
 const RAW_TEXT_TAGS = new Set(['script', 'style', 'template']);
 const SKIP_CONTAINER_TAGS = new Set(['nav', 'header', 'footer', 'aside']);
 const BLOCK_TAGS = new Set(['h1', 'h2', 'h3', 'p', 'blockquote', 'figcaption', 'li']);
+// CMS article bodies are often leaf <div>/<section> paragraphs. Without treating
+// those as blocks, a matching <h1>/<p> keeps contentBlocks non-empty, skips the
+// Trafilatura-line fallback, and silently drops the div body from analysis.
+const LEAF_CONTAINER_TAGS = new Set(['div', 'section']);
+const BLOCKISH_CHILD_TAGS = new Set([...BLOCK_TAGS, ...LEAF_CONTAINER_TAGS, 'ul', 'ol', 'table', 'main']);
 const BOILERPLATE_CLASS_HINTS = ['share', 'subscribe', 'newsletter', 'advert', 'promo-', 'related-', 'comments'];
 
 const ATTRIBUTION_CUES = [
@@ -364,6 +369,10 @@ function addParagraphSpans(builder, paragraphIndex, { role, roleBasis, text, att
   }
 }
 
+function hasBlockishChild(node) {
+  return (node.children || []).some((child) => child.type === 'element' && BLOCKISH_CHILD_TAGS.has(child.tag));
+}
+
 function walkBlocks(node, { inSkipContainer } = {}) {
   const blocks = [];
   if (node.type !== 'element') return blocks;
@@ -415,6 +424,30 @@ function walkBlocks(node, { inSkipContainer } = {}) {
     }
 
     blocks.push({ role, roleBasis, text, attribution: { speaker: null, cue: null }, splitQuotes });
+    return blocks;
+  }
+
+  // Leaf CMS containers (no nested block/list/table): treat like <p>.
+  // Otherwise a matching <h1>/<p> keeps contentBlocks non-empty, skips the
+  // Trafilatura-line fallback, and silently drops the div/section body.
+  if (!skipHere && LEAF_CONTAINER_TAGS.has(node.tag) && !hasBlockishChild(node)) {
+    const text = collapseWhitespace(innerText(node));
+    if (text) {
+      const classAttr = (node.attrs.class || '').toLowerCase();
+      let role = 'authorial';
+      let roleBasis = 'default';
+      let splitQuotes = true;
+      if (classAttr.includes('byline')) {
+        role = 'byline_meta';
+        roleBasis = 'html_structure';
+        splitQuotes = false;
+      } else if (BOILERPLATE_CLASS_HINTS.some((hint) => classAttr.includes(hint))) {
+        role = 'boilerplate';
+        roleBasis = 'html_structure';
+        splitQuotes = false;
+      }
+      blocks.push({ role, roleBasis, text, attribution: { speaker: null, cue: null }, splitQuotes });
+    }
     return blocks;
   }
 

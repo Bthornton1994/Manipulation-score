@@ -833,14 +833,16 @@ test('a block equal to a line plus the start of the next line is not kept', asyn
 });
 
 test('list items that Trafilatura keeps do not replace a body the walker has no block for', async () => {
-  // The body is in <div> paragraphs. Trafilatura keeps the unclassed tag and
-  // page-number lists as "- " lines, so those <li> blocks match. List items
-  // alone must not skip the fallback and reduce the article to its tags.
+  // The body is in <div> paragraphs that each also hold an empty ad slot
+  // <div>, so they are not leaf containers and the walker has no block for
+  // them. Trafilatura keeps the unclassed tag and page-number lists as "- "
+  // lines, so those <li> blocks match. List items alone must not skip the
+  // fallback and reduce the article to its tags.
   const html = `<!doctype html><html lang="en"><head><title>Harbor dredging delayed again</title></head><body><article>
-<div class="article-title">Harbor dredging delayed again as permit review drags on</div>
-<div class="article-paragraph">The harbor authority said on Thursday that dredging of the north channel will not begin until next spring, the third delay since the project was approved.</div>
-<div class="article-paragraph">State regulators are still reviewing a permit for the disposal site, and the authority cannot award a contract until that review is complete, a spokesperson said.</div>
-<div class="article-paragraph">Fishing crews say the channel has grown so shallow that larger boats can only enter at high tide, cutting the number of trips they can make each week.</div>
+<div class="article-title">Harbor dredging delayed again as permit review drags on<div class="ad-slot"></div></div>
+<div class="article-paragraph">The harbor authority said on Thursday that dredging of the north channel will not begin until next spring, the third delay since the project was approved.<div class="ad-slot"></div></div>
+<div class="article-paragraph">State regulators are still reviewing a permit for the disposal site, and the authority cannot award a contract until that review is complete, a spokesperson said.<div class="ad-slot"></div></div>
+<div class="article-paragraph">Fishing crews say the channel has grown so shallow that larger boats can only enter at high tide, cutting the number of trips they can make each week.<div class="ad-slot"></div></div>
 <ul><li>Harbor</li><li>Permits</li><li>Fishing</li></ul>
 <ol><li>1</li><li>2</li><li>3</li></ol>
 </article></body></html>`;
@@ -937,13 +939,16 @@ const HARBOR_BODY = [
   'Fishing crews say the channel has grown so shallow that larger boats can only enter at high tide, cutting the number of trips they can make each week.'
 ];
 
+// Each <div> also holds an empty ad slot <div>, so it is not a leaf container
+// and the walker has no block for its text. Trafilatura still keeps each one
+// as its own line.
 function harborPage(block) {
   return `<!doctype html><html lang="en"><head><title>Harbor dredging delayed again</title></head><body><article>
-<div class="article-title">Harbor dredging delayed again as permit review drags on</div>
-<div class="article-paragraph">${HARBOR_BODY[0]}</div>
+<div class="article-title">Harbor dredging delayed again as permit review drags on<div class="ad-slot"></div></div>
+<div class="article-paragraph">${HARBOR_BODY[0]}<div class="ad-slot"></div></div>
 ${block}
-<div class="article-paragraph">${HARBOR_BODY[1]}</div>
-<div class="article-paragraph">${HARBOR_BODY[2]}</div>
+<div class="article-paragraph">${HARBOR_BODY[1]}<div class="ad-slot"></div></div>
+<div class="article-paragraph">${HARBOR_BODY[2]}<div class="ad-slot"></div></div>
 <ul><li>Harbor</li><li>Permits</li></ul>
 </article></body></html>`;
 }
@@ -987,9 +992,11 @@ for (const [name, block, text] of [
   });
 }
 
-test('a <div> body next to a block that equals one extracted line is still lost until the walker reads <div> paragraphs', async () => {
+test('a <div> body the walker has no block for is still lost next to a block that equals one extracted line', async () => {
   // Known limitation, unchanged from before runs were matched: the headline
-  // equals one line, so walker blocks are used and the <div> body has none.
+  // equals one line, so walker blocks are used, and these <div> paragraphs
+  // are not leaf containers, so they have none. Leaf <div> and <section>
+  // paragraphs are walked blocks and are kept.
   const prepared = await prepareFromHtml({
     html: harborPage('<h1>Harbor dredging delayed again as permit review drags on</h1>'),
     sourceUrl: 'https://fictional-daily.example/harbor-headline',
@@ -1012,7 +1019,7 @@ test('only a non-list block equal to one extracted line, before invisible charac
   ];
   const body = `<p><strong>Q:</strong><br>${lines[2]}</p><ul><li>Home</li></ul><p>The public​ works director expects a small increase.</p>`;
   const fallback = await prepareFromHtml({
-    html: `<article><div>${lines[0]}</div>${body}</article>`,
+    html: `<article><span>${lines[0]}</span>${body}</article>`,
     sourceUrl: 'https://fictional-daily.example/gate',
     inputMode: 'fixture',
     extractImpl: extractedLines(lines)
@@ -1044,7 +1051,7 @@ test('a list item or a byline equal to one extracted line does not keep walker b
   ]) {
     const lines = ['Harbor dredging delayed again', line, ...body];
     const prepared = await prepareFromHtml({
-      html: `<article><div>${lines[0]}</div>${block}<div>${body[0]}</div><div>${body[1]}</div></article>`,
+      html: `<article><span>${lines[0]}</span>${block}<span>${body[0]}</span><span>${body[1]}</span></article>`,
       sourceUrl: 'https://fictional-daily.example/no-anchor',
       inputMode: 'fixture',
       extractImpl: extractedLines(lines)
@@ -1064,7 +1071,7 @@ test('a block of only invisible characters does not keep walker blocks', async (
   ];
   const lines = ['Harbor dredging delayed again', '​', ...body];
   const prepared = await prepareFromHtml({
-    html: `<article><div>${lines[0]}</div><p>​</p><div>${body[0]}</div><div>${body[1]}</div></article>`,
+    html: `<article><span>${lines[0]}</span><p>​</p><span>${body[0]}</span><span>${body[1]}</span></article>`,
     sourceUrl: 'https://fictional-daily.example/invisible-anchor',
     inputMode: 'fixture',
     extractImpl: extractedLines(lines)
@@ -1257,7 +1264,7 @@ test('run searches that find nothing, and labels that are prefixes of other labe
 
 test('an interview page where no block equals one line falls back to one block per extracted line', async () => {
   const { lines } = interview(3);
-  const html = interview(3).html.replace('<h1>Budget interview</h1>', '<div>Budget interview</div>');
+  const html = interview(3).html.replace('<h1>Budget interview</h1>', '<span>Budget interview</span>');
   const prepared = await prepareFromHtml({
     html,
     sourceUrl: 'https://fictional-daily.example/interview-fallback',
@@ -1323,7 +1330,7 @@ test('runs are kept whatever the order of blocks, misses, and repeated first lin
   const hiddenLabels = { html: [], lines: ['Budget interview'], kept: ['Budget interview'] };
   for (let i = 0; i < 300; i += 1) {
     const question = `Question ${i} about the drainage budget?`;
-    hiddenLabels.html.push(`<div>Q:</div><p>Q:<br>${question}</p>`);
+    hiddenLabels.html.push(`<span>Q:</span><p>Q:<br>${question}</p>`);
     hiddenLabels.lines.push('Q:', 'Q:', question);
     hiddenLabels.kept.push(`Q: ${question}`);
   }
@@ -1578,6 +1585,159 @@ test('kept blocks match an exhaustive search over every line start and line end'
   }
 });
 
+test('leaf div/section article body is not silently dropped when headline still matches', async () => {
+  // Many CMS templates put paragraphs in <div> or <section>, not <p>. The walker
+  // previously only emitted h1/h2/h3/p/blockquote/figcaption/li. A matching <h1>
+  // kept contentBlocks non-empty, skipped the Trafilatura-line fallback, and
+  // omitted the entire div body from preparedText / Jev.
+  const headline = 'Company faces inquiry after safety report';
+  const para1 = 'The city council opened an inquiry after residents raised alarms about factory emissions near the river.';
+  const para2 =
+    'Investigators found that the company hid safety test failures from regulators for more than two years.';
+  const para3 = 'Officials said further hearings will examine whether criminal charges are warranted under state law.';
+  const html = `<!doctype html>
+<html lang="en"><head><title>Safety probe</title></head>
+<body>
+<nav>Home About Contact Privacy</nav>
+<article>
+<h1>${headline}</h1>
+<div class="article-body">
+<div>${para1}</div>
+<section>${para2}</section>
+<div>${para3}</div>
+</div>
+</article>
+</body></html>`;
+  const prepared = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/div-body',
+    inputMode: 'fixture',
+    extractImpl: async () => ({
+      status: 'ok',
+      extractor_version: TRAFILATURA_VERSION,
+      language_detector_version: PY3LANGID_VERSION,
+      detected_language: 'en',
+      html_lang: 'en',
+      title: headline,
+      author: null,
+      date: null,
+      // Include headline so the walked <h1> is kept (contentBlocks non-empty),
+      // which is exactly the path that previously skipped Trafilatura fallback.
+      text: [headline, para1, para2, para3].join('\n')
+    })
+  });
+  assert.equal(prepared.extraction.status, 'ok');
+  assert.match(prepared.preparedText, /Company faces inquiry/);
+  assert.match(prepared.preparedText, /Investigators found that the company hid safety test failures/);
+  assert.match(prepared.preparedText, /criminal charges are warranted/);
+  assert.match(prepared.preparedText, /city council opened an inquiry/);
+  assert.equal(prepared.preparedText.includes('Privacy'), false);
+  for (const span of prepared.spans) {
+    assert.equal(prepared.preparedText.slice(span.start, span.end), span.text);
+  }
+});
+
+test('nested CMS div paragraphs are kept under real Trafilatura extraction', async () => {
+  const headline = 'Company faces inquiry after safety report';
+  const para1 = 'The city council opened an inquiry after residents raised alarms about factory emissions near the river.';
+  const para2 =
+    'Investigators found that the company hid safety test failures from regulators for more than two years.';
+  const para3 = 'Officials said further hearings will examine whether criminal charges are warranted under state law.';
+  const html = `<!doctype html>
+<html lang="en"><head><title>Safety probe</title></head>
+<body>
+<nav>Home About Contact Privacy</nav>
+<article>
+<h1>${headline}</h1>
+<div class="article-body">
+<div>${para1}</div>
+<div>${para2}</div>
+<div>${para3}</div>
+</div>
+</article>
+</body></html>`;
+  const prepared = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/div-body-live-extract',
+    inputMode: 'fixture'
+  });
+  assert.equal(prepared.extraction.status, 'ok');
+  assert.match(prepared.preparedText, /Investigators found that the company hid safety test failures/);
+  assert.match(prepared.preparedText, /criminal charges are warranted/);
+  assert.match(prepared.preparedText, /city council opened an inquiry/);
+  assert.equal(prepared.preparedText.includes('Privacy'), false);
+});
+
+test('leaf div body between matching paragraphs is not silently dropped', async () => {
+  const headline = 'Company faces inquiry after safety report';
+  const lead = 'The city council opened an inquiry after residents raised alarms about factory emissions near the river.';
+  const middle =
+    'Investigators found that the company hid safety test failures from regulators for more than two years and officials demanded answers from corporate leadership.';
+  const close = 'A spokesperson declined to comment on the sealed documents cited by investigators.';
+  const html = `<!doctype html>
+<html lang="en"><head><title>Partial div</title></head>
+<body>
+<article>
+<h1>${headline}</h1>
+<p>${lead}</p>
+<div class="story-body">${middle}</div>
+<p>${close}</p>
+</article>
+</body></html>`;
+  const prepared = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/partial-div',
+    inputMode: 'fixture',
+    extractImpl: async () => ({
+      status: 'ok',
+      extractor_version: TRAFILATURA_VERSION,
+      language_detector_version: PY3LANGID_VERSION,
+      detected_language: 'en',
+      html_lang: 'en',
+      title: headline,
+      author: null,
+      date: null,
+      text: [headline, lead, middle, close].join('\n')
+    })
+  });
+  assert.equal(prepared.extraction.status, 'ok');
+  assert.match(prepared.preparedText, /Investigators found that the company hid safety test failures/);
+  assert.match(prepared.preparedText, /spokesperson declined/);
+  assert.match(prepared.preparedText, /city council opened an inquiry/);
+});
+
+test('br-split text, list items, and a leaf div are kept together when other blocks match', async () => {
+  const html = `<!doctype html>
+<html lang="en"><head><title>Combined body</title></head>
+<body>
+<nav>Home About Contact Privacy</nav>
+<article>
+<h1>Company faces inquiry after safety report</h1>
+<p>The city council opened an inquiry after residents raised alarms about factory emissions near the river.</p>
+<p>Community groups demanded answers.<br>
+Investigators found that the company hid safety test failures from regulators for more than two years.</p>
+<div>Officials said further hearings will examine whether criminal charges are warranted under state law.</div>
+<ul>
+<li>Hidden lab notebooks were recovered from a locked cabinet.</li>
+</ul>
+</article>
+</body></html>`;
+  const prepared = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/combined-body',
+    inputMode: 'fixture'
+  });
+  assert.equal(prepared.extraction.status, 'ok');
+  assert.match(prepared.preparedText, /Community groups demanded answers/);
+  assert.match(prepared.preparedText, /Investigators found that the company hid safety test failures/);
+  assert.match(prepared.preparedText, /criminal charges are warranted/);
+  assert.match(prepared.preparedText, /Hidden lab notebooks were recovered/);
+  assert.equal(prepared.preparedText.includes('Privacy'), false);
+  for (const span of prepared.spans) {
+    assert.equal(prepared.preparedText.slice(span.start, span.end), span.text);
+  }
+});
+
 test('architecture section 10.2 matches first-article Trafilatura matching', async () => {
   const doc = await readFile('docs/media-lens-live-url-v2-architecture.md', 'utf8');
   const section = doc.split('### 10.2 Preparation')[1].split('### 10.3')[0];
@@ -1597,7 +1757,10 @@ test('architecture section 10.2 matches first-article Trafilatura matching', asy
   assert.match(section, /only as a run of lines, only once invisible characters are ignored, or only after the list marker is removed/);
   assert.match(section, /does not prevent the fallback/);
   assert.match(section, /List items alone, such as a menu or page numbers that Trafilatura kept, do not prevent this fallback/);
-  assert.match(section, /still loses its `<div>` body until the walker has blocks for `<div>` paragraphs/);
+  assert.match(section, /leaf CMS containers \(`div`\/`section` with no nested block, list, or table child\)/);
+  assert.match(section, /Leaf `<div>` and `<section>` paragraphs are walked blocks/);
+  assert.match(section, /still loses body text the walker has no block for/);
+  assert.equal(section.includes('until the walker has blocks for `<div>` paragraphs'), false);
   assert.match(section, /keeps no block as a run/);
   assert.ok(
     section.includes(

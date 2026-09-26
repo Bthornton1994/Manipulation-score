@@ -414,7 +414,7 @@ function walkBlocks(node, { inSkipContainer } = {}) {
       splitQuotes = false;
     }
 
-    blocks.push({ role, roleBasis, text, attribution: { speaker: null, cue: null }, splitQuotes });
+    blocks.push({ role, roleBasis, text, attribution: { speaker: null, cue: null }, splitQuotes, listItem: node.tag === 'li' });
     return blocks;
   }
 
@@ -435,45 +435,85 @@ function normalizeMatchText(text) {
     .replace(/\u00a0/g, ' ');
 }
 
-/** Trafilatura prefixes list lines with "- "; HTML walkers do not. */
-function stripExtractedListMarker(text) {
-  return text.replace(/^[-*•]\s+/, '');
-}
+// Trafilatura 2.2.0 plain text starts a list item's first line with "- "
+// (plus nesting indent, which normalizeMatchText trims). No other marker.
+const EXTRACTED_LIST_MARKER = /^- /;
+// Leading characters used to find a run's first line in the lookup.
+const RUN_ANCHOR_CHARS = 8;
 
-function matchParagraphs(text) {
-  const paragraphs = new Set();
-  for (const part of String(text || '').split(/\n+/)) {
-    const normalized = normalizeMatchText(part);
-    if (normalized) paragraphs.add(normalized);
-  }
-  return paragraphs;
+/**
+ * Comparison key for block and line text. Whitespace is not significant:
+ * the walker joins nested block elements (a nested list, a second <p> in a
+ * quote) without a space where Trafilatura starts a new line or adds one.
+ */
+function matchKey(normalizedText) {
+  return normalizedText.replace(/ /g, '');
 }
 
 /**
- * True when a walked HTML block corresponds to one or more Trafilatura
- * lines. Exact match is preferred; substring match covers <br>-joined
- * paragraphs Trafilatura splits, and list-marker stripping covers <li>.
+ * Exact lookup over extracted line keys. has(key) is true only when key
+ * equals one line or a run of consecutive lines (Trafilatura splits <br>,
+ * multi-<p> quotes, and nested list items onto separate lines). There is no
+ * substring or containment match.
+ *
+ * A run is found from its first line: a prefix of key with the length of a
+ * line that shares its leading characters and equals that line. The run
+ * must then end exactly on a line end.
  */
-function blockMatchesExtracted(normalizedBlock, paragraphs) {
-  if (!normalizedBlock) return false;
-  if (paragraphs.has(normalizedBlock)) return true;
-  for (const paragraph of paragraphs) {
-    const stripped = stripExtractedListMarker(paragraph);
-    if (
-      normalizedBlock === stripped ||
-      normalizedBlock.includes(paragraph) ||
-      normalizedBlock.includes(stripped) ||
-      paragraph.includes(normalizedBlock) ||
-      stripped.includes(normalizedBlock)
-    ) {
-      return true;
-    }
+function lineLookup(keys) {
+  const joined = keys.join('');
+  const startsByKey = new Map();
+  const lengthsByAnchor = new Map();
+  const lineEnds = new Set();
+  let offset = 0;
+  for (const key of keys) {
+    if (!startsByKey.has(key)) startsByKey.set(key, []);
+    startsByKey.get(key).push(offset);
+    const anchor = key.slice(0, RUN_ANCHOR_CHARS);
+    if (!lengthsByAnchor.has(anchor)) lengthsByAnchor.set(anchor, new Set());
+    lengthsByAnchor.get(anchor).add(key.length);
+    offset += key.length;
+    lineEnds.add(offset);
   }
-  return false;
+
+  function isRun(key) {
+    for (let size = 1; size <= RUN_ANCHOR_CHARS && size < key.length; size += 1) {
+      for (const length of lengthsByAnchor.get(key.slice(0, size)) || []) {
+        if (length >= key.length) continue;
+        for (const start of startsByKey.get(key.slice(0, length)) || []) {
+          if (lineEnds.has(start + key.length) && joined.startsWith(key, start)) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  const runResults = new Map();
+  return {
+    has(key) {
+      if (!key) return false;
+      if (startsByKey.has(key)) return true;
+      if (!runResults.has(key)) runResults.set(key, isRun(key));
+      return runResults.get(key);
+    }
+  };
 }
 
-function keepExtractedBlock(block, paragraphs) {
-  return blockMatchesExtracted(normalizeMatchText(block.text || ''), paragraphs);
+function extractedLineLookups(text) {
+  const lines = String(text || '')
+    .split(/\n+/)
+    .map((line) => normalizeMatchText(line))
+    .filter((line) => line.length > 0);
+  return {
+    lines: lineLookup(lines.map(matchKey)),
+    listItemLines: lineLookup(lines.map((line) => matchKey(line.replace(EXTRACTED_LIST_MARKER, ''))))
+  };
+}
+
+/** Walked <li> blocks may also match after the extractor's list marker is removed. */
+function keepExtractedBlock(block, lookups) {
+  const key = matchKey(normalizeMatchText(block.text || ''));
+  return lookups.lines.has(key) || (block.listItem === true && lookups.listItemLines.has(key));
 }
 
 function contentBlocks(blocks) {
@@ -618,11 +658,13 @@ export async function prepareFromHtml({
   const root = parseHtml(sourceHtml);
   const meta = mergeMetadata(extractMetadata(root), extracted);
   const articleRoot = findFirst(root, (n) => n.type === 'element' && n.tag === 'article') || root;
-  const paragraphs = matchParagraphs(extracted.text);
-  let rawBlocks = walkBlocks(articleRoot, {}).filter((block) => keepExtractedBlock(block, paragraphs));
+  const lookups = extractedLineLookups(extracted.text);
+  let rawBlocks = walkBlocks(articleRoot, {}).filter((block) => keepExtractedBlock(block, lookups));
   // Full Trafilatura-line fallback only when the walker kept nothing eligible.
   // Do not replace a partial walker match: Trafilatura may still emit hidden
-  // or newsletter lines the walker correctly excluded.
+  // or newsletter lines the walker correctly excluded. Matching is exact, so
+  // menu items, page numbers, or fragments that only appear inside a line
+  // are not matches and cannot suppress this fallback.
   if (contentBlocks(rawBlocks).length === 0) {
     rawBlocks = blocksFromExtractedText(extracted.text);
   }

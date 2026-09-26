@@ -683,6 +683,168 @@ Investigators found that the company hid safety test failures from regulators fo
   }
 });
 
+function extractedLines(lines) {
+  return async () => ({
+    status: 'ok',
+    extractor_version: TRAFILATURA_VERSION,
+    detected_language: 'en',
+    html_lang: 'en',
+    text: lines.join('\n')
+  });
+}
+
+test('minified nested lists, multi-paragraph quotes, and list items with breaks match consecutive Trafilatura lines', async () => {
+  // Trafilatura puts each nested element on its own line. The walker joins
+  // them into one block without a space, so the block must equal the run.
+  const html = `<!doctype html><html lang="en"><body><article><h1>Quote and lists</h1><p>The regional council published its review of the drainage program on Tuesday after months of delay.</p><blockquote><p>We cannot keep patching the same streets every spring.</p><p>The county needs a permanent drainage plan now.</p></blockquote><ul><li>Crews cleared storm drains on Elm Street.<ul><li>Two drains were fully blocked.</li><li>One culvert had collapsed.</li></ul></li><li><p>Residents filed forty claims.</p><p>Most claims involved basement flooding.</p></li><li>Inspectors will return in May.<br>A final report is due in June.</li></ul><p>The notice listed <code>Drain 4
+Drain 9</code> as blocked until crews finish the work this summer.</p><p>Officials said repairs will begin once the state releases emergency funds for the county.</p></article></body></html>`;
+  const prepared = await prepareFromHtml({ html, sourceUrl: 'https://fictional-daily.example/nested', inputMode: 'fixture' });
+  assert.equal(prepared.extraction.status, 'ok');
+  for (const phrase of [
+    /permanent drainage plan now/,
+    /Two drains were fully blocked/,
+    /One culvert had collapsed/,
+    /Most claims involved basement flooding/,
+    /A final report is due in June/,
+    /Drain 9/,
+    /state releases emergency funds/
+  ]) {
+    assert.match(prepared.preparedText, phrase);
+  }
+  const quoted = prepared.spans.find((span) => span.role === 'quoted' && span.text.includes('permanent drainage plan'));
+  assert.ok(quoted);
+  assert.match(quoted.text, /same streets every spring/);
+  for (const span of prepared.spans) {
+    assert.equal(prepared.preparedText.slice(span.start, span.end), span.text);
+  }
+});
+
+test('menu items inside the article are not kept because a body line contains their text', async () => {
+  // Substring matching kept each menu <li> because a body line contained
+  // "Home", "News", or "Weather". Trafilatura drops the menu, so no line equals it.
+  const html = `<!doctype html><html lang="en"><body><article>
+<h1>River town weighs flood repairs</h1>
+<ul class="menu"><li>Home</li><li>News</li><li>Weather</li></ul>
+<p>Home values near the river fell after the spring flooding, county records show.</p>
+<p>News of the repair plan spread quickly among residents who lost property in the storm.</p>
+<p>Weather forecasters expect another wet season, the county engineer said on Monday.</p>
+</article></body></html>`;
+  const prepared = await prepareFromHtml({ html, sourceUrl: 'https://fictional-daily.example/menu', inputMode: 'fixture' });
+  assert.equal(prepared.extraction.status, 'ok');
+  const texts = prepared.spans.map((span) => span.text);
+  for (const item of ['Home', 'News', 'Weather']) {
+    assert.equal(texts.includes(item), false, item);
+  }
+  assert.match(prepared.preparedText, /Home values near the river fell/);
+  assert.match(prepared.preparedText, /another wet season/);
+});
+
+test('page numbers are not kept because a body line contains the digit', async () => {
+  const lines = [
+    'Flood repair costs climb',
+    'Repairs to 2 bridges will cost 3 times the first estimate, the county said.',
+    'Crews have 12 weeks to finish before the 2027 rainy season.'
+  ];
+  const html = `<article><h1>${lines[0]}</h1><p>${lines[1]}</p><p>${lines[2]}</p><ul><li>1</li><li>2</li><li>3</li><li>12</li></ul></article>`;
+  const prepared = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/pages',
+    inputMode: 'fixture',
+    extractImpl: extractedLines(lines)
+  });
+  assert.deepEqual(
+    prepared.spans.map((span) => span.text),
+    lines
+  );
+});
+
+test('short lines do not over-match: a block that contains a line or sits inside one is not kept', async () => {
+  const lines = [
+    'Council approves drainage plan',
+    'More',
+    'The council voted on Tuesday to approve the drainage plan after US officials inspected downtown streets.'
+  ];
+  const html = `<article><h1>${lines[0]}</h1><p>More stories from our newsroom this week</p><p>US</p><p>Related: Council approves drainage plan for the east side</p><p>${lines[2]}</p><p>council voted</p></article>`;
+  const prepared = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/short',
+    inputMode: 'fixture',
+    extractImpl: extractedLines(lines)
+  });
+  assert.deepEqual(
+    prepared.spans.map((span) => span.text),
+    [lines[0], lines[2]]
+  );
+});
+
+test('when only junk would have matched by substring, the Trafilatura-line fallback keeps the extracted body', async () => {
+  // The body is in <span> elements the walker has no block for. Menu items, a
+  // page number, and a fragment each appear inside an extracted line. With
+  // substring matching they counted as content, skipped the fallback, and
+  // replaced the article with "Home 2 council voted".
+  const lines = [
+    'Council approves drainage plan',
+    'Home values near the river fell 2 percent after the flooding.',
+    'The council voted on Tuesday to approve the drainage plan.'
+  ];
+  const html = `<article><span>${lines[0]}</span> <span>${lines[1]}</span> <span>${lines[2]}</span><ul class="menu"><li>Home</li><li>2</li></ul><p>council voted</p></article>`;
+  const prepared = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/fallback',
+    inputMode: 'fixture',
+    extractImpl: extractedLines(lines)
+  });
+  assert.deepEqual(
+    prepared.spans.map((span) => [span.role, span.text]),
+    [
+      ['headline', lines[0]],
+      ['authorial', lines[1]],
+      ['authorial', lines[2]]
+    ]
+  );
+});
+
+test('only list items match after the "- " marker is removed, and other bullet characters are not markers', async () => {
+  const lines = [
+    'Library budget update',
+    '- Grant renewed for the branch library.',
+    '- Budget approved at the Tuesday session.',
+    '• Subscribe for weekly budget alerts.',
+    '* Sponsored: compare budget apps.'
+  ];
+  const html = `<article><h1>${lines[0]}</h1><ul><li>Grant renewed for the branch library.</li></ul><p>Budget approved at the Tuesday session.</p><ul class="menu"><li>Subscribe for weekly budget alerts.</li><li>Sponsored: compare budget apps.</li></ul></article>`;
+  const prepared = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/markers',
+    inputMode: 'fixture',
+    extractImpl: extractedLines(lines)
+  });
+  assert.deepEqual(
+    prepared.spans.map((span) => span.text),
+    ['Library budget update', 'Grant renewed for the branch library.']
+  );
+});
+
+test('a large list is matched in bounded time', async () => {
+  // Substring matching compared every walked block with every extracted line,
+  // so thousands of <li> items took seconds. Prebuilt lookups keep it near-linear.
+  const count = 6000;
+  const items = Array.from({ length: count }, (_, i) => `Finding ${i} was recorded in the district ledger during the audit.`);
+  const menu = Array.from({ length: count }, (_, i) => `<li>Finding ${i} archive link</li>`).join('');
+  const html = `<article><h1>Audit findings released</h1><ul>${items.map((item) => `<li>${item}</li>`).join('')}</ul><ul class="menu">${menu}</ul></article>`;
+  const started = performance.now();
+  const prepared = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/audit',
+    inputMode: 'fixture',
+    extractImpl: extractedLines(['Audit findings released', ...items.map((item) => `- ${item}`)])
+  });
+  const elapsedMs = performance.now() - started;
+  assert.equal(prepared.spans.length, count + 1);
+  assert.equal(prepared.spans.some((span) => span.text.includes('archive link')), false);
+  assert.ok(elapsedMs < 2000, `large list took ${Math.round(elapsedMs)} ms`);
+});
+
 test('architecture section 10.2 matches first-article Trafilatura matching', async () => {
   const doc = await readFile('docs/media-lens-live-url-v2-architecture.md', 'utf8');
   const section = doc.split('### 10.2 Preparation')[1].split('### 10.3')[0];

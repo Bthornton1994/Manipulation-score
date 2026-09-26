@@ -646,6 +646,43 @@ test('a byline absent from the extractor text is dropped and a kept byline is no
   assert.ok(jevTexts.some((text) => text.includes('council voted')));
 });
 
+test('br-split paragraphs and list items are not silently dropped when other blocks still match', async () => {
+  // Trafilatura splits <br> inside <p> into separate lines and prefixes <li>
+  // with "- ". Exact-only matching previously kept surrounding <p>s, skipped
+  // fallback, and omitted the mismatched body from preparedText.
+  const html = `<!doctype html>
+<html lang="en"><head><title>Safety probe</title></head>
+<body>
+<nav>Home About Contact Privacy</nav>
+<article>
+<h1>Company faces inquiry after safety report</h1>
+<p>The city council opened an inquiry after residents raised alarms about factory emissions near the river.</p>
+<p>Community groups demanded answers.<br>
+Investigators found that the company hid safety test failures from regulators for more than two years.</p>
+<p>Officials said further hearings will examine whether criminal charges are warranted under state law.</p>
+<ul>
+<li>Hidden lab notebooks were recovered from a locked cabinet.</li>
+<li>Workers described pressure to falsify daily air-quality logs.</li>
+</ul>
+<p>A spokesperson declined to comment on the sealed documents cited by investigators.</p>
+</article>
+</body></html>`;
+  const prepared = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/safety-probe',
+    inputMode: 'fixture'
+  });
+  assert.equal(prepared.extraction.status, 'ok');
+  assert.match(prepared.preparedText, /Investigators found that the company hid safety test failures/);
+  assert.match(prepared.preparedText, /Hidden lab notebooks were recovered/);
+  assert.match(prepared.preparedText, /falsify daily air-quality logs/);
+  assert.match(prepared.preparedText, /Community groups demanded answers/);
+  assert.equal(prepared.preparedText.includes('Privacy'), false);
+  for (const span of prepared.spans) {
+    assert.equal(prepared.preparedText.slice(span.start, span.end), span.text);
+  }
+});
+
 test('architecture section 10.2 matches first-article Trafilatura matching', async () => {
   const doc = await readFile('docs/media-lens-live-url-v2-architecture.md', 'utf8');
   const section = doc.split('### 10.2 Preparation')[1].split('### 10.3')[0];

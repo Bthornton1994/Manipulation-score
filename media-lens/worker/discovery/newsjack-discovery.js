@@ -200,14 +200,25 @@ export function classifySourceUrl(value) {
 // Text that a URL parser or a browser would read as a link.
 const URL_SCHEME_TEXT = /^(?:https?|ftp|wss?|javascript|data|vbscript|file|mailto|blob|tel|sms|about):/i;
 
+// Host, URL, and path checks ignore combining marks. NFD runs first because
+// outlet text is NFKC-folded, and NFKC composes a mark into a letter
+// ("www" + U+0301 + "." is "wwẃ."). Decomposing turns that letter back into
+// a base plus \p{M}, and the strip removes the mark. The name shown to
+// readers stays the NFKC text, marks included.
+function ignoringCombiningMarks(value) {
+  return value.normalize('NFD').replace(/\p{M}/gu, '');
+}
+
 export function isUrlLikeText(value) {
-  return value.includes('://') || value.startsWith('//') || URL_SCHEME_TEXT.test(value);
+  const plain = ignoringCombiningMarks(value);
+  return plain.includes('://') || plain.startsWith('//') || URL_SCHEME_TEXT.test(plain);
 }
 
 // Upstream falls back to a feed URL or local file path when a feed has no
 // title. A path is not an outlet name.
 function isPathLikeText(value) {
-  return /^(?:\/|~|\.{1,2}\/|[A-Za-z]:[\\/])/.test(value) || value.includes('\\');
+  const plain = ignoringCombiningMarks(value);
+  return /^(?:\/|~|\.{1,2}\/|[A-Za-z]:[\\/])/.test(plain) || plain.includes('\\');
 }
 
 // A host name with a path, query, or port, a www. name, or an IP address
@@ -216,11 +227,11 @@ function isPathLikeText(value) {
 // non-public name such as "localhost" or "printer.home.arpa". Ideographic
 // full stops count as dots. An email-like value is not an outlet name.
 function isHostLikeText(value) {
-  // Combining marks are ignored for the checks ("169.254.169.254" with an
-  // accent on a digit still reads as an address). A trailing dot before a
-  // port, a path, or the end is still the same host to a URL parser
-  // ("localhost.:3000", "evil.com./login").
-  const plain = value.replace(/\p{M}/gu, '').replace(/[\u3002\uff61]/g, '.');
+  // Combining marks are ignored ("169.254.169.254" with an accent on a digit
+  // still reads as an address, and "www" + U+0301 + "." still reads as "www.").
+  // A trailing dot before a port, a path, or the end is still the same host
+  // to a URL parser ("localhost.:3000", "evil.com./login").
+  const plain = ignoringCombiningMarks(value).replace(/[\u3002\uff61]/g, '.');
   const dotted = plain.replace(/\.(?=[:/?#]|$)/g, '');
   const bareHost = /^[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.?$/u.test(dotted) ? dotted.toLowerCase().replace(/\.$/, '') : null;
   return (

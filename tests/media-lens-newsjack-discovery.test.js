@@ -987,5 +987,47 @@ test('host-like outlet names with a trailing dot, a zone, or a path are refused'
 test('host checks ignore combining marks and catch a bare www.', () => {
   const acute = String.fromCharCode(0x301);
   for (const value of ['www.', `169.254.169.254${acute}`, `local${acute}host:3000`]) assert.equal(outletText(value), '', JSON.stringify(value));
-  for (const value of ['Café Babel', 'Süddeutsche Zeitung', `Cafe${acute} Babel`]) assert.notEqual(outletText(value), '', value);
+  assert.equal(outletText('Café Babel'), 'Café Babel');
+  assert.equal(outletText('Süddeutsche Zeitung'), 'Süddeutsche Zeitung');
+  assert.equal(outletText(`Cafe${acute} Babel`), 'Café Babel');
+});
+
+test('host checks ignore combining marks that NFKC composes into letters', () => {
+  const acute = '\u0301';
+  for (const value of [
+    `www${acute}.`,
+    `www${acute}.example.com`,
+    `w${acute}ww.`,
+    `ww${acute}w.`,
+    `WWW${acute}.`,
+    `ｗｗｗ${acute}.`,
+    `local${acute}host`,
+    `l${acute}ocalhost`,
+    `local${acute}host.`,
+    `foo.loc${acute}al`,
+    `foo.l${acute}ocal`,
+    `foo.loca${acute}l`,
+    `foo.loc${acute}al.`,
+    `app.local${acute}host`,
+    `me${acute}tadata`,
+    `insta${acute}nce-data`,
+    `printer.intern${acute}al`,
+    `fe${acute}80::1`,
+    `FE${acute}80::1`
+  ]) {
+    assert.equal(outletText(value), '', JSON.stringify(value));
+  }
+  assert.equal(outletText('Café Babel'), 'Café Babel');
+  assert.equal(outletText('Süddeutsche Zeitung'), 'Süddeutsche Zeitung');
+  assert.equal(outletText(`Cafe${acute} Babel`), 'Café Babel');
+  assert.equal(outletText('Café.com'), 'Café.com');
+  assert.equal(outletText('El País'), 'El País');
+  assert.equal(outletText('www Times'), 'www Times');
+});
+
+test('url and path checks ignore combining marks', () => {
+  const acute = '\u0301';
+  for (const value of [`about${acute}:blank`, `.${acute}/etc/passwd`, `java${acute}script:alert(1)`]) {
+    assert.equal(outletText(value), '', JSON.stringify(value));
+  }
 });

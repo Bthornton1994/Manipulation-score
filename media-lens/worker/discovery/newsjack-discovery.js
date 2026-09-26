@@ -198,7 +198,7 @@ export function classifySourceUrl(value) {
 }
 
 // Text that a URL parser or a browser would read as a link.
-const URL_SCHEME_TEXT = /^(?:https?|ftp|wss?|javascript|data|vbscript|file|mailto|blob|tel|sms):/i;
+const URL_SCHEME_TEXT = /^(?:https?|ftp|wss?|javascript|data|vbscript|file|mailto|blob|tel|sms|about):/i;
 
 export function isUrlLikeText(value) {
   return value.includes('://') || value.startsWith('//') || URL_SCHEME_TEXT.test(value);
@@ -221,20 +221,28 @@ function isHostLikeText(value) {
   return (
     /^www\./i.test(dotted) ||
     /^[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+(?:[/?#]|:\d)/u.test(dotted) ||
-    /^\d{1,3}(?:\.\d{1,3}){3}$/.test(dotted) ||
-    /^\[?[0-9a-f]*:[0-9a-f:]+\]?$/i.test(dotted) ||
+    // IPv4 in any dotted, short, decimal, or hex form, and IPv6 (with an
+    // embedded IPv4 tail).
+    /^(?:0x[0-9a-f]+|\d+)(?:\.(?:0x[0-9a-f]+|\d+)){0,3}$/i.test(dotted) ||
+    /^\[?[0-9a-f]*:[0-9a-f:.]+\]?$/i.test(dotted) ||
     /\S@\S/.test(dotted) ||
-    (bareHost !== null && (bareHost === 'localhost' || (bareHost.includes('.') && isNonPublicHostName(bareHost))))
+    (bareHost !== null &&
+      (bareHost === 'localhost' ||
+        bareHost === 'instance-data' ||
+        /\.(?:local|localhost)$/.test(bareHost) ||
+        (bareHost.includes('.') && isNonPublicHostName(bareHost))))
   );
 }
 
-// Display text: control characters, invisible format characters (including
-// bidi overrides), and blank-looking letters (Hangul fillers, the braille
-// blank) are removed and whitespace is collapsed.
+// Display text: control characters, default-ignorable code points (format
+// characters, bidi overrides, variation selectors, combining grapheme
+// joiners), blank-looking letters (Hangul fillers, the braille blank), and
+// lone surrogates are removed and whitespace is collapsed.
 export function displayText(value) {
   if (typeof value !== 'string') return '';
   return value
-    .replace(/[\p{Cc}\p{Cf}\u115F\u1160\u3164\uFFA0\u2800]/gu, ' ')
+    .replace(/[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\u115F\u1160\u3164\uFFA0\u2800]/gu, ' ')
+    .replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -242,10 +250,14 @@ export function displayText(value) {
 // Outlet names are display text. A value with no letter or digit, or one
 // that reads as a URL, a host name, or a file path, is not an outlet name.
 export function outletText(value) {
-  // NFKC folds fullwidth look-alikes (for example "ｗｗｗ.") before the checks.
-  const normalized = displayText(typeof value === 'string' ? value.replace(/\p{Cf}/gu, '').normalize('NFKC') : '');
+  // NFKC folds fullwidth look-alikes (for example "ｗｗｗ.") before the checks,
+  // and invisible characters are removed rather than spaced so they cannot
+  // split a URL or host name. The cut comes first, so the checks see exactly
+  // the text that is shown.
+  const stripped = typeof value === 'string' ? value.replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu, '').normalize('NFKC') : '';
+  const normalized = truncateCodePoints(displayText(stripped), 200).trim();
   if (!normalized || !/[\p{L}\p{N}]/u.test(normalized) || isUrlLikeText(normalized) || isPathLikeText(normalized) || isHostLikeText(normalized)) return '';
-  return truncateCodePoints(normalized, 200);
+  return normalized;
 }
 
 function outletSlug(outlet) {
@@ -588,7 +600,7 @@ export function captureToStoryDiscovery(input, { now, pin = NEWSJACK_PIN, search
         members.push({
           outlet,
           outlet_basis: 'provider_reported_publication_name',
-          article_title: truncateCodePoints(title, 300),
+          article_title: truncateCodePoints(title, 300).trim(),
           published_at: published.value,
           published_at_basis: 'provider_reported_via_newsjack_unverified',
           canonical_url: classified.url,
@@ -657,7 +669,7 @@ export function captureToStoryDiscovery(input, { now, pin = NEWSJACK_PIN, search
         ? `${label} Members are grouped by Newsjack's text-similarity heuristics, and none is labeled independent. ${OMISSION_NOTE}`
         : {
             no_accepted_members: `${label} No evidence item in the capture met the member rules. Dropped items are counted by reason on each sources_checked row, and signals Newsjack did not emit are counted in provenance.provider_selection. ${OMISSION_NOTE}`,
-            no_results: `${label} The news search returned no results in this run. ${OMISSION_NOTE}`,
+            no_results: `${label} Newsjack kept no news-search items after its own age, hygiene, and syndication filters. ${OMISSION_NOTE}`,
             no_member_source_checked: `${label} No news-search results were returned, so nothing was checked. Each sources_checked row gives the outcome and error class. ${OMISSION_NOTE}`
           }[emptyReason],
     data_origin: 'fixture',

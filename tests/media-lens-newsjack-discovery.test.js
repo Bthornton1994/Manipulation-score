@@ -820,7 +820,10 @@ test('an empty result says whether the search returned nothing or everything was
   const document = captureToStoryDiscovery(noResults, { now: NOW });
   assert.equal(document.status, 'empty');
   assert.equal(document.reason, 'no_results');
-  assert.match(document.message, /returned no results/);
+  // Newsjack counts news_search items after its own filters, so the message
+  // says what Newsjack kept, not what the provider returned.
+  assert.match(document.message, /kept no news-search items after its own age, hygiene, and syndication filters/);
+  assert.doesNotMatch(document.message, /returned no results/);
   // A partial source still counts as checked.
   const allDropped = mutated((c) => {
     Object.assign(c.sources.news_search, { status: 'partial_error', error_class: 'timeout' });
@@ -896,4 +899,45 @@ test('origin citations withhold redirectors and fragments, and a refused basis v
   assert.equal(projected.withheld.invalid_values, 2);
   assert.equal(projected.freshness_basis_precision, null, 'Media Lens refuses the basis value, so it makes no precision claim');
   assert.equal(projected.freshness_status, 'fresh', "Newsjack's own status is kept, labeled unverified");
+});
+
+test('each source status branch is tied to its own flags', () => {
+  const cases = [
+    { status: 'no_results', available: false, evidence_count: 0, error_class: null },
+    { status: 'unavailable', available: true, evidence_count: 0, error_class: null },
+    { status: 'partial_error', evidence_count: 0, error_class: 'timeout' },
+    { status: 'not_requested', requested: false, error_class: 'timeout' },
+    { status: 'error', evidence_count: 3, error_class: 'timeout' }
+  ];
+  for (const patch of cases) {
+    const capture = mutated((c) => Object.assign(c.sources.news_search, patch));
+    assert.ok(codes(validateNewsjackCapture(capture)).includes('source_status_inconsistent'), JSON.stringify(patch));
+  }
+});
+
+test('a search that reported items but emitted no signals is not called a search with no results', () => {
+  const capture = buildFixtureCapture({ withOrigin: false });
+  capture.signals = [];
+  capture.clustering.groups = [];
+  Object.assign(capture.selection, { total_scored_signals: 4, total_emitted_signals: 0, signals_not_emitted: 4, evidence_truncated: 0 });
+  withId(capture);
+  assert.equal(validateNewsjackCapture(capture).ok, true);
+  const document = captureToStoryDiscovery(capture, { now: NOW });
+  assert.equal(document.reason, 'no_accepted_members');
+  assert.doesNotMatch(document.message, /kept no news-search items/);
+});
+
+test('outlet names also refuse .local, short or hex IP forms, invisible splitters, and a cut that would expose a host', () => {
+  for (const value of ['printer.local', 'app.localhost', 'foo。local', 'instance-data', '127.1', '0x7f.0.0.1', '2130706433', '::ffff:10.0.0.1', 'evil͏.com/login', 'javascript️:alert(1)', 'about:blank', `${'a'.repeat(191)}.internal Daily`]) {
+    assert.equal(outletText(value), '', JSON.stringify(value));
+  }
+  assert.equal(outletText('Harbor Times'), 'Harbor Times');
+  assert.equal(outletText(`${'O'.repeat(199)} X`), 'O'.repeat(199), 'a cut never ends in a space');
+  for (const title of ['͏️', '\u{e0100}឴', '\ud800']) {
+    const capture = mutated((c) => {
+      c.signals.find((signal) => signal.id === STUDY_CLUSTER).evidence[0].title = title;
+    });
+    const study = captureToStoryDiscovery(capture, { now: NOW }).clusters.find((cluster) => cluster.cluster_id === STUDY_CLUSTER);
+    assert.equal(study, undefined, JSON.stringify(title));
+  }
 });

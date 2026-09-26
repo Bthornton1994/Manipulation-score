@@ -12,6 +12,7 @@ import {
   NEWSJACK_DEFAULT_PROFILE,
   classifySourceError,
   isTitleFromExcerpt,
+  projectCapture,
   validateRawClusterOutput,
   validateRawDetectorOutput,
   validateRawOriginOutput
@@ -176,6 +177,41 @@ test('raw origin-apply output must use the run clock and window the runner set',
   }
 });
 
+test('raw validators refuse output nested too deeply to compare instead of throwing', () => {
+  const candidates = raw('raw-detector.json');
+  const clustered = raw('raw-cluster.json');
+  // Two separate objects, so the comparison has to recurse all the way down.
+  const nest = () => {
+    let deep = 1;
+    for (let i = 0; i < 20000; i += 1) deep = { a: deep };
+    return deep;
+  };
+  const representative = clustered.signals[0];
+  candidates.signals.find((signal) => signal.id === representative.id).mechanical_scores = nest();
+  representative.mechanical_scores = nest();
+  const verdict = validateRawClusterOutput(clustered, candidates, timing('cluster'));
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.code, 'artifact_structure_invalid');
+});
+
+test('an origin finding with a non-string original_url is dropped and counted', () => {
+  const targeted = raw('raw-origin.json');
+  targeted.signals[0].story_origin.original_url = ['https://harbor-times.example/local/transit-fare-vote'];
+  const capture = projectCapture({
+    request: FIXTURE_REQUEST,
+    pin: testPin('c'.repeat(64)),
+    binarySha256: null,
+    mode: 'fixture',
+    steps: ['version', 'detector_run', 'cluster', 'origin_apply'].map((name) => ({ step: name, started_at: new Date(timing(name).startedMs).toISOString(), exited_at: new Date(timing(name).exitedMs).toISOString(), exit_code: 0, timed_out: false, stdout_bytes: 10, stderr_bytes: 0 })),
+    candidates: raw('raw-detector.json'),
+    clustered: raw('raw-cluster.json'),
+    targeted,
+    findingsSha256: 'd'.repeat(64)
+  });
+  assert.equal(capture.origin.claims[0].original_url, null);
+  assert.equal(capture.origin.claims[0].withheld.invalid_values, 2);
+});
+
 test('source error text is reduced to a class and copied snippets are detected', () => {
   const table = [
     ['Get "https://x/?q=a": context deadline exceeded (Client.Timeout exceeded)', 'timeout'],
@@ -323,7 +359,8 @@ test('process failures are reported by code and write nothing', async () => {
     [{ steps: { cluster: { patch: { coarse_relevance: { keep: [] } } } } }, {}, 'newsjack_output_invalid:clustered_candidates.json:coarse_decisions_present', 5],
     [{ steps: { detector_run: { action: 'sleep' } } }, { timeouts: { version: 5000, detector_run: 300, cluster: 5000, origin_apply: 5000 } }, 'newsjack_timeout:detector_run', 4],
     [{ steps: { detector_run: { action: 'flood' } } }, { maxStdoutBytes: 256 * 1024 }, 'newsjack_output_too_large:detector_run', 4],
-    [{ steps: { version: { action: 'mutate-self' } } }, {}, 'binary_hash_mismatch', 3]
+    [{ steps: { version: { action: 'mutate-self' } } }, {}, 'binary_hash_mismatch', 3],
+    [{ steps: { version: { action: 'fifo-self', mkfifo: '/usr/bin/mkfifo' } } }, {}, 'binary_hash_mismatch', 3]
   ];
   for (const [scenario, extra, code, exitCode] of cases) {
     const binary = await fake(ws, scenario);
@@ -520,6 +557,7 @@ test('an empty Newsjack run is a valid capture that converts to empty', async ()
   const result = await runNewsjackCapture(runOptions(ws, binary));
   assert.equal(result.status, 'ok', JSON.stringify(result));
   assert.equal(result.document_status, 'empty');
+  assert.equal(result.document_reason, 'no_results');
   assert.deepEqual(result.counts, { clusters: 0, members: 0, rejected: 0 });
 });
 

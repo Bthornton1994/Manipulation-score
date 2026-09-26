@@ -37,6 +37,11 @@ const emit = (obj) => process.stdout.write(JSON.stringify(patch(obj)));
 if (behavior.stderr) process.stderr.write(behavior.stderr);
 if (behavior.action === 'exit') process.exit(behavior.code);
 if (behavior.action === 'sleep') { setTimeout(() => {}, 600000); return; }
+if (behavior.action === 'fifo-self') {
+  // Replace its own private copy with a FIFO before the next re-hash.
+  fs.renameSync(process.argv[1], process.argv[1] + '-moved');
+  require('node:child_process').execFileSync(behavior.mkfifo, [process.argv[1]]);
+}
 if (behavior.action === 'mutate-self') {
   // Same uid as the runner, so it can undo the 0500 mode and rewrite itself.
   fs.chmodSync(process.argv[1], 0o700);
@@ -89,7 +94,13 @@ if (stepName === 'detector_run') {
   template.monitor.lookback_days = Number(flag('lookback-days'));
   template.monitor.max_age_hours = Number(flag('max-age-hours'));
   template.monitor.depth = flag('depth');
-  if (SCENARIO.emptyRun) { template.signals = null; template.diagnostics.total_scored_signals = 0; template.diagnostics.total_emitted_signals = 0; }
+  // As in v0.1.19, a run with no items has no signals (null), no evidence
+  // counts, and news_search status no_results.
+  if (SCENARIO.emptyRun) {
+    template.signals = null;
+    Object.assign(template.diagnostics, { total_scored_signals: 0, total_emitted_signals: 0, evidence_by_source: {}, signals_by_lane: {}, emitted_by_lane: {} });
+    Object.assign(template.diagnostics.source_status.news_search, { evidence_count: 0, status: 'no_results' });
+  }
   emit(template);
   process.exit(0);
 }
@@ -122,10 +133,12 @@ if (stepName === 'origin_apply') {
     const summary = { signal_id: s.id, signal_title: s.title, sources: s.sources, routing: s.routing, evidence_urls: urls.length ? urls.slice(0, 5) : null };
     if (!finding) { missing.push(summary); continue; }
     // As in v0.1.19: no first_public_at means unverified_no_timestamp with an empty basis.
-    const timed = Boolean(finding.first_public_at);
+    // Only a string first_public_at carries a basis here; a date-only value
+    // has date precision, as in parseOriginTimestamp.
+    const timed = typeof finding.first_public_at === 'string' && finding.first_public_at.length >= 10;
     const computed = timed ? status : 'unverified_no_timestamp';
     statusCounts[computed] = (statusCounts[computed] || 0) + 1;
-    const gate = { computed_status: computed, worker_status: null, run_generated_at: run, freshness_cutoff: cutoff, freshness_window_hours: hours, basis_field: timed ? 'first_public_at' : null, basis_value: timed ? finding.first_public_at : null, basis_precision: timed ? 'time' : null, rationale: 'fake', deterministic_authority: true };
+    const gate = { computed_status: computed, worker_status: null, run_generated_at: run, freshness_cutoff: cutoff, freshness_window_hours: hours, basis_field: timed ? 'first_public_at' : null, basis_value: timed ? finding.first_public_at : null, basis_precision: timed ? (finding.first_public_at.length === 10 ? 'date' : 'time') : null, rationale: 'fake', deterministic_authority: true };
     if (computed === 'fresh' || computed === 'fresh_new_development') selected.push(Object.assign({}, s, { story_origin: finding, freshness_gate: gate }));
     else rejected.push(Object.assign({}, summary, { story_origin: finding, freshness_gate: gate }));
   }

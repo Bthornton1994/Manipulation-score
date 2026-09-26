@@ -152,7 +152,7 @@ const valid = { ok: true, code: null, path: null };
  * @param {{ startedMs: number, exitedMs: number }} timing runner observation of the detector step
  * @param {'fixture'|'mock'|'live'} mode
  */
-export function validateRawDetectorOutput(raw, request, timing, mode) {
+function checkRawDetectorOutput(raw, request, timing, mode) {
   if (!isPlainObject(raw)) return invalid('artifact_shape_invalid');
   const topProblem = keyProblem(raw, DETECTOR_KEYS);
   if (topProblem) return invalid(topProblem, '$');
@@ -258,7 +258,7 @@ function expectedEvidenceUrls(signal) {
 /**
  * Validate `cluster` stdout against the detector output it was given.
  */
-export function validateRawClusterOutput(raw, candidates, timing) {
+function checkRawClusterOutput(raw, candidates, timing) {
   if (!isPlainObject(raw)) return invalid('artifact_shape_invalid');
   const topProblem = keyProblem(raw, CLUSTER_OUTPUT_KEYS);
   if (topProblem) return invalid(topProblem, '$');
@@ -346,7 +346,7 @@ function findingFor(raw, id) {
  * Validate `origin-apply` stdout. Agent-authored content inside story_origin
  * is not trusted here; it is filtered during projection.
  */
-export function validateRawOriginOutput(raw, candidates, clustered, request, timing) {
+function checkRawOriginOutput(raw, candidates, clustered, request, timing) {
   if (!isPlainObject(raw)) return invalid('artifact_shape_invalid');
   const topProblem = keyProblem(raw, ORIGIN_OUTPUT_KEYS);
   if (topProblem) return invalid(topProblem, '$');
@@ -478,6 +478,8 @@ function projectClaim(clusterId, finding) {
   };
   const first = originTime(origin.first_public_at);
   if (!first.ok) withheld.invalid_values += 1;
+  // A non-string original_url is dropped and counted, like any refused value.
+  if (origin.original_url !== undefined && origin.original_url !== null && typeof origin.original_url !== 'string') withheld.invalid_values += 1;
   const original = publicCitation(origin.original_url);
   if (original.withheld) withheld.urls += 1;
   const timestampEvidence = [];
@@ -525,6 +527,22 @@ function projectClaim(clusterId, finding) {
     withheld
   };
 }
+
+// The raw validators never throw on data: output nested too deeply to
+// compare is refused as a validation failure, not a process error.
+function guarded(check) {
+  return (...args) => {
+    try {
+      return check(...args);
+    } catch {
+      return invalid('artifact_structure_invalid', '$');
+    }
+  };
+}
+
+export const validateRawDetectorOutput = guarded(checkRawDetectorOutput);
+export const validateRawClusterOutput = guarded(checkRawClusterOutput);
+export const validateRawOriginOutput = guarded(checkRawOriginOutput);
 
 /**
  * Build a media-lens.newsjack-capture.v1 record from validated raw output.

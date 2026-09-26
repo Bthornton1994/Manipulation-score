@@ -27,7 +27,7 @@
 import { spawn as nodeSpawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { constants as fsConstants } from 'node:fs';
-import { access, chmod, lstat, mkdir, mkdtemp, open, readFile, realpath, rename, rm, unlink, writeFile } from 'node:fs/promises';
+import { access, chmod, lstat, mkdir, mkdtemp, open, realpath, rename, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,6 +41,7 @@ import { projectCapture, validateRawClusterOutput, validateRawDetectorOutput, va
 const DEFAULT_REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const MAX_BINARY_BYTES = 64 * 1024 * 1024;
 const MAX_FINDINGS_BYTES = 5 * 1024 * 1024;
+const MAX_CAPTURE_WRITE_BYTES = 16 * 1024 * 1024;
 const DEFAULT_MAX_STDOUT_BYTES = 10 * 1024 * 1024;
 const KILL_GRACE_MS = 2000;
 export const DEFAULT_STEP_TIMEOUTS = Object.freeze({ version: 5000, detector_run: 20000, cluster: 20000, origin_apply: 20000 });
@@ -350,9 +351,12 @@ function runStep({ spawnImpl, binary, argv, env, cwd, timeoutMs, maxStdoutBytes,
 }
 
 async function writeAtomic(path, text) {
-  const existing = await readFile(path, 'utf8').catch(() => null);
-  if (existing !== null) {
-    if (existing === text) return;
+  // An existing entry must be a regular file with the same content; it is
+  // read without following a symlink or blocking on a FIFO.
+  const info = await lstat(path).catch(() => null);
+  if (info) {
+    const existing = info.isFile() ? await readBoundedNoFollow(path, MAX_CAPTURE_WRITE_BYTES) : null;
+    if (existing !== null && existing.toString('utf8') === text) return;
     fail('output_collision', EXIT.write);
   }
   const temp = `${path}.${process.pid}.tmp`;
@@ -425,8 +429,11 @@ export async function runNewsjackCapture(opts = {}) {
     if (!binaryBytes) fail('binary_path_invalid', EXIT.usage);
     await writeFile(binary, binaryBytes, { mode: 0o700, flag: 'wx' });
     await chmod(binary, 0o500);
+    // The re-read cannot follow a symlink or block on a FIFO swapped in by
+    // anything running as this user, including the child.
     const verifyBinary = async () => {
-      if (sha256(await readFile(binary)) !== expectedHash) fail('binary_hash_mismatch', EXIT.refused);
+      const bytes = await readBoundedNoFollow(binary, MAX_BINARY_BYTES);
+      if (!bytes || sha256(bytes) !== expectedHash) fail('binary_hash_mismatch', EXIT.refused);
     };
     await verifyBinary();
 

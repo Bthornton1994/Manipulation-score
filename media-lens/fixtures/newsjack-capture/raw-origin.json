@@ -57,7 +57,8 @@
           "engagement": {},
           "metadata": {
             "publication_type": "news",
-            "note": "SENTINEL-METADATA"
+            "note": "SENTINEL-METADATA",
+            "raw_source": "Fictional Daily"
           }
         },
         {
@@ -68,7 +69,10 @@
           "container": "Harbor Times",
           "published_at": "2026-09-25T09:15:00+00:00",
           "excerpt": "SENTINEL-EXCERPT Council schedules transit fare vote",
-          "engagement": {}
+          "engagement": {},
+          "metadata": {
+            "raw_source": "Harbor Times"
+          }
         },
         {
           "source": "news_search",
@@ -78,7 +82,10 @@
           "container": "PR Newswire",
           "published_at": "2026-09-25T10:00:00.000Z",
           "excerpt": "SENTINEL-EXCERPT Transit authority statement on fare vote",
-          "engagement": {}
+          "engagement": {},
+          "metadata": {
+            "raw_source": "PR Newswire"
+          }
         },
         {
           "source": "news_search",
@@ -88,7 +95,10 @@
           "container": "Fictional Daily Metro",
           "published_at": "2026-09-25T12:05:00Z",
           "excerpt": "SENTINEL-EXCERPT City council sets date for transit fare vote",
-          "engagement": {}
+          "engagement": {},
+          "metadata": {
+            "raw_source": "Fictional Daily Metro"
+          }
         }
       ],
       "features": {
@@ -99,26 +109,37 @@
         "seen_urls": {},
         "profile_matches": [],
         "safety_flags": [],
-        "age_hours": 5.99
+        "age_hours": 5.92
       },
       "story_size": {
-        "band": "moderate",
-        "score": 0.41,
-        "basis": "outlet_mix"
+        "score": null,
+        "band": "unknown",
+        "confidence": "low",
+        "basis": "publication_metadata_missing",
+        "known_outlet_count": 0,
+        "known_traffic_count": 0,
+        "known_authority_count": 0,
+        "top_outlets": [],
+        "attention_hint": null,
+        "components": {
+          "source_quality": 0.95,
+          "major_news": 0,
+          "social_momentum": 0
+        }
       },
       "routing": {
         "lane": "profile_relevance",
-        "queue_priority": 61.2,
+        "queue_priority": 64.1,
         "demoted": false
       },
       "mechanical_scores": {
-        "freshness": 0.8,
-        "source_agreement": 0.3,
+        "freshness": 0.86,
+        "source_agreement": 0.42,
         "novelty": 1,
-        "profile_match": 0,
-        "source_quality": 0.5,
+        "profile_match": 0.4,
+        "source_quality": 0.95,
         "momentum": 0,
-        "major_news": 0.2
+        "major_news": 0
       },
       "query": "transit fare vote",
       "cluster": {
@@ -205,7 +226,7 @@
         ],
         "routing": {
           "lane": "profile_relevance",
-          "queue_priority": 44.1,
+          "queue_priority": 66.9,
           "demoted": false
         },
         "evidence_urls": [
@@ -243,7 +264,7 @@
         ],
         "routing": {
           "lane": "profile_relevance",
-          "queue_priority": 39.4,
+          "queue_priority": 66.9,
           "demoted": false
         },
         "evidence_urls": [
@@ -258,9 +279,5 @@
     "deterministic_authority": true
   },
   "detector_diagnostics": {},
-  "source_errors": {
-    "transit fare vote": {
-      "news_search": "Get \"https://medialyst.ai/api/v1/news/search?q=transit+fare+vote&token=SENTINEL-TOKEN\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
-    }
-  }
+  "source_errors": {}
 }

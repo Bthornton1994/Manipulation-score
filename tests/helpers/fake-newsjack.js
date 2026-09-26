@@ -25,7 +25,7 @@ const sha1 = (v) => createHash('sha1').update(v).digest('hex');
 const argv = process.argv.slice(2);
 if (SCENARIO.marker) fs.writeFileSync(SCENARIO.marker, 'executed');
 if (SCENARIO.record) {
-  fs.appendFileSync(SCENARIO.record, JSON.stringify({ argv, env: process.env, cwd: process.cwd() }) + '\n');
+  fs.appendFileSync(SCENARIO.record, JSON.stringify({ argv, env: process.env, cwd: process.cwd(), script: process.argv[1] }) + '\n');
 }
 const stepName = argv[0] === 'detector' ? 'detector_run' : argv[0] === 'origin-apply' ? 'origin_apply' : argv[0];
 const behavior = (SCENARIO.steps || {})[stepName] || { action: 'normal' };
@@ -37,6 +37,24 @@ const emit = (obj) => process.stdout.write(JSON.stringify(patch(obj)));
 if (behavior.stderr) process.stderr.write(behavior.stderr);
 if (behavior.action === 'exit') process.exit(behavior.code);
 if (behavior.action === 'sleep') { setTimeout(() => {}, 600000); return; }
+if (behavior.action === 'mutate-self') {
+  // Same uid as the runner, so it can undo the 0500 mode and rewrite itself.
+  fs.chmodSync(process.argv[1], 0o700);
+  fs.appendFileSync(process.argv[1], '\n// changed between steps\n');
+}
+if (behavior.swapDir) {
+  fs.renameSync(behavior.swapDir.path, behavior.swapDir.path + '-moved');
+  fs.mkdirSync(behavior.swapDir.target);
+  fs.symlinkSync(behavior.swapDir.target, behavior.swapDir.path);
+}
+if (behavior.action === 'setsid') {
+  // A descendant in its own session keeps the stdout pipe open after the
+  // process group is killed.
+  const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 600000)'], { stdio: ['ignore', 'inherit', 'ignore'], detached: true });
+  fs.writeFileSync(behavior.pidFile, String(child.pid));
+  setTimeout(() => {}, 600000);
+  return;
+}
 if (behavior.action === 'grandchild') {
   const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 600000)'], { stdio: 'ignore' });
   fs.writeFileSync(behavior.pidFile, String(child.pid));

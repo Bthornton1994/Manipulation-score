@@ -66,21 +66,32 @@
         "age_hours": 18
       },
       "story_size": {
-        "band": "unknown",
         "score": null,
-        "attention_hint": null
+        "band": "unknown",
+        "confidence": "low",
+        "basis": "publication_metadata_missing",
+        "known_outlet_count": 0,
+        "known_traffic_count": 0,
+        "known_authority_count": 0,
+        "top_outlets": [],
+        "attention_hint": null,
+        "components": {
+          "source_quality": 0.95,
+          "major_news": 0,
+          "social_momentum": 0
+        }
       },
       "routing": {
-        "lane": "profile_relevance_weak",
-        "queue_priority": 39.9,
-        "demoted": true
+        "lane": "profile_relevance",
+        "queue_priority": 64.1,
+        "demoted": false
       },
       "mechanical_scores": {
-        "freshness": 0.75,
-        "source_agreement": 0.25,
+        "freshness": 0.86,
+        "source_agreement": 0.42,
         "novelty": 1,
-        "profile_match": 0,
-        "source_quality": 0.6,
+        "profile_match": 0.4,
+        "source_quality": 0.95,
         "momentum": 0,
         "major_news": 0
       },
@@ -93,10 +104,10 @@
     },
     "hygiene_rejections": {},
     "signals_by_lane": {
-      "profile_relevance_weak": 1
+      "profile_relevance": 1
     },
     "emitted_by_lane": {
-      "profile_relevance_weak": 1
+      "profile_relevance": 1
     },
     "lane_caps": null,
     "selection": {

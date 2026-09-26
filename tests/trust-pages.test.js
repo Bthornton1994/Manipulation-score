@@ -84,8 +84,23 @@ test('changelog records the September 25, 2026 Media Lens disclosure entry above
 });
 
 test('trust pages changed for the Media Lens operator preview carry the September 25, 2026 date', async () => {
-  for (const page of ['privacy.html', 'limitations.html', 'acceptable-use.html', 'methodology.html', 'changelog.html']) {
+  for (const page of ['privacy.html', 'acceptable-use.html']) {
     const html = await readFile(page, 'utf8');
     assert.match(html, /<p class="legal-updated">Last updated: September 25, 2026<\/p>/, page);
   }
+});
+
+test('trust pages changed for the Media Lens coverage wording carry the September 26, 2026 date and a changelog entry', async () => {
+  for (const page of ['limitations.html', 'methodology.html', 'changelog.html']) {
+    const html = await readFile(page, 'utf8');
+    assert.match(html, /<p class="legal-updated">Last updated: September 26, 2026<\/p>/, page);
+  }
+  const html = await readFile('changelog.html', 'utf8');
+  const entryIdx = html.indexOf('<h2>September 26, 2026 | Media Lens coverage wording</h2>');
+  const previousIdx = html.indexOf('<h2>September 25, 2026 | Media Lens preview disclosures</h2>');
+  assert.ok(entryIdx !== -1 && entryIdx < previousIdx, 'the new entry sits above the September 25 entry');
+  const entry = html.slice(entryIdx, previousIdx);
+  assert.match(entry, /reads no Newsjack output or other coverage data/);
+  assert.match(entry, /clarity-v37/);
+  assert.doesNotMatch(entry, /accura|live coverage is available|multi-outlet coverage is live/i);
 });

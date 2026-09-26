@@ -19,6 +19,7 @@ import {
   NEWSJACK_SOURCE_KIND_NAMES,
   NEWSJACK_SOURCE_STATUSES,
   canonicalCaptureId,
+  isRealDate,
   parseNewsjackClock
 } from '../schema/newsjack-capture.js';
 import { classifySourceUrl, parseProviderTimestamp } from '../worker/discovery/newsjack-discovery.js';
@@ -419,8 +420,15 @@ export function isTitleFromExcerpt(title, excerpt) {
   return Buffer.byteLength(prefix, 'utf8') >= 60 && cleanTitle.startsWith(prefix);
 }
 
-function truncateCodePoints(value, max) {
-  return Array.from(value).slice(0, max).join('');
+// Cut to at most `max` UTF-16 units without splitting a character.
+function truncateUtf16(value, max) {
+  if (value.length <= max) return value;
+  let out = '';
+  for (const char of value) {
+    if (out.length + char.length > max) break;
+    out += char;
+  }
+  return out;
 }
 
 function floorToMsIso(value) {
@@ -429,13 +437,18 @@ function floorToMsIso(value) {
 }
 
 function projectEvidence(item) {
+  const titleFromExcerpt = isTitleFromExcerpt(item.title, item.excerpt);
   return {
     source: item.source,
-    title: truncateCodePoints(item.title, NEWSJACK_CAPTURE_LIMITS.title_chars),
+    // A copied snippet is excerpt text, so it is not written.
+    title: titleFromExcerpt ? '' : truncateUtf16(item.title, NEWSJACK_CAPTURE_LIMITS.title_chars),
     url: item.url.length <= NEWSJACK_CAPTURE_LIMITS.url_chars ? item.url : '',
-    container: item.container === null ? null : truncateCodePoints(item.container, NEWSJACK_CAPTURE_LIMITS.container_chars),
-    published_at: item.published_at === null ? null : item.published_at.slice(0, NEWSJACK_CAPTURE_LIMITS.published_at_chars),
-    title_from_excerpt: isTitleFromExcerpt(item.title, item.excerpt)
+    // Over-long names and times are dropped, not cut: cutting could turn a
+    // refused value into an accepted one.
+    container: item.container === null || item.container.length > NEWSJACK_CAPTURE_LIMITS.container_chars ? null : item.container,
+    published_at:
+      item.published_at === null || item.published_at.length > NEWSJACK_CAPTURE_LIMITS.published_at_chars ? null : item.published_at,
+    title_from_excerpt: titleFromExcerpt
   };
 }
 
@@ -459,12 +472,16 @@ function projectClaim(clusterId, finding) {
     withheld.invalid_values += 1;
     return null;
   };
-  let firstPublicAt = null;
-  if (origin.first_public_at !== undefined && origin.first_public_at !== null && origin.first_public_at !== '') {
-    const parsed = parseProviderTimestamp(origin.first_public_at);
-    if (parsed.value) firstPublicAt = parsed.value;
-    else withheld.invalid_values += 1;
-  }
+  // The story-origin skill allows a date without a time when only the date
+  // is known; origin-apply handles that precision itself. Keep it labeled.
+  const originTime = (value) => {
+    if (value === undefined || value === null || value === '') return { value: null, precision: null, ok: true };
+    if (typeof value === 'string' && isRealDate(value)) return { value, precision: 'date', ok: true };
+    const parsed = parseProviderTimestamp(value);
+    return parsed.value ? { value: parsed.value, precision: 'time', ok: true } : { value: null, precision: null, ok: false };
+  };
+  const first = originTime(origin.first_public_at);
+  if (!first.ok) withheld.invalid_values += 1;
   const original = publicCitation(origin.original_url);
   if (original.withheld) withheld.urls += 1;
   const timestampEvidence = [];
@@ -474,26 +491,24 @@ function projectClaim(clusterId, finding) {
       continue;
     }
     const citation = publicCitation(entry.url);
-    const published = parseProviderTimestamp(entry.published_at);
+    const published = originTime(entry.published_at);
     if (!citation.url) {
       withheld.urls += 1;
       continue;
     }
-    if (!published.value) {
-      withheld.invalid_values += 1;
-      continue;
-    }
+    if (!published.ok) withheld.invalid_values += 1;
     if (timestampEvidence.length >= NEWSJACK_CAPTURE_LIMITS.timestamp_evidence_per_claim) {
       withheld.timestamp_evidence_truncated += 1;
       continue;
     }
-    timestampEvidence.push({ url: citation.url, published_at: published.value });
+    timestampEvidence.push({ url: citation.url, published_at: published.value, precision: published.precision });
   }
   const basisField = NEWSJACK_BASIS_FIELDS.includes(gate.basis_field) ? gate.basis_field : null;
   return {
     cluster_id: clusterId,
     same_story_assessment: pickEnum(origin.same_story_assessment, NEWSJACK_SAME_STORY_ASSESSMENTS),
-    first_public_at: firstPublicAt,
+    first_public_at: first.value,
+    first_public_at_precision: first.precision,
     original_url: original.url,
     timestamp_evidence: timestampEvidence,
     confidence: pickEnum(origin.confidence, NEWSJACK_CONFIDENCE_VALUES),

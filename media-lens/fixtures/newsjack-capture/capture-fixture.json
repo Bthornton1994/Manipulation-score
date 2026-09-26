@@ -1,6 +1,6 @@
 {
   "contract": "media-lens.newsjack-capture.v1",
-  "capture_id": "66d2a4cdf35299bada97d12560a83828106ba0fd92b27e5a4acbdf09d3f9edb1",
+  "capture_id": "d157e6a6a38ca1b8f60ae60da0b2b2e0967b47a50242de510933f132563062dd",
   "newsjack": {
     "version": "v0.1.19",
     "commit": "bdb41b8d1f9a9e27221cc86102cbfe1a748fc123",
@@ -38,7 +38,7 @@
         "exited_at": "2026-09-25T18:00:03.410Z",
         "exit_code": 0,
         "timed_out": false,
-        "stdout_bytes": 12071,
+        "stdout_bytes": 14457,
         "stderr_bytes": 0
       },
       {
@@ -47,7 +47,7 @@
         "exited_at": "2026-09-25T18:00:03.470Z",
         "exit_code": 0,
         "timed_out": false,
-        "stdout_bytes": 11025,
+        "stdout_bytes": 12814,
         "stderr_bytes": 0
       },
       {
@@ -56,7 +56,7 @@
         "exited_at": "2026-09-25T18:00:03.520Z",
         "exit_code": 0,
         "timed_out": false,
-        "stdout_bytes": 8313,
+        "stdout_bytes": 8714,
         "stderr_bytes": 0
       }
     ]
@@ -77,12 +77,94 @@
       "requested": true,
       "available": true,
       "attempted": true,
-      "evidence_count": 16,
-      "status": "partial_error",
-      "error_class": "timeout"
+      "evidence_count": 18,
+      "status": "used",
+      "error_class": null
     }
   },
   "signals": [
+    {
+      "id": "8139e0b65e6da336",
+      "evidence": [
+        {
+          "source": "news_search",
+          "title": "Bus riders react to proposed fare increase",
+          "url": "https://riverside-post.example/riders-react",
+          "container": "Riverside Post",
+          "published_at": "2026-09-25T11:42:17.123456789Z",
+          "title_from_excerpt": false
+        },
+        {
+          "source": "news_search",
+          "title": "Riders push back on fare plan",
+          "url": "https://northern-chronicle.example/fare-reaction",
+          "container": "Northern Chronicle",
+          "published_at": "2026-09-25",
+          "title_from_excerpt": false
+        },
+        {
+          "source": "news_search",
+          "title": "Commuters weigh in on fares",
+          "url": "https://coast-herald.example/fares",
+          "container": "Coast Herald",
+          "published_at": null,
+          "title_from_excerpt": false
+        },
+        {
+          "source": "news_search",
+          "title": "Fare hike draws criticism",
+          "url": "https://inland-review.example/fare-hike",
+          "container": "Inland Review",
+          "published_at": "2026-02-30T12:00:00Z",
+          "title_from_excerpt": false
+        },
+        {
+          "source": "news_search",
+          "title": "Fare increase debate continues",
+          "url": "https://summit-news.example/fare",
+          "container": "Summit News",
+          "published_at": "2026-09-25T19:00:00Z",
+          "title_from_excerpt": false
+        },
+        {
+          "source": "news_search",
+          "title": "Earlier fare proposal recalled",
+          "url": "https://lakeside-gazette.example/fare",
+          "container": "Lakeside Gazette",
+          "published_at": "2026-09-24T18:00:02Z",
+          "title_from_excerpt": false
+        },
+        {
+          "source": "news_search",
+          "title": "Internal fare memo",
+          "url": "https://metro.internal/fare",
+          "container": "Metro Internal",
+          "published_at": "2026-09-25T10:10:00Z",
+          "title_from_excerpt": false
+        },
+        {
+          "source": "news_search",
+          "title": "",
+          "url": "https://snippet-source.example/riders",
+          "container": "Snippet Source",
+          "published_at": "2026-09-25T13:00:00Z",
+          "title_from_excerpt": true
+        }
+      ]
+    },
+    {
+      "id": "b1086c347b8d1334",
+      "evidence": [
+        {
+          "source": "news_search",
+          "title": "Transit agency publishes fare study",
+          "url": "https://capital-observer.example/fare-study",
+          "container": "Capital Observer",
+          "published_at": "2026-09-25T14:05:00.250Z",
+          "title_from_excerpt": false
+        }
+      ]
+    },
     {
       "id": "26027af283a9b76d",
       "evidence": [
@@ -148,88 +230,6 @@
           "title_from_excerpt": false
         }
       ]
-    },
-    {
-      "id": "8139e0b65e6da336",
-      "evidence": [
-        {
-          "source": "news_search",
-          "title": "Bus riders react to proposed fare increase",
-          "url": "https://riverside-post.example/riders-react",
-          "container": "Riverside Post",
-          "published_at": "2026-09-25T11:42:17.123456789Z",
-          "title_from_excerpt": false
-        },
-        {
-          "source": "news_search",
-          "title": "Riders push back on fare plan",
-          "url": "https://northern-chronicle.example/fare-reaction",
-          "container": "Northern Chronicle",
-          "published_at": "2026-09-25",
-          "title_from_excerpt": false
-        },
-        {
-          "source": "news_search",
-          "title": "Commuters weigh in on fares",
-          "url": "https://coast-herald.example/fares",
-          "container": "Coast Herald",
-          "published_at": null,
-          "title_from_excerpt": false
-        },
-        {
-          "source": "news_search",
-          "title": "Fare hike draws criticism",
-          "url": "https://inland-review.example/fare-hike",
-          "container": "Inland Review",
-          "published_at": "2026-02-30T12:00:00Z",
-          "title_from_excerpt": false
-        },
-        {
-          "source": "news_search",
-          "title": "Fare increase debate continues",
-          "url": "https://summit-news.example/fare",
-          "container": "Summit News",
-          "published_at": "2026-09-25T19:00:00Z",
-          "title_from_excerpt": false
-        },
-        {
-          "source": "news_search",
-          "title": "Earlier fare proposal recalled",
-          "url": "https://lakeside-gazette.example/fare",
-          "container": "Lakeside Gazette",
-          "published_at": "2026-09-23T10:00:00Z",
-          "title_from_excerpt": false
-        },
-        {
-          "source": "news_search",
-          "title": "Internal fare memo",
-          "url": "https://metro.internal/fare",
-          "container": "Metro Internal",
-          "published_at": "2026-09-25T10:10:00Z",
-          "title_from_excerpt": false
-        },
-        {
-          "source": "news_search",
-          "title": "Bus riders react to proposed fare increase in the city as officials weigh options for next year",
-          "url": "https://snippet-source.example/riders",
-          "container": "Snippet Source",
-          "published_at": "2026-09-25T13:00:00Z",
-          "title_from_excerpt": true
-        }
-      ]
-    },
-    {
-      "id": "b1086c347b8d1334",
-      "evidence": [
-        {
-          "source": "news_search",
-          "title": "Transit agency publishes fare study",
-          "url": "https://capital-observer.example/fare-study",
-          "container": "Capital Observer",
-          "published_at": "2026-09-25T14:05:00.250Z",
-          "title_from_excerpt": false
-        }
-      ]
     }
   ],
   "clustering": {
@@ -263,15 +263,18 @@
         "cluster_id": "26027af283a9b76d",
         "same_story_assessment": "same_story",
         "first_public_at": "2026-09-25T09:15:00.000Z",
+        "first_public_at_precision": "time",
         "original_url": "https://harbor-times.example/local/transit-fare-vote",
         "timestamp_evidence": [
           {
             "url": "https://harbor-times.example/local/transit-fare-vote",
-            "published_at": "2026-09-25T09:15:00.000Z"
+            "published_at": "2026-09-25T09:15:00.000Z",
+            "precision": "time"
           },
           {
             "url": "https://valley-ledger.example/2026/09/25/fare-vote",
-            "published_at": "2026-09-25T12:30:00.000Z"
+            "published_at": "2026-09-25T12:30:00.000Z",
+            "precision": "time"
           }
         ],
         "confidence": null,
@@ -293,7 +296,8 @@
       {
         "cluster_id": "b1086c347b8d1334",
         "same_story_assessment": "unclear",
-        "first_public_at": null,
+        "first_public_at": "2026-09-20",
+        "first_public_at_precision": "date",
         "original_url": null,
         "timestamp_evidence": [],
         "confidence": "low",
@@ -308,7 +312,7 @@
         "detector_timestamp_fallback": false,
         "withheld": {
           "urls": 0,
-          "invalid_values": 1,
+          "invalid_values": 0,
           "timestamp_evidence_truncated": 0
         }
       }

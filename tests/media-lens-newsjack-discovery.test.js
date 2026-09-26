@@ -12,12 +12,16 @@ import { validateStoryDiscovery } from '../media-lens/schema/story-discovery.js'
 import { projectCapture } from '../media-lens/tools/newsjack-raw.js';
 import {
   NEWSJACK_CLUSTER_BASIS,
+  NEWSJACK_GROUPING_NOTE,
+  NEWSJACK_INDEPENDENCE_NOTE,
   NEWSJACK_MEMBER_REJECTIONS,
   NEWSJACK_ORIGIN_NOTE,
   NEWSJACK_SOURCE_KINDS,
+  NON_OUTLET_HOSTS,
   NON_PUBLIC_HOST_SUFFIXES,
   captureToStoryDiscovery,
   classifySourceUrl,
+  displayText,
   outletText,
   parseProviderTimestamp
 } from '../media-lens/worker/discovery/newsjack-discovery.js';
@@ -33,7 +37,7 @@ import {
   createRssAtomSearchProvider,
   createSearchProvider
 } from '../media-lens/worker/discovery/search-provider.js';
-import { FIXTURE_REQUEST, buildFixtureCapture, raw, rawText, testPin } from './helpers/newsjack-fixtures.js';
+import { FIXTURE_REQUEST, FIXTURE_TIMINGS, buildFixtureCapture, raw, rawText, testPin } from './helpers/newsjack-fixtures.js';
 
 const NOW = Date.parse('2026-09-26T00:00:00.000Z');
 const FARE_CLUSTER = '26027af283a9b76d';
@@ -57,8 +61,8 @@ function codes(result) {
 }
 
 function mockCapture({ now = Date.parse('2026-09-25T18:00:01.000Z'), signalsNull = false } = {}) {
-  const candidates = raw('raw-detector-mock-real.json');
-  const clustered = raw('raw-cluster-mock-real.json');
+  const candidates = raw('raw-detector-mock-shape.json');
+  const clustered = raw('raw-cluster-mock-shape.json');
   if (signalsNull) {
     candidates.signals = null;
     candidates.diagnostics.total_scored_signals = 0;
@@ -103,7 +107,12 @@ test('a fixture capture converts to labeled, uncertain story-discovery.v1 withou
   assert.equal(document.retrieved_at, '2026-09-25T18:00:03.410Z');
   assert.equal(document.retrieved_at_basis, 'runner_observed_detector_exit_upper_bound');
   assert.deepEqual(document.window, { start: '2026-09-24T18:00:03.410Z', end: '2026-09-25T18:00:03.410Z', hours: 24 });
-  assert.deepEqual(document.provenance.retrieval_interval, { not_before: '2026-09-25T18:00:00.052Z', not_after: '2026-09-25T18:00:03.410Z' });
+  assert.deepEqual(document.provenance.retrieval_interval, {
+    not_before: FIXTURE_TIMINGS.detector_run[0],
+    not_after: FIXTURE_TIMINGS.detector_run[1],
+    basis: 'runner_observed_detector_start_and_exit'
+  });
+  assert.equal(document.provenance.newsjack_generated_at, '2026-09-25T18:00:00.052314Z');
   assert.equal(document.provenance.commit, NEWSJACK_PIN.commit);
   assert.equal(document.provenance.binary_check, 'fixture_unhashed');
   assert.equal(document.provenance.clusters_without_members, 1);
@@ -114,6 +123,13 @@ test('a fixture capture converts to labeled, uncertain story-discovery.v1 withou
   assert.deepEqual(document.clusters.map((cluster) => cluster.cluster_id), [FARE_CLUSTER, STUDY_CLUSTER]);
   const fare = document.clusters[0];
   assert.equal(fare.cluster_basis, NEWSJACK_CLUSTER_BASIS);
+  // The grouping description matches v0.1.19: detector Jaccard over title
+  // and snippet text, then the cluster step's URL or title-word overlap.
+  assert.deepEqual(fare.cluster_params, { title_overlap: 0.6, min_shared_tokens: 2, detector_jaccard: 0.32, detector_text: 'title_and_snippet', basis: 'pinned_source_review' });
+  assert.equal(fare.grouping_note, NEWSJACK_GROUPING_NOTE);
+  assert.match(NEWSJACK_GROUPING_NOTE, /snippets \(Jaccard 0\.32\)/);
+  assert.equal(fare.independence_note, NEWSJACK_INDEPENDENCE_NOTE);
+  assert.doesNotMatch(document.message, /title words/);
   assert.deepEqual(fare.members.map((member) => [member.outlet, member.relation, member.published_at]), [
     ['Fictional Daily', 'same_story', '2026-09-25T12:00:00.000Z'],
     ['Harbor Times', 'same_story', '2026-09-25T09:15:00.000Z'],
@@ -136,13 +152,15 @@ test('a fixture capture converts to labeled, uncertain story-discovery.v1 withou
 test('every dropped evidence item is counted under its own reason and listed without a URL', () => {
   const document = captureToStoryDiscovery(buildFixtureCapture(), { now: NOW });
   const row = document.sources_checked.find((entry) => entry.source_id === 'newsjack:news_search');
-  assert.equal(row.outcome, 'partial');
-  assert.equal(row.error, 'timeout');
+  assert.equal(row.outcome, 'checked');
+  assert.equal(row.error, null);
+  assert.equal(row.newsjack_evidence_count, 18);
   assert.equal(row.item_count, 5);
   const expected = {
     incomplete: 1,
     non_https_url: 1,
     non_public_url: 1,
+    non_outlet_host: 0,
     duplicate_url: 1,
     title_from_excerpt: 1,
     source_kind_excluded: 0,
@@ -184,9 +202,15 @@ test('origin evidence is carried only as unverified agent claims and never chang
   // The search-results URL (it carries query terms) and the http URL are withheld.
   assert.deepEqual(claim.timestamp_evidence.map((entry) => new URL(entry.url).hostname), ['harbor-times.example', 'valley-ledger.example']);
   assert.deepEqual(claim.withheld, { urls: 2, invalid_values: 1, timestamp_evidence_truncated: 0 });
+  assert.equal(claim.first_public_at_precision, 'time');
+  assert.deepEqual(claim.timestamp_evidence.map((entry) => entry.precision), ['time', 'time']);
   const [studyClaim] = withOrigin.clusters[1].origin_claims;
   assert.equal(studyClaim.freshness_status, 'stale');
-  assert.equal(studyClaim.first_public_at, null, 'a date-only agent time is not turned into midnight');
+  // The skill allows a date-only first_public_at. It is kept as a date with
+  // its precision, never turned into midnight and never counted as invalid.
+  assert.equal(studyClaim.first_public_at, '2026-09-20');
+  assert.equal(studyClaim.first_public_at_precision, 'date');
+  assert.equal(studyClaim.withheld.invalid_values, 0);
 });
 
 test('client profile data, excerpts, authors, raw error text, and agent prose never reach the capture or document', () => {
@@ -198,7 +222,7 @@ test('client profile data, excerpts, authors, raw error text, and agent prose ne
   }
   // The raw fixtures really do contain those values; the projection drops them.
   const rawText = JSON.stringify(raw('raw-detector.json')) + JSON.stringify(raw('raw-origin.json'));
-  for (const marker of ['SENTINEL-EXCERPT', 'SENTINEL-AUTHOR', 'SENTINEL-METADATA', 'SENTINEL-TOKEN', 'SENTINEL-RATIONALE']) {
+  for (const marker of ['SENTINEL-EXCERPT', 'SENTINEL-AUTHOR', 'SENTINEL-METADATA', 'SENTINEL-RATIONALE']) {
     assert.ok(rawText.includes(marker), `fixture should plant ${marker}`);
   }
 });
@@ -281,13 +305,15 @@ test('outlet names must be readable text, not URLs, paths, or invisible characte
   }
 });
 
-test('a real mock capture converts to empty because mock dates carry no time', () => {
+test('a capture in the --mock output shape converts to empty because mock dates carry no time', () => {
   const capture = mockCapture();
   assert.deepEqual(validateNewsjackCapture(capture, { pin: testPin(FAKE_HASH) }), { ok: true, errors: [] });
   const document = captureToStoryDiscovery(capture, { now: Date.parse('2026-09-25T18:00:02.000Z'), pin: testPin(FAKE_HASH) });
   assert.equal(document.status, 'empty');
   assert.equal(document.reason, 'no_accepted_members');
-  assert.equal(document.provenance.binary_check, 'matched');
+  // The converter checks only that the capture names a hash recorded in the
+  // pin; the runner is what hashed the executed file.
+  assert.equal(document.provenance.binary_check, 'recorded_in_pin');
   assert.equal(document.sources_checked[0].rejected_published_at_date_only, 1);
   assert.match(document.message, /synthetic data from a pinned binary, not live coverage/);
   assert.deepEqual(validateStoryDiscovery(document), { ok: true, errors: [] });
@@ -359,7 +385,8 @@ test('the converter reads text safely and never throws on data', () => {
 
 test('only news_search evidence can become a member; other kinds are counted as excluded', () => {
   const capture = mutated((c) => {
-    c.signals[3].evidence[0].source = 'reddit';
+    c.signals.find((signal) => signal.id === STUDY_CLUSTER).evidence[0].source = 'reddit';
+    c.sources.reddit = { requested: true, available: true, attempted: true, evidence_count: 1, status: 'used', error_class: null };
   });
   assert.equal(validateNewsjackCapture(capture).ok, true);
   const document = captureToStoryDiscovery(capture, { now: NOW });
@@ -476,4 +503,234 @@ test('the discovery doc and license note quote the pinned commit', () => {
     assert.ok(text.includes(NEWSJACK_PIN.commit), path);
     assert.ok(text.includes(NEWSJACK_PIN.version), path);
   }
+});
+
+function sourceErrorCapture() {
+  const at = (started, exited) => ({ started, exited });
+  const timings = {
+    version: at('2026-09-25T18:09:59.900Z', '2026-09-25T18:09:59.950Z'),
+    detector_run: at('2026-09-25T18:10:00.000Z', '2026-09-25T18:10:00.310Z'),
+    cluster: at('2026-09-25T18:10:00.380Z', '2026-09-25T18:10:00.450Z')
+  };
+  const steps = Object.entries(timings).map(([name, { started, exited }]) => ({
+    step: name,
+    started_at: started,
+    exited_at: exited,
+    exit_code: 0,
+    timed_out: false,
+    stdout_bytes: 10,
+    stderr_bytes: 0
+  }));
+  return projectCapture({
+    request: FIXTURE_REQUEST,
+    pin: NEWSJACK_PIN,
+    binarySha256: null,
+    mode: 'fixture',
+    steps,
+    candidates: raw('raw-detector-source-error.json'),
+    clustered: raw('raw-cluster-source-error.json')
+  });
+}
+
+test('a source error reaches the capture only as a reduced class, and an unchecked run says so', () => {
+  const rawError = JSON.stringify(raw('raw-detector-source-error.json'));
+  assert.ok(rawError.includes('medialyst.ai') && rawError.includes('Client.Timeout'), 'the raw fixture carries real-shaped error text');
+  const capture = sourceErrorCapture();
+  assert.deepEqual(validateNewsjackCapture(capture), { ok: true, errors: [] });
+  assert.deepEqual(capture.sources.news_search, { requested: true, available: true, attempted: true, evidence_count: 0, status: 'error', error_class: 'timeout' });
+  const document = captureToStoryDiscovery(capture, { now: NOW });
+  assert.deepEqual(validateStoryDiscovery(document), { ok: true, errors: [] });
+  assert.equal(document.status, 'empty');
+  assert.equal(document.reason, 'no_member_source_checked');
+  assert.match(document.message, /nothing was checked/);
+  assert.equal(document.sources_checked[0].outcome, 'failed');
+  assert.equal(document.sources_checked[0].error, 'timeout');
+  const serialized = JSON.stringify(capture) + JSON.stringify(document);
+  for (const marker of ['medialyst.ai', 'Client.Timeout', 'Post "', 'deadline']) assert.ok(!serialized.includes(marker), marker);
+});
+
+test('forum, social, video, short-link, and aggregator hosts never become outlet members', () => {
+  for (const url of ['https://www.reddit.com/r/transit/comments/abc/fare', 'https://news.ycombinator.com/item?x', 'https://x.com/agency/status/1', 'https://t.co/abc', 'https://m.youtube.com/watch', 'https://news.google.com/articles/abc', 'https://www.linkedin.com/pulse/fare']) {
+    const capture = mutated((c) => {
+      c.signals.find((signal) => signal.id === STUDY_CLUSTER).evidence[0].url = url;
+    });
+    const document = captureToStoryDiscovery(capture, { now: NOW });
+    const row = document.sources_checked.find((entry) => entry.source_id === 'newsjack:news_search');
+    const study = document.clusters.find((cluster) => cluster.cluster_id === STUDY_CLUSTER);
+    assert.equal(study, undefined, url);
+    assert.equal(row.rejected_non_outlet_host, 1, url);
+  }
+  assert.ok(NON_OUTLET_HOSTS.includes('reddit.com') && NON_OUTLET_HOSTS.includes('news.google.com'));
+});
+
+test('a URL is used once across the whole document, whatever time a later copy reports', () => {
+  // The Harbor Times URL is already a FARE member; the Lakeside URL was
+  // rejected in RIDERS as outside the window. A later copy with an
+  // in-window time must not win either way.
+  for (const url of ['https://harbor-times.example/local/transit-fare-vote', 'https://lakeside-gazette.example/fare']) {
+    const capture = mutated((c) => {
+      c.signals.find((signal) => signal.id === STUDY_CLUSTER).evidence[0].url = url;
+    });
+    const document = captureToStoryDiscovery(capture, { now: NOW });
+    assert.equal(document.clusters.find((cluster) => cluster.cluster_id === STUDY_CLUSTER), undefined, url);
+    const row = document.sources_checked.find((entry) => entry.source_id === 'newsjack:news_search');
+    assert.equal(row.rejected_duplicate_url, 2, url);
+    const urls = document.clusters.flatMap((cluster) => cluster.members.map((member) => member.canonical_url));
+    assert.equal(new Set(urls).size, urls.length);
+  }
+});
+
+test('origin-claim URLs pass the same public-link policy as members and must be canonical', () => {
+  const unsafe = mutated((c) => {
+    c.origin.claims[0].original_url = 'https://169.254.169.254/latest';
+    c.origin.claims[0].timestamp_evidence[1].url = 'https://metro.internal/fare';
+  });
+  assert.equal(validateNewsjackCapture(unsafe).ok, true, 'the contract checks shape; the converter applies the link policy');
+  const [claim] = captureToStoryDiscovery(unsafe, { now: NOW }).clusters[0].origin_claims;
+  assert.equal(claim.original_url, null);
+  assert.deepEqual(claim.timestamp_evidence.map((entry) => entry.url), ['https://harbor-times.example/local/transit-fare-vote']);
+  assert.equal(claim.withheld.urls, 4);
+  for (const url of ['https://Harbor-Times.example/local/transit-fare-vote', ' https://harbor-times.example/a', 'https://harbor-times.example/a\n', 'https://harbor-times.example/a b', 'https://user@harbor-times.example/a']) {
+    const capture = mutated((c) => {
+      c.origin.claims[0].original_url = url;
+    });
+    assert.ok(codes(validateNewsjackCapture(capture)).includes('origin_invalid'), JSON.stringify(url));
+  }
+});
+
+test('origin freshness windows are tied to the run', () => {
+  for (const window of [
+    { start: '2020-01-01T00:00:00.000Z', end: '2030-01-01T00:00:00.000Z', hours: 1 },
+    { start: '2026-09-24T18:00:01.052Z', end: '2026-09-25T18:00:01.052Z', hours: 24 },
+    { start: '2026-09-24T18:00:00.052Z', end: '2026-09-25T18:00:00.052Z', hours: 23 }
+  ]) {
+    const capture = mutated((c) => {
+      c.origin.claims[0].freshness_window = window;
+    });
+    assert.ok(codes(validateNewsjackCapture(capture)).includes('origin_invalid'), JSON.stringify(window));
+  }
+});
+
+test('origin claims never change membership, including clusters without a claim', () => {
+  const withoutStudyClaim = captureToStoryDiscovery(
+    mutated((c) => {
+      c.origin.claims.splice(1, 1);
+    }),
+    { now: NOW }
+  );
+  const withoutOrigin = captureToStoryDiscovery(buildFixtureCapture({ withOrigin: false }), { now: NOW });
+  const strip = (document) => document.clusters.map((cluster) => ({ id: cluster.cluster_id, members: cluster.members }));
+  assert.deepEqual(strip(withoutStudyClaim), strip(withoutOrigin));
+  assert.equal(withoutStudyClaim.clusters.find((cluster) => cluster.cluster_id === STUDY_CLUSTER).origin_claims, undefined);
+  assert.ok(withoutStudyClaim.clusters.find((cluster) => cluster.cluster_id === STUDY_CLUSTER).members.length > 0);
+});
+
+test('source status must agree with the evidence present', () => {
+  for (const fn of [(c) => (c.sources.news_search.status = 'unavailable'), (c) => (c.sources.news_search.status = 'no_results'), (c) => (c.sources.news_search.evidence_count = 3)]) {
+    assert.ok(codes(validateNewsjackCapture(mutated(fn))).includes('source_evidence_inconsistent'));
+  }
+});
+
+test('capture times must be plausible calendar times', () => {
+  for (const year of ['0001', '2019', '2200']) {
+    const capture = mutated((c) => {
+      for (const step of c.process.steps) {
+        step.started_at = step.started_at.replace('2026', year);
+        step.exited_at = step.exited_at.replace('2026', year);
+      }
+      c.monitor.generated_at = c.monitor.generated_at.replace('2026', year);
+    });
+    const document = captureToStoryDiscovery(capture, { now: NOW });
+    assert.equal(document.status, 'abstain', year);
+    assert.equal(document.sources_checked[0].error, 'time_invalid', year);
+    assert.equal(validateStoryDiscovery(document).ok, true);
+  }
+});
+
+test('abstain errors name unknown keys generically, never by their text', () => {
+  const capture = mutated((c) => {
+    c.sources['Visit https://evil.example/claim now'] = structuredClone(c.sources.news_search);
+    c.signals[0].evidence[0]['https://evil.example/?token=1'] = 'x';
+  });
+  const document = captureToStoryDiscovery(capture, { now: NOW });
+  assert.equal(document.status, 'abstain');
+  assert.ok(document.errors.some((error) => error.path === '$.sources.*'));
+  assert.ok(document.errors.some((error) => error.path === '$.signals[0].evidence[0].*'));
+  assert.ok(!JSON.stringify(document).includes('evil.example'));
+});
+
+test('titles and outlet names are display text; host-like names are not outlets', () => {
+  assert.equal(displayText('Fare‮vote\u0007  set\u009b'), 'Fare vote set');
+  for (const value of ['www.evil.example/path', '169.254.169.254', '169.254.169.254/latest/meta-data', 'metro.internal/admin?token=abc', 'harbor-times.example:8080', '[fd00::1]', 'fd00::1']) {
+    assert.equal(outletText(value), '', value);
+  }
+  assert.equal(outletText('Harbor Times'), 'Harbor Times');
+  assert.equal(outletText('Reuters.com'), 'Reuters.com', 'a bare publication domain name with no path stays readable text');
+  const capture = mutated((c) => {
+    const evidence = c.signals.find((signal) => signal.id === STUDY_CLUSTER).evidence[0];
+    evidence.title = 'Transit agency‮ publishes\u0000 fare study';
+  });
+  const study = captureToStoryDiscovery(capture, { now: NOW }).clusters.find((cluster) => cluster.cluster_id === STUDY_CLUSTER);
+  assert.equal(study.members[0].article_title, 'Transit agency publishes fare study');
+});
+
+test('the projection stores copied snippets as empty titles and nulls over-long values instead of cutting them', () => {
+  const snippet = buildFixtureCapture().signals.flatMap((signal) => signal.evidence).find((evidence) => evidence.title_from_excerpt);
+  assert.equal(snippet.title, '');
+  assert.ok(!JSON.stringify(buildFixtureCapture()).includes('officials weigh options'));
+
+  const candidates = raw('raw-detector.json');
+  const clustered = raw('raw-cluster.json');
+  const study = (doc) => doc.signals.find((signal) => signal.id === STUDY_CLUSTER);
+  const astral = '\u{1d4d5}'.repeat(600); // 1200 UTF-16 units
+  for (const doc of [candidates, clustered]) {
+    const evidence = study(doc).evidence[0];
+    evidence.container = `Capital Observer${' '.repeat(300)}https://metro.internal/x`;
+    evidence.published_at = `2026-09-25T14:05:00.250Z${' '.repeat(60)}junk`;
+    evidence.title = astral;
+  }
+  const steps = ['version', 'detector_run', 'cluster'].map((name) => ({
+    step: name,
+    started_at: FIXTURE_TIMINGS[name][0],
+    exited_at: FIXTURE_TIMINGS[name][1],
+    exit_code: 0,
+    timed_out: false,
+    stdout_bytes: 10,
+    stderr_bytes: 0
+  }));
+  const capture = projectCapture({ request: FIXTURE_REQUEST, pin: NEWSJACK_PIN, binarySha256: null, mode: 'fixture', steps, candidates, clustered });
+  assert.deepEqual(validateNewsjackCapture(capture), { ok: true, errors: [] });
+  const evidence = capture.signals.find((signal) => signal.id === STUDY_CLUSTER).evidence[0];
+  assert.equal(evidence.container, null);
+  assert.equal(evidence.published_at, null);
+  assert.ok(evidence.title.length <= 1000 && evidence.title.length > 990);
+  assert.equal(Array.from(evidence.title).every((ch) => ch === '\u{1d4d5}'), true, 'no character is split');
+  const document = captureToStoryDiscovery(capture, { now: NOW });
+  assert.equal(document.clusters.find((cluster) => cluster.cluster_id === STUDY_CLUSTER), undefined);
+});
+
+test('rejected members are listed up to 200 per source while every rejection is counted', () => {
+  const capture = buildFixtureCapture({ withOrigin: false });
+  const ids = Array.from({ length: 50 }, (_, i) => i.toString(16).padStart(16, '0'));
+  capture.signals = ids.map((id, i) => ({
+    id,
+    evidence: Array.from({ length: 8 }, (_, j) => ({
+      source: 'news_search',
+      title: `Story ${i} item ${j}`,
+      url: `http://outlet-${i}-${j}.example/a`,
+      container: `Outlet ${i} ${j}`,
+      published_at: '2026-09-25T12:00:00Z',
+      title_from_excerpt: false
+    }))
+  }));
+  capture.clustering.groups = ids.map((id) => ({ cluster_id: id, signal_ids: [id] }));
+  Object.assign(capture.selection, { total_scored_signals: 50, total_emitted_signals: 50, signals_not_emitted: 0, evidence_truncated: 0, limit: 50 });
+  capture.request.limit = 50;
+  capture.sources.news_search.evidence_count = 400;
+  withId(capture);
+  assert.equal(validateNewsjackCapture(capture).ok, true);
+  const row = captureToStoryDiscovery(capture, { now: NOW }).sources_checked[0];
+  assert.equal(row.rejected_total, 400);
+  assert.equal(row.rejected_non_https_url, 400);
+  assert.equal(row.rejected_members.length, 200);
 });

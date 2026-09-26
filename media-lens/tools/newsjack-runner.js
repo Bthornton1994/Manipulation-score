@@ -206,9 +206,47 @@ export async function checkRunRequest(opts, { repoRoot = DEFAULT_REPO_ROOT } = {
   const outReal = await realpath(opts.outDir);
   const repoReal = await realpath(repoRoot).catch(() => repoRoot);
   if (isInsideOrEqual(repoReal, outReal)) fail('out_dir_in_repo', EXIT.usage);
+  if (opts.workRoot !== undefined && opts.workRoot !== null) {
+    if (typeof opts.workRoot !== 'string' || !isAbsolute(opts.workRoot)) fail('work_root_invalid', EXIT.usage);
+    let workInfo;
+    try {
+      workInfo = await lstat(opts.workRoot);
+    } catch {
+      fail('work_root_invalid', EXIT.usage);
+    }
+    if (!workInfo.isDirectory() || workInfo.isSymbolicLink()) fail('work_root_invalid', EXIT.usage);
+  }
+  const workReal = await realpath(opts.workRoot ?? tmpdir()).catch(() => null);
+  if (!workReal) fail('work_root_invalid', EXIT.usage);
+  if (isInsideOrEqual(repoReal, workReal)) fail('work_root_in_repo', EXIT.usage);
   if (typeof opts.binaryPath !== 'string' || !isAbsolute(opts.binaryPath)) fail('binary_path_invalid', EXIT.usage);
   if (!(await regularFile(opts.binaryPath, MAX_BINARY_BYTES))) fail('binary_path_invalid', EXIT.usage);
-  return request;
+  return { request, workRoot: workReal, outDir: outReal };
+}
+
+// Read a regular file without following a symlink swapped in after the
+// request check, and never more than maxBytes.
+async function readBoundedNoFollow(path, maxBytes) {
+  let handle;
+  try {
+    handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+    const info = await handle.stat();
+    if (!info.isFile() || info.size > maxBytes) return null;
+    const buffer = await handle.readFile();
+    return buffer.length <= maxBytes ? buffer : null;
+  } catch {
+    return null;
+  } finally {
+    await handle?.close().catch(() => {});
+  }
+}
+
+// The out dir is re-checked right before writing, so a symlink swapped in
+// during the run cannot redirect the output.
+async function checkOutDirUnchanged(outDir) {
+  const info = await lstat(outDir).catch(() => null);
+  if (!info || !info.isDirectory() || info.isSymbolicLink()) fail('out_dir_changed', EXIT.write);
+  if ((await realpath(outDir).catch(() => null)) !== outDir) fail('out_dir_changed', EXIT.write);
 }
 
 function runStep({ spawnImpl, binary, argv, env, cwd, timeoutMs, maxStdoutBytes, now, signal }) {
@@ -228,32 +266,67 @@ function runStep({ spawnImpl, binary, argv, env, cwd, timeoutMs, maxStdoutBytes,
     let timedOut = false;
     let aborted = false;
     let spawnFailed = false;
-    let killTimer = null;
-    const killGroup = () => {
+    let killing = false;
+    let settled = false;
+    const timers = [];
+    const later = (fn, ms) => {
+      const timer = setTimeout(fn, ms);
+      timer.unref?.();
+      timers.push(timer);
+    };
+    const signalGroup = (name) => {
       if (child.pid === undefined) return;
       try {
-        process.kill(-child.pid, 'SIGTERM');
+        process.kill(-child.pid, name);
       } catch {
-        // already gone
+        // group already gone
       }
-      killTimer = setTimeout(() => {
-        try {
-          process.kill(-child.pid, 'SIGKILL');
-        } catch {
-          // already gone
-        }
-      }, KILL_GRACE_MS);
-      killTimer.unref?.();
     };
-    const timer = setTimeout(() => {
-      timedOut = true;
-      killGroup();
-    }, timeoutMs);
+    const settle = (exitCode, exitSignal) => {
+      if (settled) return;
+      settled = true;
+      for (const timer of timers) clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      // Reap anything left in the group.
+      signalGroup('SIGKILL');
+      resolve({
+        spawnFailed,
+        exitCode,
+        exitSignal,
+        timedOut,
+        overflow,
+        aborted,
+        stdout: Buffer.concat(chunks).toString('utf8'),
+        stdoutBytes,
+        stderrBytes,
+        startedMs,
+        exitedMs: now()
+      });
+    };
+    // Kill once: SIGTERM to the group, SIGKILL after a grace period, and a
+    // hard deadline that stops waiting even if a descendant left the group
+    // and still holds the output pipes.
+    const killGroup = () => {
+      if (killing) return;
+      killing = true;
+      signalGroup('SIGTERM');
+      later(() => signalGroup('SIGKILL'), KILL_GRACE_MS);
+      later(() => {
+        child.stdout.destroy();
+        child.stderr.destroy();
+        settle(null, 'SIGKILL');
+      }, 2 * KILL_GRACE_MS);
+    };
     const onAbort = () => {
       aborted = true;
       killGroup();
     };
-    signal?.addEventListener('abort', onAbort, { once: true });
+    later(() => {
+      timedOut = true;
+      killGroup();
+    }, timeoutMs);
+    if (signal?.aborted) onAbort();
+    else signal?.addEventListener('abort', onAbort, { once: true });
     child.stdout.on('data', (chunk) => {
       stdoutBytes += chunk.length;
       if (stdoutBytes > maxStdoutBytes) {
@@ -271,32 +344,7 @@ function runStep({ spawnImpl, binary, argv, env, cwd, timeoutMs, maxStdoutBytes,
     child.on('error', () => {
       spawnFailed = true;
     });
-    child.on('close', (exitCode, exitSignal) => {
-      clearTimeout(timer);
-      signal?.removeEventListener('abort', onAbort);
-      // Reap any grandchild left in the group.
-      if (child.pid !== undefined) {
-        try {
-          process.kill(-child.pid, 'SIGKILL');
-        } catch {
-          // group already empty
-        }
-      }
-      if (killTimer) clearTimeout(killTimer);
-      resolve({
-        spawnFailed,
-        exitCode,
-        exitSignal,
-        timedOut,
-        overflow,
-        aborted,
-        stdout: Buffer.concat(chunks).toString('utf8'),
-        stdoutBytes,
-        stderrBytes,
-        startedMs,
-        exitedMs: now()
-      });
-    });
+    child.on('close', (exitCode, exitSignal) => settle(exitCode, exitSignal));
   });
 }
 
@@ -330,7 +378,6 @@ async function writeAtomic(path, text) {
 export async function runNewsjackCapture(opts = {}) {
   const {
     live = false,
-    workRoot = tmpdir(),
     pin = NEWSJACK_PIN,
     spawnImpl = nodeSpawn,
     now = () => Date.now(),
@@ -345,8 +392,12 @@ export async function runNewsjackCapture(opts = {}) {
     signal = null
   } = opts;
   let privateDir = null;
+  const checkAbort = () => {
+    if (signal?.aborted) fail('newsjack_killed:aborted', EXIT.process);
+  };
   try {
-    const request = await checkRunRequest(opts, { repoRoot });
+    const { request, workRoot, outDir } = await checkRunRequest(opts, { repoRoot });
+    checkAbort();
 
     if (live) {
       if (searchProviderStatus?.medialyst !== 'implemented') fail('no_approved_transport', EXIT.refused);
@@ -371,7 +422,10 @@ export async function runNewsjackCapture(opts = {}) {
     const binary = join(privateDir, 'bin', 'newsjack');
     await copyFile(opts.binaryPath, binary);
     await chmod(binary, 0o500);
-    if (sha256(await readFile(binary)) !== expectedHash) fail('binary_hash_mismatch', EXIT.refused);
+    const verifyBinary = async () => {
+      if (sha256(await readFile(binary)) !== expectedHash) fail('binary_hash_mismatch', EXIT.refused);
+    };
+    await verifyBinary();
 
     const env = buildChildEnv({ privateDir });
     const workDir = join(privateDir, 'work');
@@ -383,6 +437,9 @@ export async function runNewsjackCapture(opts = {}) {
     };
     const steps = [];
     const runPinnedStep = async (step) => {
+      checkAbort();
+      // Re-verify the exact bytes before every execution.
+      await verifyBinary();
       const result = await runStep({
         spawnImpl,
         binary,
@@ -437,7 +494,8 @@ export async function runNewsjackCapture(opts = {}) {
     let targeted = null;
     let findingsSha256 = null;
     if (opts.originFindings) {
-      const findingsText = await readFile(opts.originFindings);
+      const findingsText = await readBoundedNoFollow(opts.originFindings, MAX_FINDINGS_BYTES);
+      if (!findingsText) fail('origin_findings_invalid', EXIT.usage);
       findingsSha256 = sha256(findingsText);
       await writeFileExclusive(paths.clustered, clusterRun.stdout);
       await writeFileExclusive(paths.findings, findingsText);
@@ -466,11 +524,13 @@ export async function runNewsjackCapture(opts = {}) {
     if (document.status !== 'ok' && document.status !== 'empty') fail(`document_invalid:${document.reason}`, EXIT.invalid);
     if (!validateStoryDiscovery(document).ok) fail('document_invalid', EXIT.invalid);
 
+    checkAbort();
     const id16 = capture.capture_id.slice(0, 16);
     const captureFile = `newsjack-capture-${id16}.json`;
     const documentFile = `story-discovery-${id16}.json`;
-    await writeAtomic(join(opts.outDir, captureFile), `${JSON.stringify(capture, null, 2)}\n`);
-    await writeAtomic(join(opts.outDir, documentFile), `${JSON.stringify(document, null, 2)}\n`);
+    await checkOutDirUnchanged(outDir);
+    await writeAtomic(join(outDir, captureFile), `${JSON.stringify(capture, null, 2)}\n`);
+    await writeAtomic(join(outDir, documentFile), `${JSON.stringify(document, null, 2)}\n`);
     return {
       status: 'ok',
       exitCode: EXIT.ok,

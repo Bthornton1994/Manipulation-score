@@ -59,6 +59,12 @@ export const NEWSJACK_PIN = deepFreeze({
     'apps/cli/cmd/newsjack/paths.go': '3588d2d9f54bbfa8aaceb7ccea341b2993704556',
     'apps/cli/cmd/newsjack/http.go': '1d03f40339d9f9833a3b4af2c6069ec8489f49a4',
     'apps/cli/cmd/newsjack/distribution.go': '1922abe731eef43ce77268b9d72a55f79a98268d',
+    'apps/cli/cmd/newsjack/auth.go': 'dae156da5050bd47660c3741edc0012247623b52',
+    'apps/cli/cmd/newsjack/auth_oauth.go': '4622b7ba7ccfd1c7914f437031d3e3cec669821a',
+    'apps/cli/cmd/newsjack/api_commands.go': '28afa99c310e139572ad7be41db3f2e42a4f6628',
+    'apps/cli/cmd/newsjack/detector_store.go': 'a92d5026c571a5a5cbc4b92344546f1755a28a83',
+    'apps/cli/cmd/newsjack/bundle.go': '13998e735af06c6cb02881439bd0c0199f26a0be',
+    'apps/cli/cmd/newsjack/config.go': 'a9599fbe095ded215219b153c5a8d8e4fa979bca',
     'apps/cli/go.mod': '0e2f01059969b7f03561705751e508eadc33c25b'
   },
   // The only subcommands the runner ever executes.

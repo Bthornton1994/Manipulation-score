@@ -1,7 +1,9 @@
 // Shared Newsjack capture fixtures for tests. The raw files in
-// media-lens/fixtures/newsjack-capture/ are hand-written in the exact key
-// structure the pinned Newsjack v0.1.19 source emits. They were not produced
-// by a Newsjack binary.
+// media-lens/fixtures/newsjack-capture/ are hand-written to follow the key
+// structure, story-size shape, scores, and source status the pinned Newsjack
+// v0.1.19 source emits for the default empty profile. Some evidence values are
+// unusual on purpose (see media-lens/docs/newsjack-discovery.md). They were
+// not produced by a Newsjack binary.
 
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';

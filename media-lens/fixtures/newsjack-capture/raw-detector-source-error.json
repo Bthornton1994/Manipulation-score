@@ -1,0 +1,74 @@
+{
+  "monitor": {
+    "name": null,
+    "generated_at": "2026-09-25T18:10:00.018342Z",
+    "profile": {
+      "company": null,
+      "topics": [],
+      "competitors": [],
+      "search_terms": [],
+      "feed_urls": [],
+      "x_news": {
+        "enabled": true
+      },
+      "x_trends": {
+        "mode": "none",
+        "woeids": [],
+        "locations": []
+      },
+      "spokespeople": [],
+      "standing": [],
+      "exclusions": []
+    },
+    "queries": [
+      "transit fare vote"
+    ],
+    "feed_urls": [],
+    "sources_requested": [
+      "news_search"
+    ],
+    "sources_used": [
+      "news_search"
+    ],
+    "lookback_days": 1,
+    "max_age_hours": 24,
+    "new_only": false,
+    "depth": "quick",
+    "mock": false
+  },
+  "signals": [],
+  "diagnostics": {
+    "evidence_by_source": {},
+    "hygiene_rejections": {},
+    "signals_by_lane": {},
+    "emitted_by_lane": {},
+    "lane_caps": null,
+    "selection": {
+      "mode": "mechanical_floor",
+      "limit": 20,
+      "min_queue_priority": 0,
+      "min_major_news": 0
+    },
+    "total_scored_signals": 0,
+    "total_emitted_signals": 0,
+    "source_status": {
+      "news_search": {
+        "requested": true,
+        "available": true,
+        "attempted": true,
+        "evidence_count": 0,
+        "status": "error"
+      }
+    }
+  },
+  "source_errors": {
+    "transit fare vote": {
+      "news_search": "Post \"https://medialyst.ai/api/v1/news/search\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
+    }
+  },
+  "store": {
+    "saved": false,
+    "run_id": null,
+    "path": null
+  }
+}

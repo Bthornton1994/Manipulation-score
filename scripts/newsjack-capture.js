@@ -16,8 +16,10 @@
 // Exit codes: 0 ok, 1 convert abstained, 2 usage, 3 gate or pin refused,
 // 4 Newsjack process failure, 5 output validation failure, 6 write failure.
 
+import { realpathSync } from 'node:fs';
 import { lstat, readFile } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { validateStoryDiscovery } from '../media-lens/schema/story-discovery.js';
 import { runNewsjackCapture } from '../media-lens/tools/newsjack-runner.js';
 import { isKillSwitchAsserted } from '../media-lens/worker/config.js';
@@ -37,6 +39,7 @@ const RUN_FLAGS = new Map([
   ['--work-root', 'workRoot']
 ]);
 const INTEGER_FLAGS = new Set(['maxAgeHours', 'lookbackDays', 'limit']);
+const STOP_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
 
 function parseRunArgs(args) {
   const opts = { live: false };
@@ -126,8 +129,8 @@ export async function main(argv, deps = {}) {
   }
   const controller = new AbortController();
   const abort = () => controller.abort();
-  process.once('SIGINT', abort);
-  process.once('SIGTERM', abort);
+  // A closed terminal must stop the child process group too.
+  for (const name of STOP_SIGNALS) process.once(name, abort);
   try {
     const result = await runCapture({
       ...opts,
@@ -150,15 +153,14 @@ export async function main(argv, deps = {}) {
     write(result.status === 'ok' ? stdout : stderr, summary);
     return result.exitCode;
   } finally {
-    process.removeListener('SIGINT', abort);
-    process.removeListener('SIGTERM', abort);
+    for (const name of STOP_SIGNALS) process.removeListener(name, abort);
   }
 }
 
 function isRunAsCli() {
   if (!process.argv[1]) return false;
   try {
-    return import.meta.url === new URL(`file://${process.argv[1]}`).href;
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
   } catch {
     return false;
   }

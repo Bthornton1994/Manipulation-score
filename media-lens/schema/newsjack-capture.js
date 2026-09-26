@@ -51,6 +51,9 @@ const HEX16 = /^[a-f0-9]{16}$/;
 const HEX40 = /^[a-f0-9]{40}$/;
 const HEX64 = /^[a-f0-9]{64}$/;
 const STRICT_UTC_MS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+const EARLIEST_MS = Date.parse('2020-01-01T00:00:00.000Z');
+const LATEST_MS = Date.parse('2100-01-01T00:00:00.000Z');
 const RFC3339_NANO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
 const CLOCK_SLACK_MS = 2000;
 
@@ -59,6 +62,12 @@ export function isStrictUtcMs(value) {
   if (typeof value !== 'string' || !STRICT_UTC_MS.test(value)) return false;
   const ms = Date.parse(value);
   return Number.isFinite(ms) && new Date(ms).toISOString() === value;
+}
+
+export function isRealDate(value) {
+  if (typeof value !== 'string' || !DATE_ONLY.test(value)) return false;
+  const ms = Date.parse(`${value}T00:00:00.000Z`);
+  return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) === value;
 }
 
 // Newsjack's own RFC3339Nano UTC clock string, checked for a real date.
@@ -113,14 +122,24 @@ function isInt(value, min, max) {
   return Number.isInteger(value) && value >= min && value <= max;
 }
 
+// A citation URL must already be in canonical form, so no control
+// characters, whitespace, or unnormalized text can ride along. The converter
+// also applies the public-link policy before showing it.
 function isHttpsNoQuery(value) {
   if (typeof value !== 'string' || value.length > NEWSJACK_CAPTURE_LIMITS.url_chars) return false;
   try {
     const url = new URL(value);
-    return url.protocol === 'https:' && url.search === '' && url.username === '' && url.password === '';
+    return url.href === value && url.protocol === 'https:' && url.search === '' && url.username === '' && url.password === '';
   } catch {
     return false;
   }
+}
+
+function precisionOf(value) {
+  if (value === null) return null;
+  if (isStrictUtcMs(value)) return 'time';
+  if (isRealDate(value)) return 'date';
+  return 'invalid';
 }
 
 function isNullableString(value, max) {
@@ -141,8 +160,9 @@ export function validateNewsjackCapture(value, { pin = NEWSJACK_PIN } = {}) {
   const exactKeys = (obj, keys, path, optional = []) => {
     if (!isPlainObject(obj)) return fail('missing_field', path);
     let ok = true;
+    // Unknown key names are not echoed: they could carry arbitrary text.
     for (const key of Object.keys(obj)) {
-      if (!keys.includes(key) && !optional.includes(key)) ok = fail(`unknown_field`, `${path}.${key}`);
+      if (!keys.includes(key) && !optional.includes(key)) ok = fail('unknown_field', `${path}.*`);
     }
     for (const key of keys) {
       if (!Object.prototype.hasOwnProperty.call(obj, key)) ok = fail('missing_field', `${path}.${key}`);
@@ -227,6 +247,10 @@ export function validateNewsjackCapture(value, { pin = NEWSJACK_PIN } = {}) {
           }
           const started = Date.parse(step.started_at);
           const exited = Date.parse(step.exited_at);
+          if (started < EARLIEST_MS || exited > LATEST_MS) {
+            fail('time_invalid', path);
+            return;
+          }
           if (started > exited || started < previousExit) fail('process_order_invalid', path);
           previousExit = exited;
           if (!isInt(step.stdout_bytes, 0, Number.MAX_SAFE_INTEGER) || !isInt(step.stderr_bytes, 0, Number.MAX_SAFE_INTEGER)) fail('process_incomplete', path);
@@ -267,6 +291,7 @@ export function validateNewsjackCapture(value, { pin = NEWSJACK_PIN } = {}) {
           NEWSJACK_SOURCE_KIND_NAMES.includes(evidence.source) &&
           typeof evidence.title === 'string' &&
           evidence.title.length <= NEWSJACK_CAPTURE_LIMITS.title_chars &&
+          (evidence.title_from_excerpt !== true || evidence.title === '') &&
           typeof evidence.url === 'string' &&
           evidence.url.length <= NEWSJACK_CAPTURE_LIMITS.url_chars &&
           isNullableString(evidence.container, NEWSJACK_CAPTURE_LIMITS.container_chars) &&
@@ -299,11 +324,11 @@ export function validateNewsjackCapture(value, { pin = NEWSJACK_PIN } = {}) {
     fail('source_status_invalid', '$.sources');
   } else {
     for (const [kind, entry] of Object.entries(sources)) {
-      const path = `$.sources.${kind}`;
       if (!NEWSJACK_SOURCE_KIND_NAMES.includes(kind)) {
-        fail('source_status_invalid', path);
+        fail('source_status_invalid', '$.sources.*');
         continue;
       }
+      const path = `$.sources.${kind}`;
       if (!exactKeys(entry, ['requested', 'available', 'attempted', 'evidence_count', 'status', 'error_class'], path)) continue;
       if (
         typeof entry.requested !== 'boolean' ||
@@ -315,6 +340,22 @@ export function validateNewsjackCapture(value, { pin = NEWSJACK_PIN } = {}) {
         fail('source_status_invalid', path);
       }
       if (entry.error_class !== null && !NEWSJACK_ERROR_CLASSES.includes(entry.error_class)) fail('error_class_invalid', `${path}.error_class`);
+    }
+  }
+
+  // Evidence present in the capture must agree with its source's status.
+  if (isPlainObject(sources) && Array.isArray(value.signals)) {
+    const itemsByKind = {};
+    for (const signal of value.signals) {
+      for (const evidence of Array.isArray(signal?.evidence) ? signal.evidence : []) {
+        if (typeof evidence?.source === 'string') itemsByKind[evidence.source] = (itemsByKind[evidence.source] || 0) + 1;
+      }
+    }
+    for (const [kind, count] of Object.entries(itemsByKind)) {
+      const entry = sources[kind];
+      if (!isPlainObject(entry) || !['used', 'partial_error'].includes(entry.status) || !(entry.evidence_count >= count)) {
+        fail('source_evidence_inconsistent', NEWSJACK_SOURCE_KIND_NAMES.includes(kind) ? `$.sources.${kind}` : '$.sources.*');
+      }
     }
   }
 
@@ -362,6 +403,7 @@ export function validateNewsjackCapture(value, { pin = NEWSJACK_PIN } = {}) {
           'cluster_id',
           'same_story_assessment',
           'first_public_at',
+          'first_public_at_precision',
           'original_url',
           'timestamp_evidence',
           'confidence',
@@ -383,22 +425,33 @@ export function validateNewsjackCapture(value, { pin = NEWSJACK_PIN } = {}) {
           (claim.freshness_basis_precision === null || claim.freshness_basis_precision === 'time' || claim.freshness_basis_precision === 'date') &&
           typeof claim.detector_timestamp_fallback === 'boolean';
         if (!enumsOk) fail('origin_invalid', path);
-        if (claim.first_public_at !== null && !isStrictUtcMs(claim.first_public_at)) fail('origin_invalid', `${path}.first_public_at`);
+        const firstPrecision = precisionOf(claim.first_public_at);
+        if (firstPrecision === 'invalid' || claim.first_public_at_precision !== firstPrecision) fail('origin_invalid', `${path}.first_public_at`);
         if (claim.original_url !== null && !isHttpsNoQuery(claim.original_url)) fail('origin_invalid', `${path}.original_url`);
         if (!Array.isArray(claim.timestamp_evidence) || claim.timestamp_evidence.length > NEWSJACK_CAPTURE_LIMITS.timestamp_evidence_per_claim) {
           fail('origin_invalid', `${path}.timestamp_evidence`);
         } else {
           claim.timestamp_evidence.forEach((entry, entryIndex) => {
             const entryPath = `${path}.timestamp_evidence[${entryIndex}]`;
-            if (!exactKeys(entry, ['url', 'published_at'], entryPath)) return;
-            if (!isHttpsNoQuery(entry.url) || !isStrictUtcMs(entry.published_at)) fail('origin_invalid', entryPath);
+            if (!exactKeys(entry, ['url', 'published_at', 'precision'], entryPath)) return;
+            const entryPrecision = precisionOf(entry.published_at);
+            if (!isHttpsNoQuery(entry.url) || entryPrecision === 'invalid' || entry.precision !== entryPrecision) fail('origin_invalid', entryPath);
           });
         }
         if (exactKeys(claim.freshness_window, ['start', 'end', 'hours'], `${path}.freshness_window`)) {
+          // origin-apply's window must be the run's own: it ends at Newsjack's
+          // detector clock and spans the request's max_age_hours.
           const window = claim.freshness_window;
-          if (!isStrictUtcMs(window.start) || !isStrictUtcMs(window.end) || !isInt(window.hours, 1, 48) || window.start > window.end) {
-            fail('origin_invalid', `${path}.freshness_window`);
-          }
+          const generated = isPlainObject(value.monitor) ? parseNewsjackClock(value.monitor.generated_at) : null;
+          const windowOk =
+            isStrictUtcMs(window.start) &&
+            isStrictUtcMs(window.end) &&
+            isPlainObject(request) &&
+            window.hours === request.max_age_hours &&
+            generated !== null &&
+            window.end === new Date(generated).toISOString() &&
+            Date.parse(window.end) - Date.parse(window.start) === window.hours * 60 * 60 * 1000;
+          if (!windowOk) fail('origin_invalid', `${path}.freshness_window`);
         }
         if (exactKeys(claim.withheld, ['urls', 'invalid_values', 'timestamp_evidence_truncated'], `${path}.withheld`)) {
           if (['urls', 'invalid_values', 'timestamp_evidence_truncated'].some((key) => !isInt(claim.withheld[key], 0, Number.MAX_SAFE_INTEGER))) {

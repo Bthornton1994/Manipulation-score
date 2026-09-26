@@ -22,19 +22,22 @@ import { FRAME_NOTE, OMISSION_NOTE, SAME_STORY_NOT_INDEPENDENT } from './cluster
 import { NEWSJACK_PIN } from './newsjack-pin.js';
 import { SEARCH_PROVIDER_MODE_STATUS } from './search-provider.js';
 
-export const NEWSJACK_CLUSTER_BASIS = 'newsjack_cluster_shared_url_or_title_overlap';
+export const NEWSJACK_CLUSTER_BASIS = 'newsjack_detector_text_similarity_and_cluster_overlap';
 export const NEWSJACK_MEMBER_BASIS = 'newsjack_cluster_member';
 export const NEWSJACK_WINDOW_BASIS = 'media_lens_published_at_filter_from_max_age_hours';
 export const NEWSJACK_RETRIEVED_AT_BASIS = 'runner_observed_detector_exit_upper_bound';
 export const NEWSJACK_ORIGIN_NOTE =
   "Written by an AI agent following Newsjack's story-origin-check skill. Newsjack checked the finding's structure and computed the freshness status from the agent's timestamps. Nobody verified the timestamps or URLs. This is not independent reporting and does not change the cluster.";
+export const NEWSJACK_GROUPING_NOTE =
+  "Newsjack's detector puts evidence in one signal when it shares an exact URL or enough words across titles and snippets (Jaccard 0.32), then its cluster step merges signals that share a URL or at least two significant title words (overlap 0.6). This is a text-similarity heuristic.";
 export const NEWSJACK_INDEPENDENCE_NOTE =
-  'Newsjack groups headlines by shared URLs or title words. That is not evidence of independent reporting, so no member is labeled independent.';
+  'Text similarity is not evidence of independent reporting, so no member is labeled independent.';
 
-// Which Newsjack evidence kinds may become story members. Only Medialyst
-// news_search returns publisher articles. Feeds are served by the approved
-// feed client in discover.js instead, and forum, social, and trend kinds are
-// not outlet articles.
+// Which Newsjack evidence kinds may become story members. news_search is the
+// only kind meant to return publisher articles, but its results are not
+// trusted to be outlets: hosts are checked too (NON_OUTLET_HOSTS). Feeds are
+// served by the approved feed client in discover.js instead, and forum,
+// social, and trend kinds are not outlet articles.
 export const NEWSJACK_SOURCE_KINDS = Object.freeze({
   news_search: Object.freeze({ member_eligible: true, live_search_provider_mode: 'medialyst' }),
   major_feed: Object.freeze({ member_eligible: false, reason: 'served_by_approved_feed_client' }),
@@ -49,6 +52,7 @@ export const NEWSJACK_MEMBER_REJECTIONS = Object.freeze([
   'incomplete',
   'non_https_url',
   'non_public_url',
+  'non_outlet_host',
   'duplicate_url',
   'title_from_excerpt',
   'source_kind_excluded',
@@ -109,6 +113,41 @@ function isNonPublicHostName(host) {
   return NON_PUBLIC_HOST_SUFFIXES.some((suffix) => host === suffix.slice(1) || host.endsWith(suffix));
 }
 
+// Forum, social, video, short-link, and aggregator hosts. A news-search
+// result on one of these is not an outlet article, whatever its evidence
+// kind says, matching the source-kind policy above.
+export const NON_OUTLET_HOSTS = Object.freeze([
+  'reddit.com',
+  'redd.it',
+  'news.ycombinator.com',
+  'x.com',
+  'twitter.com',
+  't.co',
+  'facebook.com',
+  'fb.watch',
+  'instagram.com',
+  'threads.net',
+  'tiktok.com',
+  'youtube.com',
+  'youtu.be',
+  'linkedin.com',
+  'bsky.app',
+  'news.google.com',
+  'google.com',
+  'bing.com',
+  'duckduckgo.com'
+]);
+
+export function isNonOutletHost(url) {
+  let host;
+  try {
+    host = new URL(url).hostname.toLowerCase().replace(/\.$/, '');
+  } catch {
+    return false;
+  }
+  return NON_OUTLET_HOSTS.some((entry) => host === entry || host.endsWith(`.${entry}`));
+}
+
 // Classify a candidate canonical source link. Only public https URLs can
 // become user-facing links. Nothing here fetches the URL.
 export function classifySourceUrl(value) {
@@ -144,13 +183,29 @@ function isPathLikeText(value) {
   return /^(?:\/|~|\.{1,2}\/|[A-Za-z]:[\\/])/.test(value) || value.includes('\\');
 }
 
-// Outlet names are display text. Invisible format characters are removed. A
-// value with no letter or digit, or one that reads as a URL or a file path,
-// is not an outlet name.
+// A host name with a path, query, or port, a www. name, or an IP address
+// reads as a link in many renderers even without a scheme.
+function isHostLikeText(value) {
+  return (
+    /^www\./i.test(value) ||
+    /^[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+(?:[/?#]|:\d)/u.test(value) ||
+    /^\d{1,3}(?:\.\d{1,3}){3}$/.test(value) ||
+    /^\[?[0-9a-f]*:[0-9a-f:]+\]?$/i.test(value)
+  );
+}
+
+// Display text: control characters and invisible format characters
+// (including bidi overrides) are removed and whitespace is collapsed.
+export function displayText(value) {
+  if (typeof value !== 'string') return '';
+  return value.replace(/[\p{Cc}\p{Cf}]/gu, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// Outlet names are display text. A value with no letter or digit, or one
+// that reads as a URL, a host name, or a file path, is not an outlet name.
 export function outletText(value) {
-  const raw = typeof value === 'string' ? value : '';
-  const normalized = raw.replace(/\p{Cf}/gu, '').trim().replace(/\s+/g, ' ');
-  if (!normalized || !/[\p{L}\p{N}]/u.test(normalized) || isUrlLikeText(normalized) || isPathLikeText(normalized)) return '';
+  const normalized = displayText(typeof value === 'string' ? value.replace(/\p{Cf}/gu, '') : '');
+  if (!normalized || !/[\p{L}\p{N}]/u.test(normalized) || isUrlLikeText(normalized) || isPathLikeText(normalized) || isHostLikeText(normalized)) return '';
   return normalized.slice(0, 200);
 }
 
@@ -178,7 +233,8 @@ const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 export function parseProviderTimestamp(value) {
   if (value === null || value === undefined || value === '') return { value: null, reason: 'missing' };
   if (typeof value !== 'string') return { value: null, reason: 'unparseable' };
-  const raw = value.trim();
+  // No trimming: surrounding text means the value is not a clean time.
+  const raw = value;
   if (DATE_ONLY.test(raw)) return { value: null, reason: 'date_only' };
   const match = PROVIDER_TIME.exec(raw);
   if (!match) return { value: null, reason: 'unparseable' };
@@ -274,9 +330,30 @@ function stepTime(capture, step, field) {
   return capture.process.steps.find((entry) => entry.step === step)?.[field] ?? null;
 }
 
+function publicCitationUrl(value) {
+  if (value === null) return { url: null, withheld: false };
+  const classified = classifySourceUrl(value);
+  if (!classified.url || new URL(classified.url).search !== '') return { url: null, withheld: true };
+  return { url: classified.url, withheld: false };
+}
+
 function originClaimFor(capture, clusterId) {
   const claim = capture.origin?.claims.find((entry) => entry.cluster_id === clusterId);
   if (!claim) return null;
+  // The capture validator checks shape only; URLs go through the same public
+  // link policy as member URLs before they are shown.
+  let withheldUrls = claim.withheld.urls;
+  const original = publicCitationUrl(claim.original_url);
+  if (original.withheld) withheldUrls += 1;
+  const timestampEvidence = [];
+  for (const entry of claim.timestamp_evidence) {
+    const citation = publicCitationUrl(entry.url);
+    if (!citation.url) {
+      withheldUrls += 1;
+      continue;
+    }
+    timestampEvidence.push({ url: citation.url, published_at: entry.published_at, precision: entry.precision });
+  }
   return {
     authored_by: 'ai_agent_via_story_origin_skill',
     verification: 'unverified',
@@ -284,15 +361,16 @@ function originClaimFor(capture, clusterId) {
     note: NEWSJACK_ORIGIN_NOTE,
     same_story_assessment: claim.same_story_assessment,
     first_public_at: claim.first_public_at,
-    original_url: claim.original_url,
-    timestamp_evidence: claim.timestamp_evidence.map((entry) => ({ url: entry.url, published_at: entry.published_at })),
+    first_public_at_precision: claim.first_public_at_precision,
+    original_url: original.url,
+    timestamp_evidence: timestampEvidence,
     confidence: claim.confidence,
     freshness_status: claim.freshness_status,
     freshness_basis_field: claim.freshness_basis_field,
     freshness_basis_precision: claim.freshness_basis_precision,
     freshness_window: { ...claim.freshness_window },
     detector_timestamp_fallback: claim.detector_timestamp_fallback,
-    withheld: { ...claim.withheld }
+    withheld: { ...claim.withheld, urls: withheldUrls }
   };
 }
 
@@ -405,9 +483,11 @@ export function captureToStoryDiscovery(input, { now, pin = NEWSJACK_PIN, search
 
   const clusters = [];
   let clustersWithoutMembers = 0;
+  // A URL is considered once across the whole document: later copies, in
+  // any cluster and whatever time they report, are counted as duplicates.
+  const seenUrlKeys = new Set();
   for (const group of capture.clustering.groups) {
     const members = [];
-    const seenUrlKeys = new Set();
     for (const signalId of group.signal_ids) {
       const signal = signalsById.get(signalId);
       for (const evidence of signal.evidence) {
@@ -421,7 +501,7 @@ export function captureToStoryDiscovery(input, { now, pin = NEWSJACK_PIN, search
           reject(kind, 'title_from_excerpt', group.cluster_id, signalId, outlet);
           continue;
         }
-        const title = evidence.title.trim();
+        const title = displayText(evidence.title);
         const classified = classifySourceUrl(evidence.url);
         if (!outlet || !title || classified.reason === 'incomplete') {
           reject(kind, 'incomplete', group.cluster_id, signalId, outlet);
@@ -434,6 +514,11 @@ export function captureToStoryDiscovery(input, { now, pin = NEWSJACK_PIN, search
         const urlKey = normalizedURLKey(classified.url);
         if (seenUrlKeys.has(urlKey)) {
           reject(kind, 'duplicate_url', group.cluster_id, signalId, outlet);
+          continue;
+        }
+        seenUrlKeys.add(urlKey);
+        if (isNonOutletHost(classified.url)) {
+          reject(kind, 'non_outlet_host', group.cluster_id, signalId, outlet);
           continue;
         }
         const published = parseProviderTimestamp(evidence.published_at);
@@ -450,7 +535,6 @@ export function captureToStoryDiscovery(input, { now, pin = NEWSJACK_PIN, search
           reject(kind, 'outside_window', group.cluster_id, signalId, outlet);
           continue;
         }
-        seenUrlKeys.add(urlKey);
         const syndicated = isSharedSyndicationHost(classified.url);
         members.push({
           outlet,
@@ -484,8 +568,10 @@ export function captureToStoryDiscovery(input, { now, pin = NEWSJACK_PIN, search
         title_overlap: capture.clustering.title_overlap,
         min_shared_tokens: capture.clustering.min_shared_tokens,
         detector_jaccard: 0.32,
+        detector_text: 'title_and_snippet',
         basis: 'pinned_source_review'
       },
+      grouping_note: NEWSJACK_GROUPING_NOTE,
       window,
       sources_checked: [...rows.values()].map((row) => row.source_id),
       members,
@@ -506,14 +592,19 @@ export function captureToStoryDiscovery(input, { now, pin = NEWSJACK_PIN, search
   for (const cluster of clusters) cluster.sources_checked = sourcesChecked.map((row) => row.source_id);
 
   const status = clusters.length > 0 ? 'ok' : 'empty';
+  // An empty result means something only when a member-eligible source was
+  // actually checked. Otherwise say that nothing was checked.
+  const eligibleChecked = sourcesChecked.some((row) => row.member_eligible && (row.outcome === 'checked' || row.outcome === 'partial'));
   const label = mode === 'mock' ? 'Newsjack mock run: synthetic data from a pinned binary, not live coverage.' : 'Newsjack fixture capture: hand-written example data, not live coverage.';
   const document = baseDocument({
     status,
-    reason: status === 'ok' ? 'newsjack_capture_converted' : 'no_accepted_members',
+    reason: status === 'ok' ? 'newsjack_capture_converted' : eligibleChecked ? 'no_accepted_members' : 'no_member_source_checked',
     message:
       status === 'ok'
-        ? `${label} Members are grouped by shared URLs or title words, and none is labeled independent. ${OMISSION_NOTE}`
-        : `${label} No evidence item met the member rules. Dropped items are counted by reason on each sources_checked row. ${OMISSION_NOTE}`,
+        ? `${label} Members are grouped by Newsjack's text-similarity heuristics, and none is labeled independent. ${OMISSION_NOTE}`
+        : eligibleChecked
+          ? `${label} No evidence item met the member rules. Dropped items are counted by reason on each sources_checked row. ${OMISSION_NOTE}`
+          : `${label} No news-search results were returned, so nothing was checked. Each sources_checked row gives the outcome and error class. ${OMISSION_NOTE}`,
     data_origin: 'fixture',
     fixture_labeled: true,
     retrieved_at: retrievedAt,
@@ -527,15 +618,17 @@ export function captureToStoryDiscovery(input, { now, pin = NEWSJACK_PIN, search
       version: capture.newsjack.version,
       commit: capture.newsjack.commit,
       binary_sha256: capture.newsjack.binary_sha256,
-      binary_check: mode === 'mock' ? 'matched' : 'fixture_unhashed',
+      binary_check: mode === 'mock' ? 'recorded_in_pin' : 'fixture_unhashed',
       capture_id: capture.capture_id,
       capture_contract: NEWSJACK_CAPTURE_CONTRACT,
       runner_mode: mode,
       argv_template: capture.runner.argv_template,
       retrieval_interval: {
-        not_before: new Date(Math.floor(Date.parse(capture.monitor.generated_at))).toISOString(),
-        not_after: retrievedAt
+        not_before: stepTime(capture, 'detector_run', 'started_at'),
+        not_after: retrievedAt,
+        basis: 'runner_observed_detector_start_and_exit'
       },
+      newsjack_generated_at: capture.monitor.generated_at,
       provider_selection: {
         ...capture.selection,
         lookback_days: capture.request.lookback_days,

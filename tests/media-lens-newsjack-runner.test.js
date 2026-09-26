@@ -24,7 +24,7 @@ import { FIXTURE_REQUEST, NEWSJACK_FIXTURE_DIR, raw, testPin, timing } from './h
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const TOPIC = 'transit fare vote';
-const MOCK_TEMPLATE = join(NEWSJACK_FIXTURE_DIR, 'raw-detector-mock-real.json');
+const MOCK_TEMPLATE = join(NEWSJACK_FIXTURE_DIR, 'raw-detector-mock-shape.json');
 
 function rawCheck(verdict, code) {
   assert.equal(verdict.ok, false, code);
@@ -122,7 +122,7 @@ test('raw detector output must match the pinned v0.1.19 shape and the request th
   rawCheck(validateRawDetectorOutput(raw('raw-detector.json'), { ...FIXTURE_REQUEST, limit: 2 }, t, 'fixture'), 'signals_invalid');
   rawCheck(validateRawDetectorOutput([], FIXTURE_REQUEST, t, 'fixture'), 'artifact_shape_invalid');
   // Evidence without metadata is valid: upstream omits empty metadata.
-  const mock = raw('raw-detector-mock-real.json');
+  const mock = raw('raw-detector-mock-shape.json');
   assert.equal(Object.hasOwn(mock.signals[0].evidence[0], 'metadata'), false);
   assert.equal(validateRawDetectorOutput(mock, FIXTURE_REQUEST, { startedMs: Date.parse('2026-09-25T18:00:00.000Z'), exitedMs: Date.parse('2026-09-25T18:00:00.500Z') }, 'mock').ok, true);
   assert.deepEqual(raw('raw-detector.json').monitor.profile, NEWSJACK_DEFAULT_PROFILE);
@@ -136,9 +136,10 @@ test('raw cluster output must bind to the detector output it was given', () => {
     ['version_mismatch', (c) => (c.version = 2)],
     ['stage_time_invalid', (c) => (c.generated_at = '2026-09-25T19:00:00Z')],
     ['artifact_binding_mismatch', (c) => (c.monitor.lookback_days = 7)],
-    ['artifact_binding_mismatch', (c) => (c.source_errors = {})],
+    ['artifact_binding_mismatch', (c) => (c.source_errors = { [TOPIC]: { news_search: 'added after the detector ran' } })],
     ['coarse_decisions_present', (c) => (c.coarse_relevance = { decisions: [] })],
     ['drop_stale_unsupported', (c) => c.pre_gated_stale.push({})],
+    ['drop_stale_unsupported', (c) => (c.clustering.drop_stale = true)],
     ['cluster_params_mismatch', (c) => (c.clustering.title_overlap = 0.3)],
     ['clustering_counts_invalid', (c) => (c.clustering.duplicate_count = 5)],
     ['representative_mismatch', (c) => (c.signals[0].title = 'Edited title')],
@@ -161,6 +162,7 @@ test('raw origin-apply output must use the run clock and window the runner set',
   const cases = [
     ['origin_run_time_override', (c) => (c.freshness_gate.run_generated_at = '2026-09-25T12:00:00Z')],
     ['origin_window_mismatch', (c) => (c.freshness_gate.freshness_window_hours = 72)],
+    ['origin_window_mismatch', (c) => (c.freshness_gate.deterministic_authority = false)],
     ['origin_finding_invalid', (c) => (c.signals[0].freshness_gate.computed_status = 'verified')],
     ['origin_finding_invalid', (c) => (c.signals[0].id = 'ffffffffffffffff')],
     ['origin_signal_mismatch', (c) => (c.signals[0].title = 'Edited title')],
@@ -237,7 +239,12 @@ test('request and path problems are usage errors and execute nothing', async () 
     [{ outDir: join(REPO_ROOT, 'media-lens') }, 'out_dir_in_repo'],
     [{ binaryPath: 'newsjack' }, 'binary_path_invalid'],
     [{ binaryPath: link }, 'binary_path_invalid'],
-    [{ binaryPath: ws.dir }, 'binary_path_invalid']
+    [{ binaryPath: ws.dir }, 'binary_path_invalid'],
+    [{ workRoot: 'relative/work' }, 'work_root_invalid'],
+    [{ workRoot: join(ws.dir, 'missing') }, 'work_root_invalid'],
+    [{ workRoot: binary.path }, 'work_root_invalid'],
+    [{ workRoot: outLink }, 'work_root_invalid'],
+    [{ workRoot: join(REPO_ROOT, 'media-lens') }, 'work_root_in_repo']
   ];
   for (const [extra, code] of cases) {
     const result = await runNewsjackCapture(runOptions(ws, binary, extra));
@@ -269,6 +276,10 @@ test('a pinned run executes a private copy with an exact, credential-free enviro
   const calls = await records(ws);
   assert.deepEqual(calls.map((call) => call.argv[0]), ['version', 'detector', 'cluster']);
   for (const call of calls) {
+    // The hashed private copy runs, never the operator's file.
+    assert.notEqual(call.script, binary.path);
+    assert.ok(call.script.startsWith(join(ws.work, 'ml-newsjack-')), call.script);
+    assert.ok(call.script.endsWith(join('bin', 'newsjack')), call.script);
     assert.deepEqual(Object.keys(call.env).sort(), [...CHILD_ENV_KEYS].sort());
     assert.ok(!JSON.stringify(call.env).includes('SENTINEL'));
     assert.equal(call.env.NEWSJACK_AUTO_UPDATE, '0');
@@ -310,7 +321,8 @@ test('process failures are reported by code and write nothing', async () => {
     [{ steps: { detector_run: { patch: { 'store.saved': true } } } }, {}, 'newsjack_output_invalid:candidates.json:store_saved_unsupported', 5],
     [{ steps: { cluster: { patch: { coarse_relevance: { keep: [] } } } } }, {}, 'newsjack_output_invalid:clustered_candidates.json:coarse_decisions_present', 5],
     [{ steps: { detector_run: { action: 'sleep' } } }, { timeouts: { version: 5000, detector_run: 300, cluster: 5000, origin_apply: 5000 } }, 'newsjack_timeout:detector_run', 4],
-    [{ steps: { detector_run: { action: 'flood' } } }, { maxStdoutBytes: 256 * 1024 }, 'newsjack_output_too_large:detector_run', 4]
+    [{ steps: { detector_run: { action: 'flood' } } }, { maxStdoutBytes: 256 * 1024 }, 'newsjack_output_too_large:detector_run', 4],
+    [{ steps: { version: { action: 'mutate-self' } } }, {}, 'binary_hash_mismatch', 3]
   ];
   for (const [scenario, extra, code, exitCode] of cases) {
     const binary = await fake(ws, scenario);
@@ -326,9 +338,9 @@ test('a timeout kills the whole process group, including grandchildren', async (
   const ws = await workspace();
   const pidFile = join(ws.dir, 'grandchild.pid');
   const binary = await fake(ws, { steps: { detector_run: { action: 'grandchild', pidFile } } });
-  const result = await runNewsjackCapture(runOptions(ws, binary, { timeouts: { version: 5000, detector_run: 500, cluster: 5000, origin_apply: 5000 } }));
+  const result = await runNewsjackCapture(runOptions(ws, binary, { timeouts: { version: 5000, detector_run: 1500, cluster: 5000, origin_apply: 5000 } }));
   assert.equal(result.code, 'newsjack_timeout:detector_run');
-  const pid = Number(await readFile(pidFile, 'utf8'));
+  const pid = await readPid(pidFile);
   let alive = true;
   for (let i = 0; i < 40 && alive; i += 1) {
     try {
@@ -339,6 +351,73 @@ test('a timeout kills the whole process group, including grandchildren', async (
     }
   }
   assert.equal(alive, false, 'the grandchild was killed with the group');
+});
+
+async function readPid(pidFile) {
+  for (let i = 0; i < 100; i += 1) {
+    const text = await readFile(pidFile, 'utf8').catch(() => '');
+    if (/^\d+$/.test(text)) return Number(text);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error('the fake never wrote its pid file');
+}
+
+test('a descendant that leaves the process group cannot hold the run open', async () => {
+  const ws = await workspace();
+  const pidFile = join(ws.dir, 'setsid.pid');
+  const binary = await fake(ws, { steps: { detector_run: { action: 'setsid', pidFile } } });
+  const started = Date.now();
+  let pid;
+  try {
+    const result = await runNewsjackCapture(runOptions(ws, binary, { timeouts: { version: 5000, detector_run: 1000, cluster: 5000, origin_apply: 5000 } }));
+    pid = await readPid(pidFile);
+    assert.equal(result.code, 'newsjack_timeout:detector_run');
+    assert.ok(Date.now() - started < 15000, 'the hard deadline bounds the wait');
+    assert.deepEqual(await readdir(ws.out), []);
+  } finally {
+    pid ??= await readPid(pidFile).catch(() => null);
+    if (pid) {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {
+        // already gone
+      }
+    }
+  }
+});
+
+test('an abort before or between steps stops the run without executing more', async () => {
+  const ws = await workspace();
+  const binary = await fake(ws);
+  const controller = new AbortController();
+  controller.abort();
+  const result = await runNewsjackCapture(runOptions(ws, binary, { signal: controller.signal }));
+  assert.equal(result.code, 'newsjack_killed:aborted');
+  assert.equal(result.exitCode, 4);
+  assert.equal(await exists(ws.marker), false);
+  assert.deepEqual(await readdir(ws.out), []);
+  assert.deepEqual(await readdir(ws.work), []);
+});
+
+test('origin-apply output is validated in the run, not only in unit checks', async () => {
+  const ws = await workspace();
+  const findings = join(ws.dir, 'findings.json');
+  await writeFile(findings, JSON.stringify({ findings: [{ signal_id: mockSignalId(TOPIC), same_story_assessment: 'same_story', first_public_at: null, timestamp_evidence: [] }] }));
+  const binary = await fake(ws, { steps: { origin_apply: { patch: { 'freshness_gate.freshness_window_hours': 72 } } } });
+  const result = await runNewsjackCapture(runOptions(ws, binary, { originFindings: findings }));
+  assert.equal(result.code, 'newsjack_output_invalid:targeted_candidates.json:origin_window_mismatch');
+  assert.equal(result.exitCode, 5);
+  assert.deepEqual(await readdir(ws.out), []);
+});
+
+test('an out dir swapped for a symlink during the run receives nothing', async () => {
+  const ws = await workspace();
+  const elsewhere = join(ws.dir, 'elsewhere');
+  const binary = await fake(ws, { steps: { cluster: { swapDir: { path: ws.out, target: elsewhere } } } });
+  const result = await runNewsjackCapture(runOptions(ws, binary));
+  assert.equal(result.code, 'out_dir_changed');
+  assert.equal(result.exitCode, 6);
+  assert.deepEqual(await readdir(elsewhere), []);
 });
 
 test('an abort signal stops the running step', async () => {
@@ -461,4 +540,40 @@ test('the capture CLI run prints codes only and never the query or titles', asyn
   assert.deepEqual(Object.keys(summary).sort(), ['capture_id', 'counts', 'document_reason', 'document_status', 'status']);
   assert.ok(!ok.text().includes(TOPIC) && !ok.text().includes('Regulators'));
   assert.equal(await exists(ws.marker), true);
+});
+
+test('the capture CLI turns SIGINT, SIGTERM, and SIGHUP into an abort and removes its handlers', async () => {
+  const ws = await workspace();
+  const binary = await fake(ws);
+  for (const name of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    const before = process.listenerCount(name);
+    const err = sink();
+    const pending = captureCli(['run', '--binary', binary.path, '--query', TOPIC, '--out-dir', ws.out], {
+      stdout: sink().stream,
+      stderr: err.stream,
+      runCapture: ({ signal }) =>
+        new Promise((resolve) => {
+          signal.addEventListener('abort', () => resolve({ status: 'error', exitCode: 4, code: 'newsjack_killed:aborted' }), { once: true });
+        })
+    });
+    setImmediate(() => process.emit(name));
+    assert.equal(await pending, 4, name);
+    assert.deepEqual(JSON.parse(err.text()), { status: 'error', code: 'newsjack_killed:aborted' });
+    assert.equal(process.listenerCount(name), before, name);
+  }
+});
+
+test('the capture CLI runs when invoked through a symlink', async () => {
+  const ws = await workspace();
+  const link = join(ws.dir, 'newsjack-capture.js');
+  await symlink(join(REPO_ROOT, 'scripts', 'newsjack-capture.js'), link);
+  let failure;
+  try {
+    execFileSync(process.execPath, [link], { stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (error) {
+    failure = error;
+  }
+  assert.ok(failure, 'a usage error exits non-zero instead of silently doing nothing');
+  assert.equal(failure.status, 2);
+  assert.deepEqual(JSON.parse(failure.stderr.toString()), { status: 'error', code: 'usage_invalid' });
 });

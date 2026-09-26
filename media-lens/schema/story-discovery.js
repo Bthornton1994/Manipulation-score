@@ -27,6 +27,25 @@ export function validateStoryDiscovery(document) {
     const expected = (cluster.members || []).filter((member) => member.independent_reporting).map((member) => member.canonical_url);
     const listed = (cluster.independent_reporting || []).map((item) => item.canonical_url);
     if (expected.join('|') !== listed.join('|')) errors.push('independent_list');
+    // Independent reporting counts outlets, not URLs: no two rows may share an
+    // outlet name or a host.
+    const names = new Set();
+    const hosts = new Set();
+    for (const item of cluster.independent_reporting || []) {
+      const name = String(item.outlet || '').trim().replace(/\s+/g, ' ').toLowerCase();
+      let host = '';
+      try {
+        host = new URL(item.canonical_url).hostname.toLowerCase().replace(/^www\./, '');
+      } catch {
+        host = '';
+      }
+      if ((name && names.has(name)) || (host && hosts.has(host))) errors.push('independent_outlet_repeated');
+      if (name) names.add(name);
+      if (host) hosts.add(host);
+    }
+    if (cluster.independent_outlet_count !== undefined && cluster.independent_outlet_count !== listed.length) {
+      errors.push('independent_outlet_count');
+    }
   }
   return { ok: errors.length === 0, errors };
 }

@@ -1,0 +1,266 @@
+{
+  "version": 1,
+  "generated_at": "2026-09-25T18:00:03.490011Z",
+  "monitor": {
+    "name": null,
+    "generated_at": "2026-09-25T18:00:00.052314Z",
+    "profile": {
+      "company": null,
+      "topics": [],
+      "competitors": [],
+      "search_terms": [],
+      "feed_urls": [],
+      "x_news": {
+        "enabled": true
+      },
+      "x_trends": {
+        "mode": "none",
+        "woeids": [],
+        "locations": []
+      },
+      "spokespeople": [],
+      "standing": [],
+      "exclusions": []
+    },
+    "queries": [
+      "transit fare vote"
+    ],
+    "feed_urls": [],
+    "sources_requested": [
+      "news_search"
+    ],
+    "sources_used": [
+      "news_search"
+    ],
+    "lookback_days": 1,
+    "max_age_hours": 24,
+    "new_only": false,
+    "depth": "quick",
+    "mock": false
+  },
+  "signals": [
+    {
+      "id": "26027af283a9b76d",
+      "title": "City council sets date for transit fare vote",
+      "sources": [
+        "news_search"
+      ],
+      "evidence": [
+        {
+          "source": "news_search",
+          "title": "City council sets date for transit fare vote",
+          "url": "https://fictional-daily.example/news/fare-vote-date",
+          "author": "SENTINEL-AUTHOR",
+          "container": "Fictional Daily",
+          "published_at": "2026-09-25T12:00:00Z",
+          "excerpt": "SENTINEL-EXCERPT City council sets date for transit fare vote",
+          "engagement": {},
+          "metadata": {
+            "publication_type": "news",
+            "note": "SENTINEL-METADATA"
+          }
+        },
+        {
+          "source": "news_search",
+          "title": "Council schedules transit fare vote",
+          "url": "https://harbor-times.example/local/transit-fare-vote",
+          "author": null,
+          "container": "Harbor Times",
+          "published_at": "2026-09-25T09:15:00+00:00",
+          "excerpt": "SENTINEL-EXCERPT Council schedules transit fare vote",
+          "engagement": {}
+        },
+        {
+          "source": "news_search",
+          "title": "Transit authority statement on fare vote",
+          "url": "https://www.prnewswire.example/news-releases/transit-fare-vote",
+          "author": null,
+          "container": "PR Newswire",
+          "published_at": "2026-09-25T10:00:00.000Z",
+          "excerpt": "SENTINEL-EXCERPT Transit authority statement on fare vote",
+          "engagement": {}
+        },
+        {
+          "source": "news_search",
+          "title": "City council sets date for transit fare vote",
+          "url": "https://fictional-daily.example/news/fare-vote-date/",
+          "author": null,
+          "container": "Fictional Daily Metro",
+          "published_at": "2026-09-25T12:05:00Z",
+          "excerpt": "SENTINEL-EXCERPT City council sets date for transit fare vote",
+          "engagement": {}
+        }
+      ],
+      "features": {
+        "decay_bucket": "24hr",
+        "source_count": 1,
+        "evidence_count": 4,
+        "seen_before": false,
+        "seen_urls": {},
+        "profile_matches": [],
+        "safety_flags": [],
+        "age_hours": 5.99
+      },
+      "story_size": {
+        "band": "moderate",
+        "score": 0.41,
+        "basis": "outlet_mix"
+      },
+      "routing": {
+        "lane": "profile_relevance",
+        "queue_priority": 61.2,
+        "demoted": false
+      },
+      "mechanical_scores": {
+        "freshness": 0.8,
+        "source_agreement": 0.3,
+        "novelty": 1,
+        "profile_match": 0,
+        "source_quality": 0.5,
+        "momentum": 0,
+        "major_news": 0.2
+      },
+      "query": "transit fare vote",
+      "cluster": {
+        "cluster_id": "26027af283a9b76d",
+        "cluster_index": 0,
+        "cluster_size": 2,
+        "role": "representative",
+        "member_count": 1,
+        "member_ids": [
+          "eda7204ac3f2c7dc"
+        ],
+        "duplicate_count": 1
+      },
+      "story_origin": {
+        "signal_id": "26027af283a9b76d",
+        "same_story_assessment": "same_story",
+        "first_public_at": "2026-09-25T09:15:00Z",
+        "original_url": "https://harbor-times.example/local/transit-fare-vote",
+        "original_source": "Harbor Times",
+        "canonical_coverage_url": "https://harbor-times.example/local/transit-fare-vote",
+        "same_story_basis": "SENTINEL-BASIS",
+        "confidence": "very-high",
+        "rationale": "SENTINEL-RATIONALE",
+        "timestamp_evidence": [
+          {
+            "url": "https://harbor-times.example/local/transit-fare-vote",
+            "published_at": "2026-09-25T09:15:00Z"
+          },
+          {
+            "url": "https://valley-ledger.example/2026/09/25/fare-vote",
+            "published_at": "2026-09-25T12:30:00Z"
+          },
+          {
+            "url": "https://news.google.example/search?q=transit+fare+vote",
+            "published_at": "2026-09-25T09:00:00Z"
+          },
+          {
+            "url": "http://fictional-daily.example/news/fare-vote-date",
+            "published_at": "2026-09-25T12:00:00Z"
+          }
+        ],
+        "evidence_urls": [
+          "https://harbor-times.example/local/transit-fare-vote"
+        ]
+      },
+      "freshness_gate": {
+        "computed_status": "fresh",
+        "worker_status": null,
+        "run_generated_at": "2026-09-25T18:00:00.052314Z",
+        "freshness_cutoff": "2026-09-24T18:00:00.052314Z",
+        "freshness_window_hours": 24,
+        "basis_field": "first_public_at",
+        "basis_value": "2026-09-25T09:15:00Z",
+        "basis_precision": "time",
+        "rationale": "first_public_at is inside the freshness window",
+        "deterministic_authority": true
+      }
+    }
+  ],
+  "coarse_relevance": null,
+  "freshness_gate": {
+    "input_signal_count": 3,
+    "origin_finding_count": 2,
+    "selected_count": 1,
+    "rejected_count": 1,
+    "missing_count": 1,
+    "status_counts": {
+      "fresh": 1,
+      "stale": 1
+    },
+    "freshness_window_hours": 24,
+    "run_generated_at": "2026-09-25T18:00:00.052314Z",
+    "freshness_cutoff": "2026-09-24T18:00:00.052314Z",
+    "included_statuses": [
+      "fresh",
+      "fresh_new_development"
+    ],
+    "rejected_signals": [
+      {
+        "signal_id": "b1086c347b8d1334",
+        "signal_title": "Transit agency publishes fare study",
+        "sources": [
+          "news_search"
+        ],
+        "routing": {
+          "lane": "profile_relevance",
+          "queue_priority": 44.1,
+          "demoted": false
+        },
+        "evidence_urls": [
+          "https://capital-observer.example/fare-study"
+        ],
+        "story_origin": {
+          "signal_id": "b1086c347b8d1334",
+          "same_story_assessment": "unclear",
+          "first_public_at": "2026-09-20",
+          "original_url": null,
+          "confidence": "low",
+          "rationale": "SENTINEL-RATIONALE-2",
+          "timestamp_evidence": []
+        },
+        "freshness_gate": {
+          "computed_status": "stale",
+          "worker_status": null,
+          "run_generated_at": "2026-09-25T18:00:00.052314Z",
+          "freshness_cutoff": "2026-09-24T18:00:00.052314Z",
+          "freshness_window_hours": 24,
+          "basis_field": "first_public_at",
+          "basis_value": "2026-09-20",
+          "basis_precision": "date",
+          "rationale": "first_public_at is before the freshness cutoff",
+          "deterministic_authority": true
+        }
+      }
+    ],
+    "missing_signals": [
+      {
+        "signal_id": "8139e0b65e6da336",
+        "signal_title": "Bus riders react to proposed fare increase",
+        "sources": [
+          "news_search"
+        ],
+        "routing": {
+          "lane": "profile_relevance",
+          "queue_priority": 39.4,
+          "demoted": false
+        },
+        "evidence_urls": [
+          "https://riverside-post.example/riders-react",
+          "https://northern-chronicle.example/fare-reaction",
+          "https://coast-herald.example/fares",
+          "https://inland-review.example/fare-hike",
+          "https://summit-news.example/fare"
+        ]
+      }
+    ],
+    "deterministic_authority": true
+  },
+  "detector_diagnostics": {},
+  "source_errors": {
+    "transit fare vote": {
+      "news_search": "Get \"https://medialyst.ai/api/v1/news/search?q=transit+fare+vote&token=SENTINEL-TOKEN\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
+    }
+  }
+}

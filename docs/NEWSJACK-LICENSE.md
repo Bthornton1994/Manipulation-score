@@ -1,13 +1,17 @@
 # Newsjack license and attribution
 
-Media Lens's Newsjack substrate seam (`media-lens/worker/adapters/newsjack.js`, `media-lens/worker/url-key.js`, part of `media-lens/worker/adapters/jev.js`, and part of `media-lens/worker/fusion.js`) reuses a small amount of behavior and data-contract field names from Newsjack, an unrelated open-source project.
+Media Lens works with Newsjack, an unrelated open-source project. Its Newsjack seam (`media-lens/worker/adapters/newsjack.js`, `media-lens/worker/url-key.js`, part of `media-lens/worker/adapters/jev.js`, part of `media-lens/worker/fusion.js`, the capture contract in `media-lens/schema/newsjack-capture.js`, the converter in `media-lens/worker/discovery/newsjack-discovery.js`, and the operator tool in `media-lens/tools/`) reuses a small amount of behavior and output field names from Newsjack.
 
 - Upstream: https://github.com/elvisun/newsjack
-- Pinned reference commit: `bdb41b8d1f9a9e27221cc86102cbfe1a748fc123`
+- Pinned release: `v0.1.19`, commit `bdb41b8d1f9a9e27221cc86102cbfe1a748fc123` (annotated tag object `8c20b879186363a939b1c4a7b626107d7df84c58`, not signed). The pin is recorded in `media-lens/worker/discovery/newsjack-pin.js`.
 - License: MIT
 - Copyright (c) 2026 Elvis Sun
 
-No Go code, skills prose, fixtures, or branding from Newsjack is copied into this repository. Newsjack's `TRADEMARK.md` was not reviewed for this work, so the Newsjack name is used in code comments and this document only to describe provenance, not in end-user product copy beyond "provenance via Newsjack artifacts."
+No Go code, skills prose, fixtures, eval data, binaries, or branding from Newsjack is copied into this repository or redistributed with it. The files in `media-lens/fixtures/newsjack-capture/` are hand-written synthetic data in Newsjack's output shape, on `.example` domains.
+
+Trademark: Newsjack's `TRADEMARK.md` at the pinned commit (blob `782ac8a6d87514281c8a4eca444ff3f84e61a206`) was reviewed on 2026-09-26. It reserves the name "newsjack", the newsjack.sh domain, and the logo, which the MIT license does not cover. It allows accurate references such as "works with newsjack" and developer documentation. It does not allow naming a fork or derivative product "newsjack" or "newsjack-*", using the logo, or implying endorsement. Media Lens uses the name only to describe compatibility and provenance in code, operator docs, and data labels. It does not use the logo or put the name in end-user product copy.
+
+Binaries: Media Lens never downloads, builds, bundles, or ships a Newsjack binary. The operator tool runs only a binary the operator supplies, and only when its sha256 matches a hash the owner has recorded in the pin (none is recorded yet). A statically linked Newsjack binary includes third-party Go modules (for example `modernc.org/sqlite` and `github.com/AlecAivazis/survey/v2`); anyone who redistributes such a binary must also carry those modules' license notices.
 
 ## What was ported (behavior only, reimplemented in JavaScript)
 
@@ -17,16 +21,16 @@ No Go code, skills prose, fixtures, or branding from Newsjack is copied into thi
 
 ## What is reused as a data contract only (field names, not code)
 
-`media-lens/schema/influence-graph.v1.json` and `media-lens/worker/adapters/newsjack.js` reuse these Newsjack field names verbatim so that Newsjack run artifacts (`story_origin`, `freshness_gate`, cluster `members[]`) can be read by Media Lens without a translation layer:
+`media-lens/schema/influence-graph.v1.json` and the fixture reader in `media-lens/worker/adapters/newsjack.js` reuse these Newsjack field names verbatim. Real Newsjack v0.1.19 output is not read directly: `media-lens/tools/newsjack-raw.js` validates it against the pinned output shapes and projects it into `media-lens.newsjack-capture.v1`, and `media-lens/worker/discovery/newsjack-discovery.js` converts that into `story-discovery.v1`. The reused names:
 
 - Story-origin handoff object fields: `same_story_assessment`, `surfaced_article_published_at`, `first_public_at`, `original_url`, `original_source`, `canonical_coverage_url`, `canonical_coverage_source`, `canonical_coverage_published_at`, `canonical_coverage_basis`, `same_story_basis`, `new_development`, `new_development_at`, `confidence`, `timestamp_evidence[]`, `evidence_urls[]`, `rationale`.
 - Freshness status codes: `fresh`, `fresh_new_development`, `stale`, `unverified_boundary`, `unverified_no_timestamp`, `unverified_no_corroboration`.
-- Cluster member relation values: `surfaced`, `same_story`, `syndicated`, `different_story`, `unclear`.
+- Newsjack emits no per-member relation. `newsjack cluster` records `role: "representative"`, `cluster_id`, and `member_ids`. The values `same_story`, `different_story`, `unclear`, and `fresh_new_development` belong to the agent-written `story_origin.same_story_assessment`. `syndicated` appears only as a news-search publication type that Newsjack filters out. Media Lens assigns its own member relations (`same_story` or `syndicated`) from its own rules.
 
 ## What is explicitly not used
 
-- The Newsjack CLI is never spawned by the Media Lens worker in v1. `media-lens/worker/adapters/newsjack.js`'s `cli` mode throws rather than shelling out.
-- Medialyst news search is never called by the worker.
+- The Media Lens worker never spawns the Newsjack CLI. The adapter's old `cli` and `artifacts` modes were removed. Only the operator tool outside the worker (`scripts/newsjack-capture.js`) can run a pinned Newsjack binary, and it refuses to until a binary hash is recorded.
+- Medialyst news search is never called by Media Lens, and no credential is ever passed to a Newsjack process.
 - Newsjack's coarse-filter question set (PR-relevance questions) is not reused; `media-lens/worker/jev/questions.v1.json` is an independent question set for the influence taxonomy in `docs/media-lens-build-brief.md`.
 
 ## MIT License text (Newsjack)

@@ -1,0 +1,366 @@
+{
+  "version": 1,
+  "generated_at": "2026-09-25T18:00:03.431876Z",
+  "monitor": {
+    "name": null,
+    "generated_at": "2026-09-25T18:00:00.052314Z",
+    "profile": {
+      "company": null,
+      "topics": [],
+      "competitors": [],
+      "search_terms": [],
+      "feed_urls": [],
+      "x_news": {
+        "enabled": true
+      },
+      "x_trends": {
+        "mode": "none",
+        "woeids": [],
+        "locations": []
+      },
+      "spokespeople": [],
+      "standing": [],
+      "exclusions": []
+    },
+    "queries": [
+      "transit fare vote"
+    ],
+    "feed_urls": [],
+    "sources_requested": [
+      "news_search"
+    ],
+    "sources_used": [
+      "news_search"
+    ],
+    "lookback_days": 1,
+    "max_age_hours": 24,
+    "new_only": false,
+    "depth": "quick",
+    "mock": false
+  },
+  "signals": [
+    {
+      "id": "26027af283a9b76d",
+      "title": "City council sets date for transit fare vote",
+      "sources": [
+        "news_search"
+      ],
+      "evidence": [
+        {
+          "source": "news_search",
+          "title": "City council sets date for transit fare vote",
+          "url": "https://fictional-daily.example/news/fare-vote-date",
+          "author": "SENTINEL-AUTHOR",
+          "container": "Fictional Daily",
+          "published_at": "2026-09-25T12:00:00Z",
+          "excerpt": "SENTINEL-EXCERPT City council sets date for transit fare vote",
+          "engagement": {},
+          "metadata": {
+            "publication_type": "news",
+            "note": "SENTINEL-METADATA"
+          }
+        },
+        {
+          "source": "news_search",
+          "title": "Council schedules transit fare vote",
+          "url": "https://harbor-times.example/local/transit-fare-vote",
+          "author": null,
+          "container": "Harbor Times",
+          "published_at": "2026-09-25T09:15:00+00:00",
+          "excerpt": "SENTINEL-EXCERPT Council schedules transit fare vote",
+          "engagement": {}
+        },
+        {
+          "source": "news_search",
+          "title": "Transit authority statement on fare vote",
+          "url": "https://www.prnewswire.example/news-releases/transit-fare-vote",
+          "author": null,
+          "container": "PR Newswire",
+          "published_at": "2026-09-25T10:00:00.000Z",
+          "excerpt": "SENTINEL-EXCERPT Transit authority statement on fare vote",
+          "engagement": {}
+        },
+        {
+          "source": "news_search",
+          "title": "City council sets date for transit fare vote",
+          "url": "https://fictional-daily.example/news/fare-vote-date/",
+          "author": null,
+          "container": "Fictional Daily Metro",
+          "published_at": "2026-09-25T12:05:00Z",
+          "excerpt": "SENTINEL-EXCERPT City council sets date for transit fare vote",
+          "engagement": {}
+        }
+      ],
+      "features": {
+        "decay_bucket": "24hr",
+        "source_count": 1,
+        "evidence_count": 4,
+        "seen_before": false,
+        "seen_urls": {},
+        "profile_matches": [],
+        "safety_flags": [],
+        "age_hours": 5.99
+      },
+      "story_size": {
+        "band": "moderate",
+        "score": 0.41,
+        "basis": "outlet_mix"
+      },
+      "routing": {
+        "lane": "profile_relevance",
+        "queue_priority": 61.2,
+        "demoted": false
+      },
+      "mechanical_scores": {
+        "freshness": 0.8,
+        "source_agreement": 0.3,
+        "novelty": 1,
+        "profile_match": 0,
+        "source_quality": 0.5,
+        "momentum": 0,
+        "major_news": 0.2
+      },
+      "query": "transit fare vote",
+      "cluster": {
+        "cluster_id": "26027af283a9b76d",
+        "cluster_index": 0,
+        "cluster_size": 2,
+        "role": "representative",
+        "member_count": 1,
+        "member_ids": [
+          "eda7204ac3f2c7dc"
+        ],
+        "duplicate_count": 1
+      }
+    },
+    {
+      "id": "8139e0b65e6da336",
+      "title": "Bus riders react to proposed fare increase",
+      "sources": [
+        "news_search"
+      ],
+      "evidence": [
+        {
+          "source": "news_search",
+          "title": "Bus riders react to proposed fare increase",
+          "url": "https://riverside-post.example/riders-react",
+          "author": null,
+          "container": "Riverside Post",
+          "published_at": "2026-09-25T11:42:17.123456789Z",
+          "excerpt": "SENTINEL-EXCERPT Bus riders react to proposed fare increase",
+          "engagement": {}
+        },
+        {
+          "source": "news_search",
+          "title": "Riders push back on fare plan",
+          "url": "https://northern-chronicle.example/fare-reaction",
+          "author": null,
+          "container": "Northern Chronicle",
+          "published_at": "2026-09-25",
+          "excerpt": "SENTINEL-EXCERPT Riders push back on fare plan",
+          "engagement": {}
+        },
+        {
+          "source": "news_search",
+          "title": "Commuters weigh in on fares",
+          "url": "https://coast-herald.example/fares",
+          "author": null,
+          "container": "Coast Herald",
+          "published_at": null,
+          "excerpt": "SENTINEL-EXCERPT Commuters weigh in on fares",
+          "engagement": {}
+        },
+        {
+          "source": "news_search",
+          "title": "Fare hike draws criticism",
+          "url": "https://inland-review.example/fare-hike",
+          "author": null,
+          "container": "Inland Review",
+          "published_at": "2026-02-30T12:00:00Z",
+          "excerpt": "SENTINEL-EXCERPT Fare hike draws criticism",
+          "engagement": {}
+        },
+        {
+          "source": "news_search",
+          "title": "Fare increase debate continues",
+          "url": "https://summit-news.example/fare",
+          "author": null,
+          "container": "Summit News",
+          "published_at": "2026-09-25T19:00:00Z",
+          "excerpt": "SENTINEL-EXCERPT Fare increase debate continues",
+          "engagement": {}
+        },
+        {
+          "source": "news_search",
+          "title": "Earlier fare proposal recalled",
+          "url": "https://lakeside-gazette.example/fare",
+          "author": null,
+          "container": "Lakeside Gazette",
+          "published_at": "2026-09-23T10:00:00Z",
+          "excerpt": "SENTINEL-EXCERPT Earlier fare proposal recalled",
+          "engagement": {}
+        },
+        {
+          "source": "news_search",
+          "title": "Internal fare memo",
+          "url": "https://metro.internal/fare",
+          "author": null,
+          "container": "Metro Internal",
+          "published_at": "2026-09-25T10:10:00Z",
+          "excerpt": "SENTINEL-EXCERPT Internal fare memo",
+          "engagement": {}
+        },
+        {
+          "source": "news_search",
+          "title": "Bus riders react to proposed fare increase in the city as officials weigh options for next year",
+          "url": "https://snippet-source.example/riders",
+          "author": null,
+          "container": "Snippet Source",
+          "published_at": "2026-09-25T13:00:00Z",
+          "excerpt": "Bus riders react to proposed fare increase in the city as officials weigh options for next year",
+          "engagement": {}
+        }
+      ],
+      "features": {
+        "decay_bucket": "24hr",
+        "source_count": 1,
+        "evidence_count": 10,
+        "seen_before": false,
+        "seen_urls": {},
+        "profile_matches": [],
+        "safety_flags": [],
+        "age_hours": 5.99
+      },
+      "story_size": {
+        "band": "moderate",
+        "score": 0.41,
+        "basis": "outlet_mix"
+      },
+      "routing": {
+        "lane": "profile_relevance",
+        "queue_priority": 39.4,
+        "demoted": false
+      },
+      "mechanical_scores": {
+        "freshness": 0.8,
+        "source_agreement": 0.3,
+        "novelty": 1,
+        "profile_match": 0,
+        "source_quality": 0.5,
+        "momentum": 0,
+        "major_news": 0.2
+      },
+      "query": "transit fare vote",
+      "cluster": {
+        "cluster_id": "8139e0b65e6da336",
+        "cluster_index": 1,
+        "cluster_size": 1,
+        "role": "representative",
+        "member_count": 0,
+        "member_ids": [],
+        "duplicate_count": 0
+      }
+    },
+    {
+      "id": "b1086c347b8d1334",
+      "title": "Transit agency publishes fare study",
+      "sources": [
+        "news_search"
+      ],
+      "evidence": [
+        {
+          "source": "news_search",
+          "title": "Transit agency publishes fare study",
+          "url": "https://capital-observer.example/fare-study",
+          "author": null,
+          "container": "Capital Observer",
+          "published_at": "2026-09-25T14:05:00.250Z",
+          "excerpt": "SENTINEL-EXCERPT Transit agency publishes fare study",
+          "engagement": {}
+        }
+      ],
+      "features": {
+        "decay_bucket": "24hr",
+        "source_count": 1,
+        "evidence_count": 1,
+        "seen_before": false,
+        "seen_urls": {},
+        "profile_matches": [],
+        "safety_flags": [],
+        "age_hours": 5.99
+      },
+      "story_size": {
+        "band": "moderate",
+        "score": 0.41,
+        "basis": "outlet_mix"
+      },
+      "routing": {
+        "lane": "profile_relevance",
+        "queue_priority": 44.1,
+        "demoted": false
+      },
+      "mechanical_scores": {
+        "freshness": 0.8,
+        "source_agreement": 0.3,
+        "novelty": 1,
+        "profile_match": 0,
+        "source_quality": 0.5,
+        "momentum": 0,
+        "major_news": 0.2
+      },
+      "query": "transit fare vote",
+      "cluster": {
+        "cluster_id": "b1086c347b8d1334",
+        "cluster_index": 2,
+        "cluster_size": 1,
+        "role": "representative",
+        "member_count": 0,
+        "member_ids": [],
+        "duplicate_count": 0
+      }
+    }
+  ],
+  "clustering": {
+    "input_signal_count": 4,
+    "cluster_count": 3,
+    "representative_count": 3,
+    "duplicate_count": 1,
+    "pre_gated_count": 0,
+    "title_overlap": 0.6,
+    "min_shared_tokens": 2,
+    "drop_stale": false,
+    "stale_max_band": "moderate",
+    "story_size_bands": {
+      "moderate": 3
+    }
+  },
+  "clustered_duplicates": [
+    {
+      "signal_id": "eda7204ac3f2c7dc",
+      "signal_title": "Transit fare vote date set by city council",
+      "sources": [
+        "news_search"
+      ],
+      "routing": {
+        "lane": "profile_relevance",
+        "queue_priority": 48.7,
+        "demoted": false
+      },
+      "evidence_urls": [
+        "https://valley-ledger.example/2026/09/25/fare-vote",
+        "http://metro-digest.example/fare",
+        "https://fictional-daily.example/news/other"
+      ],
+      "cluster_id": "26027af283a9b76d",
+      "representative_id": "26027af283a9b76d"
+    }
+  ],
+  "pre_gated_stale": [],
+  "coarse_relevance": null,
+  "detector_diagnostics": {},
+  "source_errors": {
+    "transit fare vote": {
+      "news_search": "Get \"https://medialyst.ai/api/v1/news/search?q=transit+fare+vote&token=SENTINEL-TOKEN\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
+    }
+  }
+}

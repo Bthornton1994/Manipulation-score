@@ -358,13 +358,6 @@ export async function analyze({
         occurred: jevResult.calls > 0
       });
     }
-    if (newsjackAdapter.mode === 'artifacts') {
-      externalProcessing.push({
-        recipient: 'newsjack CLI (local)',
-        data_sent: 'URL/title/published_at matched against operator-provided Newsjack run artifacts already on disk. No network call is made by this worker.',
-        occurred: newsjackResult.provenance === 'newsjack_artifacts'
-      });
-    }
     if (classifierDevOn) {
       externalProcessing.push({
         recipient: 'classifier.dev (evaluation-only)',
@@ -393,7 +386,7 @@ export async function analyze({
         newsjack: {
           mode: newsjackAdapter.mode,
           version: null,
-          artifacts: newsjackResult.provenance === 'newsjack_artifacts' ? ['candidates.json'] : []
+          artifacts: []
         },
         classifierDev: cascadeEngineMeta(cascadeResult, { enabled: classifierDevOn, elapsedMs: cascadeElapsedMs }),
         startedAt,

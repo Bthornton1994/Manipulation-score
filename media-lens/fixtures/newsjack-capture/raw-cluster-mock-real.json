@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "generated_at": "2026-09-25T18:00:00.310442Z",
+  "monitor": {
+    "name": null,
+    "generated_at": "2026-09-25T18:00:00.041977Z",
+    "profile": {
+      "company": null,
+      "topics": [],
+      "competitors": [],
+      "search_terms": [],
+      "feed_urls": [],
+      "x_news": {
+        "enabled": true
+      },
+      "x_trends": {
+        "mode": "none",
+        "woeids": [],
+        "locations": []
+      },
+      "spokespeople": [],
+      "standing": [],
+      "exclusions": []
+    },
+    "queries": [
+      "transit fare vote"
+    ],
+    "feed_urls": [],
+    "sources_requested": [
+      "news_search"
+    ],
+    "sources_used": [
+      "news_search"
+    ],
+    "lookback_days": 1,
+    "max_age_hours": 24,
+    "new_only": false,
+    "depth": "quick",
+    "mock": true
+  },
+  "signals": [
+    {
+      "id": "873260a4a7a10fa8",
+      "title": "Regulators open inquiry tied to transit fare vote",
+      "sources": [
+        "news_search"
+      ],
+      "evidence": [
+        {
+          "source": "news_search",
+          "title": "Regulators open inquiry tied to transit fare vote",
+          "url": "https://example.com/news/7d31df90",
+          "author": null,
+          "container": "Example News",
+          "published_at": "2026-09-25",
+          "excerpt": "Officials are examining claims and compliance practices around transit fare vote.",
+          "engagement": {}
+        }
+      ],
+      "features": {
+        "decay_bucket": "24hr",
+        "source_count": 1,
+        "evidence_count": 1,
+        "seen_before": false,
+        "seen_urls": {},
+        "profile_matches": [],
+        "safety_flags": [],
+        "age_hours": 18
+      },
+      "story_size": {
+        "band": "unknown",
+        "score": null,
+        "attention_hint": null
+      },
+      "routing": {
+        "lane": "profile_relevance_weak",
+        "queue_priority": 39.9,
+        "demoted": true
+      },
+      "mechanical_scores": {
+        "freshness": 0.75,
+        "source_agreement": 0.25,
+        "novelty": 1,
+        "profile_match": 0,
+        "source_quality": 0.6,
+        "momentum": 0,
+        "major_news": 0
+      },
+      "query": "transit fare vote",
+      "cluster": {
+        "cluster_id": "873260a4a7a10fa8",
+        "cluster_index": 0,
+        "cluster_size": 1,
+        "role": "representative",
+        "member_count": 0,
+        "member_ids": [],
+        "duplicate_count": 0
+      }
+    }
+  ],
+  "clustering": {
+    "input_signal_count": 1,
+    "cluster_count": 1,
+    "representative_count": 1,
+    "duplicate_count": 0,
+    "pre_gated_count": 0,
+    "title_overlap": 0.6,
+    "min_shared_tokens": 2,
+    "drop_stale": false,
+    "stale_max_band": "moderate",
+    "story_size_bands": {
+      "unknown": 1
+    }
+  },
+  "clustered_duplicates": [],
+  "pre_gated_stale": [],
+  "coarse_relevance": null,
+  "detector_diagnostics": {},
+  "source_errors": {}
+}

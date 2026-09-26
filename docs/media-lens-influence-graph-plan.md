@@ -190,9 +190,10 @@ Allowed UI phrases (exact strings, the only ones the renderer may use for observ
 
 Adapter interface (`worker/adapters/newsjack.js`): `getStoryContext({ url, canonical_url, title, published_at }) -> { story_origin, freshness_gate, cluster, provenance }` using Newsjack's contract shapes verbatim (section 3). Implementations:
 
-- `fixture` (v1 default): reads `fixtures/newsjack/<id>.json`.
-- `artifacts` (v1, thin): reads a Newsjack run directory produced out-of-band by an operator running the Newsjack detector/skills in their own agent (`candidates.json` with `story_origin` and `freshness_gate` attached by `newsjack origin-apply`, and `newsjack cluster` output). Matches the artifact's URL by `url-key.js`. This is how live provenance reaches Media Lens in v1 without the worker ever calling Medialyst or spawning anything.
-- `cli` (later, not v1): spawn a pinned `newsjack` release with `NEWSJACK_AUTO_UPDATE=0`. Requires a Medialyst login for `news-search`; the story-origin skill still needs an agent runtime. Listed so the seam is not designed away.
+- `fixture` (fixture-worker default): reads `fixtures/newsjack/<id>.json`.
+- `disabled`: what a live worker uses. Live analysis reads no Newsjack output.
+- The earlier `artifacts` mode was removed: it expected a Media Lens-specific shape (per-member `relation`, top-level `clusters`) that no Newsjack version emits, and it ran an unguarded reader on the public `/analyze` path. The earlier `cli` stub was removed too.
+- Real Newsjack runs go through an operator tool outside the worker (`media-lens/tools/newsjack-runner.js`, `scripts/newsjack-capture.js`). It executes only a binary whose sha256 matches the pin for Newsjack v0.1.19 (commit `bdb41b8d1f9a9e27221cc86102cbfe1a748fc123`), refuses live mode, and writes a versioned `media-lens.newsjack-capture.v1` record that `captureToStoryDiscovery` converts into `story-discovery.v1`. Discovery documents use a window Media Lens derives itself, and Newsjack freshness statuses appear only as unverified origin claims. See `media-lens/docs/newsjack-discovery.md`.
 
 Deterministic derivations in `fusion.js`, not in the adapter: `independent_sources_estimate` = number of distinct `url_key` groups after removing members with `relation: "syndicated"` and members whose URL matches the wire/advocacy path list from `story-origin-check/SKILL.md` (`/press_release`, `/press-release`, `/applauds`, `/statement`, `advocacy.`, `prnewswire`, `globenewswire`, `businesswire`, `accesswire`, `einpresswire`, `markets.businessinsider`, `stocktitan`) or a `partner_republication` host (AOL, Yahoo, MSN, Apple News) when a canonical/original points elsewhere. Freshness statuses are consumed as computed by Newsjack; Media Lens never computes its own cutoff.
 
@@ -275,7 +276,7 @@ python3 -m http.server 4173                                    # open http://loc
 - Server-side deployment of the worker; publishing `media-lens/` to GitHub Pages; any change to the Pages deploy other than excludes.
 - Fact-checking: `claims[].support` is `not_checked` unless a fixture or imported artifact supplies evidence. Newsjack `fact-check` is an agent skill and is not integrated.
 - Third-party outlet ratings, ownership databases, or bias labels in Source context.
-- Spawning the Newsjack CLI; running Newsjack skills; Medialyst login.
+- The worker spawning the Newsjack CLI; running Newsjack skills; Medialyst login. (A pinned-binary operator tool outside the worker exists; it cannot run until the owner records a binary hash. See `media-lens/docs/newsjack-discovery.md`.)
 - Media Lens history, accounts, sharing, or any persistence beyond the in-memory response.
 - Non-English input, PDFs, video, audio, images/OCR for Media Lens.
 - Any edit to Clarity files, `scoring.js`, `safety.js`, or Clarity methodology text.
@@ -318,5 +319,5 @@ No other exact conflicts were found with `VISION.md`, `acceptable-use.html`, or 
 2. Source context: metadata only in v1 (recommended), or include third-party outlet ratings? Ratings would need a licensed source, a display that cannot be read as "source unsafe", and a vision decision; the schema keeps `third_party_ratings: []` either way.
 3. Deploy posture: exclude all of `media-lens/` from GitHub Pages in v1 (recommended, matches "no deploy"), or publish the UI in a "worker required" state?
 4. Model pinning: does the TypeSafe API accept `model: "jev-1.13.0"`? Newsjack sends `jev-latest` and reads the reported version. If pinned ids are rejected, the pin becomes "request `jev-latest`, assert reported == `jev-1.13.0`, else `needs_review` + `model_mismatch`". Either way the recorded fields are the same.
-5. Live provenance path: import Newsjack run artifacts produced by an operator's agent (recommended for v1) versus spawning the Newsjack CLI (needs Go or a pinned release binary, Medialyst login, `NEWSJACK_AUTO_UPDATE=0`, and a separate supply-chain review per `agent-tooling.mdc`).
+5. Live provenance path: decided in `media-lens/docs/newsjack-discovery.md`. An operator tool outside the worker runs a pinned Newsjack binary and writes a versioned capture that Media Lens validates and converts. Live discovery still needs an approved news-search transport (Newsjack's only one is Medialyst), a recorded binary hash, and a rights decision.
 6. Pasted text in live mode: allow with the per-analysis consent checkbox (planned), or URL-only when external processing is on, to reduce the chance of private text reaching Jev?

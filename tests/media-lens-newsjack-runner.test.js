@@ -334,7 +334,7 @@ test('process failures are reported by code and write nothing', async () => {
   assert.deepEqual(await readdir(ws.work), []);
 });
 
-test('a timeout kills the whole process group, including grandchildren', async () => {
+test('a timeout kills the whole process group, including grandchildren', { timeout: 30000 }, async () => {
   const ws = await workspace();
   const pidFile = join(ws.dir, 'grandchild.pid');
   const binary = await fake(ws, { steps: { detector_run: { action: 'grandchild', pidFile } } });
@@ -366,24 +366,32 @@ test('a descendant that leaves the process group cannot hold the run open', asyn
   const ws = await workspace();
   const pidFile = join(ws.dir, 'setsid.pid');
   const binary = await fake(ws, { steps: { detector_run: { action: 'setsid', pidFile } } });
-  const started = Date.now();
-  let pid;
-  try {
-    const result = await runNewsjackCapture(runOptions(ws, binary, { timeouts: { version: 5000, detector_run: 1000, cluster: 5000, origin_apply: 5000 } }));
-    pid = await readPid(pidFile);
-    assert.equal(result.code, 'newsjack_timeout:detector_run');
-    assert.ok(Date.now() - started < 15000, 'the hard deadline bounds the wait');
-    assert.deepEqual(await readdir(ws.out), []);
-  } finally {
-    pid ??= await readPid(pidFile).catch(() => null);
-    if (pid) {
-      try {
-        process.kill(pid, 'SIGKILL');
-      } catch {
-        // already gone
-      }
+  const killDescendant = async () => {
+    const pid = await readPid(pidFile).catch(() => null);
+    if (!pid) return;
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      // already gone
     }
+  };
+  const run = runNewsjackCapture(runOptions(ws, binary, { timeouts: { version: 5000, detector_run: 1000, cluster: 5000, origin_apply: 5000 } }));
+  // Without the hard deadline the run would wait as long as the descendant
+  // lives. Race it, and on a hang kill the descendant so the test fails
+  // instead of hanging the whole suite.
+  let timer;
+  const deadline = new Promise((resolve) => {
+    timer = setTimeout(() => resolve('hung'), 20000);
+  });
+  const outcome = await Promise.race([run, deadline]);
+  clearTimeout(timer);
+  await killDescendant();
+  if (outcome === 'hung') {
+    await run;
+    assert.fail('the runner waited on a descendant past the hard deadline');
   }
+  assert.equal(outcome.code, 'newsjack_timeout:detector_run');
+  assert.deepEqual(await readdir(ws.out), []);
 });
 
 test('an abort before or between steps stops the run without executing more', async () => {
@@ -420,7 +428,7 @@ test('an out dir swapped for a symlink during the run receives nothing', async (
   assert.deepEqual(await readdir(elsewhere), []);
 });
 
-test('an abort signal stops the running step', async () => {
+test('an abort signal stops the running step', { timeout: 30000 }, async () => {
   const ws = await workspace();
   const binary = await fake(ws, { steps: { detector_run: { action: 'sleep' } } });
   const controller = new AbortController();

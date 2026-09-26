@@ -34,6 +34,11 @@ const VOID_ELEMENTS = new Set([
 const RAW_TEXT_TAGS = new Set(['script', 'style', 'template']);
 const SKIP_CONTAINER_TAGS = new Set(['nav', 'header', 'footer', 'aside']);
 const BLOCK_TAGS = new Set(['h1', 'h2', 'h3', 'p', 'blockquote', 'figcaption', 'li']);
+// CMS article bodies are often leaf <div>/<section> paragraphs. Without treating
+// those as blocks, a matching <h1>/<p> keeps contentBlocks non-empty, skips the
+// Trafilatura-line fallback, and silently drops the div body from analysis.
+const LEAF_CONTAINER_TAGS = new Set(['div', 'section']);
+const BLOCKISH_CHILD_TAGS = new Set([...BLOCK_TAGS, ...LEAF_CONTAINER_TAGS, 'ul', 'ol', 'table', 'main']);
 const BOILERPLATE_CLASS_HINTS = ['share', 'subscribe', 'newsletter', 'advert', 'promo-', 'related-', 'comments'];
 
 const ATTRIBUTION_CUES = [
@@ -364,6 +369,10 @@ function addParagraphSpans(builder, paragraphIndex, { role, roleBasis, text, att
   }
 }
 
+function hasBlockishChild(node) {
+  return (node.children || []).some((child) => child.type === 'element' && BLOCKISH_CHILD_TAGS.has(child.tag));
+}
+
 function walkBlocks(node, { inSkipContainer } = {}) {
   const blocks = [];
   if (node.type !== 'element') return blocks;
@@ -418,6 +427,30 @@ function walkBlocks(node, { inSkipContainer } = {}) {
     return blocks;
   }
 
+  // Leaf CMS containers (no nested block/list/table): treat like <p>.
+  // Otherwise a matching <h1>/<p> keeps contentBlocks non-empty, skips the
+  // Trafilatura-line fallback, and silently drops the div/section body.
+  if (!skipHere && LEAF_CONTAINER_TAGS.has(node.tag) && !hasBlockishChild(node)) {
+    const text = collapseWhitespace(innerText(node));
+    if (text) {
+      const classAttr = (node.attrs.class || '').toLowerCase();
+      let role = 'authorial';
+      let roleBasis = 'default';
+      let splitQuotes = true;
+      if (classAttr.includes('byline')) {
+        role = 'byline_meta';
+        roleBasis = 'html_structure';
+        splitQuotes = false;
+      } else if (BOILERPLATE_CLASS_HINTS.some((hint) => classAttr.includes(hint))) {
+        role = 'boilerplate';
+        roleBasis = 'html_structure';
+        splitQuotes = false;
+      }
+      blocks.push({ role, roleBasis, text, attribution: { speaker: null, cue: null }, splitQuotes });
+    }
+    return blocks;
+  }
+
   for (const child of node.children || []) {
     blocks.push(...walkBlocks(child, { inSkipContainer: skipHere }));
   }
@@ -435,6 +468,11 @@ function normalizeMatchText(text) {
     .replace(/\u00a0/g, ' ');
 }
 
+/** Trafilatura prefixes list lines with "- "; HTML walkers do not. */
+function stripExtractedListMarker(text) {
+  return text.replace(/^[-*•]\s+/, '');
+}
+
 function matchParagraphs(text) {
   const paragraphs = new Set();
   for (const part of String(text || '').split(/\n+/)) {
@@ -444,10 +482,31 @@ function matchParagraphs(text) {
   return paragraphs;
 }
 
+/**
+ * True when a walked HTML block corresponds to one or more Trafilatura
+ * lines. Exact match is preferred; substring match covers <br>-joined
+ * paragraphs Trafilatura splits, and list-marker stripping covers <li>.
+ */
+function blockMatchesExtracted(normalizedBlock, paragraphs) {
+  if (!normalizedBlock) return false;
+  if (paragraphs.has(normalizedBlock)) return true;
+  for (const paragraph of paragraphs) {
+    const stripped = stripExtractedListMarker(paragraph);
+    if (
+      normalizedBlock === stripped ||
+      normalizedBlock.includes(paragraph) ||
+      normalizedBlock.includes(stripped) ||
+      paragraph.includes(normalizedBlock) ||
+      stripped.includes(normalizedBlock)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function keepExtractedBlock(block, paragraphs) {
-  const normalized = normalizeMatchText(block.text || '');
-  if (!normalized) return false;
-  return paragraphs.has(normalized);
+  return blockMatchesExtracted(normalizeMatchText(block.text || ''), paragraphs);
 }
 
 function contentBlocks(blocks) {
@@ -594,6 +653,9 @@ export async function prepareFromHtml({
   const articleRoot = findFirst(root, (n) => n.type === 'element' && n.tag === 'article') || root;
   const paragraphs = matchParagraphs(extracted.text);
   let rawBlocks = walkBlocks(articleRoot, {}).filter((block) => keepExtractedBlock(block, paragraphs));
+  // Full Trafilatura-line fallback only when the walker kept nothing eligible.
+  // Do not replace a partial walker match: Trafilatura may still emit hidden
+  // or newsletter lines the walker correctly excluded.
   if (contentBlocks(rawBlocks).length === 0) {
     rawBlocks = blocksFromExtractedText(extracted.text);
   }

@@ -435,8 +435,9 @@ function normalizeMatchText(text) {
     .replace(/\u00a0/g, ' ');
 }
 
-// Trafilatura 2.2.0 plain text starts a list item's first line with "- "
-// (plus nesting indent, which normalizeMatchText trims). No other marker.
+// With include_formatting=False (extract_html.py), Trafilatura 2.2.0 starts a
+// list item's first line with "- " (plus nesting indent, which
+// normalizeMatchText trims). No other marker.
 const EXTRACTED_LIST_MARKER = /^- /;
 // Leading characters used to find a run's first line in the lookup.
 const RUN_ANCHOR_CHARS = 8;
@@ -445,16 +446,19 @@ const RUN_ANCHOR_CHARS = 8;
  * Comparison key for block and line text. Whitespace is not significant:
  * the walker joins nested block elements (a nested list, a second <p> in a
  * quote) without a space where Trafilatura starts a new line or adds one.
+ * Control, format, and private-use characters (zero-width space, soft
+ * hyphen, direction marks) are dropped too: Trafilatura removes them.
  */
 function matchKey(normalizedText) {
-  return normalizedText.replace(/ /g, '');
+  return normalizedText.replace(/[ \p{Cc}\p{Cf}\p{Co}]/gu, '');
 }
 
 /**
- * Exact lookup over extracted line keys. has(key) is true only when key
- * equals one line or a run of consecutive lines (Trafilatura splits <br>,
- * multi-<p> quotes, and nested list items onto separate lines). There is no
- * substring or containment match.
+ * Exact lookup over extracted line keys. hasLine(key) is true when key
+ * equals one line. hasRun(key) is true when key equals a run of two or more
+ * consecutive lines (Trafilatura splits <br>, multi-<p> quotes, and nested
+ * list items onto separate lines). There is no substring or containment
+ * match.
  *
  * A run is found from its first line: a prefix of key with the length of a
  * line that shares its leading characters and equals that line. The run
@@ -476,12 +480,36 @@ function lineLookup(keys) {
     lineEnds.add(offset);
   }
 
-  function isRun(key) {
+  // Blocks arrive in document order, so each list of candidate starts is
+  // searched from the end of the last run found, wrapping around. The
+  // candidates and the result are the same as a scan from the beginning;
+  // only the order changes, which keeps repeated first lines (interview
+  // "Q:" labels) from rescanning every earlier occurrence.
+  let cursor = 0;
+  function firstStartAtOrAfter(starts, position) {
+    let low = 0;
+    let high = starts.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (starts[middle] < position) low = middle + 1;
+      else high = middle;
+    }
+    return low === starts.length ? 0 : low;
+  }
+
+  function findRun(key) {
     for (let size = 1; size <= RUN_ANCHOR_CHARS && size < key.length; size += 1) {
       for (const length of lengthsByAnchor.get(key.slice(0, size)) || []) {
         if (length >= key.length) continue;
-        for (const start of startsByKey.get(key.slice(0, length)) || []) {
-          if (lineEnds.has(start + key.length) && joined.startsWith(key, start)) return true;
+        const starts = startsByKey.get(key.slice(0, length));
+        if (!starts) continue;
+        const from = firstStartAtOrAfter(starts, cursor);
+        for (let step = 0; step < starts.length; step += 1) {
+          const start = starts[(from + step) % starts.length];
+          if (lineEnds.has(start + key.length) && joined.startsWith(key, start)) {
+            cursor = start + key.length;
+            return true;
+          }
         }
       }
     }
@@ -490,10 +518,11 @@ function lineLookup(keys) {
 
   const runResults = new Map();
   return {
-    has(key) {
-      if (!key) return false;
-      if (startsByKey.has(key)) return true;
-      if (!runResults.has(key)) runResults.set(key, isRun(key));
+    hasLine(key) {
+      return startsByKey.has(key);
+    },
+    hasRun(key) {
+      if (!runResults.has(key)) runResults.set(key, findRun(key));
       return runResults.get(key);
     }
   };
@@ -502,18 +531,24 @@ function lineLookup(keys) {
 function extractedLineLookups(text) {
   const lines = String(text || '')
     .split(/\n+/)
-    .map((line) => normalizeMatchText(line))
-    .filter((line) => line.length > 0);
+    .map((line) => normalizeMatchText(line));
+  const keysOf = (texts) => texts.map(matchKey).filter((key) => key.length > 0);
   return {
-    lines: lineLookup(lines.map(matchKey)),
-    listItemLines: lineLookup(lines.map((line) => matchKey(line.replace(EXTRACTED_LIST_MARKER, ''))))
+    lines: lineLookup(keysOf(lines)),
+    linesWithoutListMarker: lineLookup(keysOf(lines.map((line) => line.replace(EXTRACTED_LIST_MARKER, ''))))
   };
 }
 
-/** Walked <li> blocks may also match after the extractor's list marker is removed. */
+/**
+ * Walked <li> blocks may also match after the extractor's list marker is
+ * removed. Single-line lookups run before either run search.
+ */
 function keepExtractedBlock(block, lookups) {
   const key = matchKey(normalizeMatchText(block.text || ''));
-  return lookups.lines.has(key) || (block.listItem === true && lookups.listItemLines.has(key));
+  if (!key) return false;
+  const listItem = block.listItem === true;
+  if (lookups.lines.hasLine(key) || (listItem && lookups.linesWithoutListMarker.hasLine(key))) return true;
+  return lookups.lines.hasRun(key) || (listItem && lookups.linesWithoutListMarker.hasRun(key));
 }
 
 function contentBlocks(blocks) {
@@ -660,12 +695,13 @@ export async function prepareFromHtml({
   const articleRoot = findFirst(root, (n) => n.type === 'element' && n.tag === 'article') || root;
   const lookups = extractedLineLookups(extracted.text);
   let rawBlocks = walkBlocks(articleRoot, {}).filter((block) => keepExtractedBlock(block, lookups));
-  // Full Trafilatura-line fallback only when the walker kept nothing eligible.
-  // Do not replace a partial walker match: Trafilatura may still emit hidden
-  // or newsletter lines the walker correctly excluded. Matching is exact, so
-  // menu items, page numbers, or fragments that only appear inside a line
-  // are not matches and cannot suppress this fallback.
-  if (contentBlocks(rawBlocks).length === 0) {
+  // Full Trafilatura-line fallback only when the walker kept no eligible
+  // block other than list items. Do not replace a partial walker match:
+  // Trafilatura may still emit hidden or newsletter lines the walker
+  // correctly excluded. Matching is whole-block, so a fragment that only
+  // appears inside a line cannot suppress this fallback, and list items
+  // alone (a menu or page numbers Trafilatura kept) cannot either.
+  if (!contentBlocks(rawBlocks).some((block) => block.listItem !== true)) {
     rawBlocks = blocksFromExtractedText(extracted.text);
   }
 

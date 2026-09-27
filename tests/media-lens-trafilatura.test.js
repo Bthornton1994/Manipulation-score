@@ -721,7 +721,8 @@ Drain 9</code> as blocked until crews finish the work this summer.</p><p>Officia
 
 test('menu items inside the article are not kept because a body line contains their text', async () => {
   // Substring matching kept each menu <li> because a body line contained
-  // "Home", "News", or "Weather". Trafilatura drops the menu, so no line equals it.
+  // "Home", "News", or "Weather". Trafilatura 2.2.0 drops a list with
+  // class="menu", so no extracted line equals a menu item.
   const html = `<!doctype html><html lang="en"><body><article>
 <h1>River town weighs flood repairs</h1>
 <ul class="menu"><li>Home</li><li>News</li><li>Weather</li></ul>
@@ -804,6 +805,54 @@ test('when only junk would have matched by substring, the Trafilatura-line fallb
   );
 });
 
+test('a block equal to a line plus the start of the next line is not kept', async () => {
+  const lines = [
+    'Council approves drainage plan',
+    'The council voted on Tuesday to approve the drainage plan after the river flooded downtown streets.',
+    'Construction starts in May and should finish before the autumn storms.'
+  ];
+  const html = `<article><h1>${lines[0]}</h1><p>${lines[1]}</p><p>${lines[2]}</p><p>${lines[0]} The council voted</p></article>`;
+  const prepared = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/run-end',
+    inputMode: 'fixture',
+    extractImpl: extractedLines(lines)
+  });
+  assert.deepEqual(
+    prepared.spans.map((span) => span.text),
+    lines
+  );
+});
+
+test('list items that Trafilatura keeps do not replace a body the walker has no block for', async () => {
+  // The body is in <div> paragraphs. Trafilatura keeps the unclassed tag and
+  // page-number lists as "- " lines, so those <li> blocks match. List items
+  // alone must not skip the fallback and reduce the article to its tags.
+  const html = `<!doctype html><html lang="en"><head><title>Harbor dredging delayed again</title></head><body><article>
+<div class="article-title">Harbor dredging delayed again as permit review drags on</div>
+<div class="article-paragraph">The harbor authority said on Thursday that dredging of the north channel will not begin until next spring, the third delay since the project was approved.</div>
+<div class="article-paragraph">State regulators are still reviewing a permit for the disposal site, and the authority cannot award a contract until that review is complete, a spokesperson said.</div>
+<div class="article-paragraph">Fishing crews say the channel has grown so shallow that larger boats can only enter at high tide, cutting the number of trips they can make each week.</div>
+<ul><li>Harbor</li><li>Permits</li><li>Fishing</li></ul>
+<ol><li>1</li><li>2</li><li>3</li></ol>
+</article></body></html>`;
+  const prepared = await prepareFromHtml({ html, sourceUrl: 'https://fictional-daily.example/harbor', inputMode: 'fixture' });
+  assert.equal(prepared.extraction.status, 'ok');
+  assert.match(prepared.preparedText, /third delay since the project was approved/);
+  assert.match(prepared.preparedText, /permit for the disposal site/);
+  assert.match(prepared.preparedText, /only enter at high tide/);
+});
+
+test('invisible characters that Trafilatura removes do not stop a paragraph from matching', async () => {
+  const zeroWidth = 'The pumping station failed twice in March,​ according to the county inspection report released on Monday.';
+  const softHyphen = 'Engineers blamed corroded wiring in the control­room and asked for emergency repair money this week.';
+  const html = `<!doctype html><html lang="en"><body><article><h1>Pump failures under review</h1><p>The regional council published its review of the drainage program on Tuesday after months of delay.</p><p>${zeroWidth}</p><p>${softHyphen}</p></article></body></html>`;
+  const prepared = await prepareFromHtml({ html, sourceUrl: 'https://fictional-daily.example/invisible', inputMode: 'fixture' });
+  assert.equal(prepared.extraction.status, 'ok');
+  assert.ok(prepared.spans.some((span) => span.text === zeroWidth));
+  assert.ok(prepared.spans.some((span) => span.text === softHyphen));
+});
+
 test('only list items match after the "- " marker is removed, and other bullet characters are not markers', async () => {
   const lines = [
     'Library budget update',
@@ -825,24 +874,72 @@ test('only list items match after the "- " marker is removed, and other bullet c
   );
 });
 
-test('a large list is matched in bounded time', async () => {
-  // Substring matching compared every walked block with every extracted line,
-  // so thousands of <li> items took seconds. Prebuilt lookups keep it near-linear.
-  const count = 6000;
+function auditList(count) {
   const items = Array.from({ length: count }, (_, i) => `Finding ${i} was recorded in the district ledger during the audit.`);
   const menu = Array.from({ length: count }, (_, i) => `<li>Finding ${i} archive link</li>`).join('');
-  const html = `<article><h1>Audit findings released</h1><ul>${items.map((item) => `<li>${item}</li>`).join('')}</ul><ul class="menu">${menu}</ul></article>`;
+  return {
+    html: `<article><h1>Audit findings released</h1><ul>${items.map((item) => `<li>${item}</li>`).join('')}</ul><ul class="menu">${menu}</ul></article>`,
+    lines: ['Audit findings released', ...items.map((item) => `- ${item}`)],
+    spans: count + 1
+  };
+}
+
+function interview(count) {
+  // Trafilatura puts each "Q:" and "A:" label on its own line, so every
+  // walked <p> is a two-line run whose first line repeats.
+  const html = [];
+  const lines = [];
+  for (let i = 0; i < count; i += 1) {
+    const question = `Question ${i} asks how the drainage budget will change next year?`;
+    const answer = `Answer ${i} says the public works director expects a small increase.`;
+    html.push(`<p><strong>Q:</strong><br>${question}</p><p><strong>A:</strong><br>${answer}</p>`);
+    lines.push('Q:', question, 'A:', answer);
+  }
+  return { html: `<article>${html.join('')}</article>`, lines, spans: count * 2 };
+}
+
+async function fastestPreparationMs({ html, lines, spans }) {
+  let fastest = Infinity;
+  for (let run = 0; run < 3; run += 1) {
+    const started = performance.now();
+    const prepared = await prepareFromHtml({
+      html,
+      sourceUrl: 'https://fictional-daily.example/timing',
+      inputMode: 'fixture',
+      extractImpl: extractedLines(lines)
+    });
+    fastest = Math.min(fastest, performance.now() - started);
+    assert.equal(prepared.spans.length, spans);
+  }
+  return fastest;
+}
+
+test('a large list is matched in bounded time', async () => {
+  // Substring matching compared every walked block with every extracted line,
+  // so 6,000 list items plus 6,000 unmatched menu items took seconds.
+  const { html, lines, spans } = auditList(6000);
   const started = performance.now();
   const prepared = await prepareFromHtml({
     html,
     sourceUrl: 'https://fictional-daily.example/audit',
     inputMode: 'fixture',
-    extractImpl: extractedLines(['Audit findings released', ...items.map((item) => `- ${item}`)])
+    extractImpl: extractedLines(lines)
   });
   const elapsedMs = performance.now() - started;
-  assert.equal(prepared.spans.length, count + 1);
+  assert.equal(prepared.spans.length, spans);
   assert.equal(prepared.spans.some((span) => span.text.includes('archive link')), false);
   assert.ok(elapsedMs < 2000, `large list took ${Math.round(elapsedMs)} ms`);
+});
+
+test('matching time grows about linearly for large lists and repeated interview labels', async () => {
+  // Eight times the input should take far less than 20 times as long. Linear
+  // matching measured 6x to 10x on Node 20 and 22; the quadratic run search
+  // this replaced measured about 80x on the interview input.
+  for (const build of [auditList, interview]) {
+    const small = await fastestPreparationMs(build(1500));
+    const large = await fastestPreparationMs(build(12000));
+    assert.ok(large / small < 20, `${build.name}: ${Math.round(small)} ms at 1,500 vs ${Math.round(large)} ms at 12,000`);
+  }
 });
 
 test('architecture section 10.2 matches first-article Trafilatura matching', async () => {
@@ -856,6 +953,8 @@ test('architecture section 10.2 matches first-article Trafilatura matching', asy
   assert.match(section, /exactly equals one Trafilatura paragraph line or a run of consecutive Trafilatura paragraph lines/);
   assert.match(section, /Only a walked `<li>` may also match after the leading `- ` list marker/);
   assert.match(section, /only contains a line, or only appears inside one, is not a match/);
+  assert.match(section, /If no content block other than a list item remains/);
+  assert.match(section, /List items alone, such as a menu or page numbers that Trafilatura kept, do not prevent this fallback/);
   assert.equal(/contains a Trafilatura paragraph line|is contained in a Trafilatura paragraph line/.test(section), false);
   assert.equal(section.includes('`•`'), false);
 });

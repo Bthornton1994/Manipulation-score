@@ -528,10 +528,13 @@ function lineLookup(keys) {
   };
 }
 
-function extractedLineLookups(text) {
-  const lines = String(text || '')
+function extractedMatchLines(text) {
+  return String(text || '')
     .split(/\n+/)
     .map((line) => normalizeMatchText(line));
+}
+
+function extractedLineLookups(lines) {
   const keysOf = (texts) => texts.map(matchKey).filter((key) => key.length > 0);
   return {
     lines: lineLookup(keysOf(lines)),
@@ -549,6 +552,34 @@ function keepExtractedBlock(block, lookups) {
   const listItem = block.listItem === true;
   if (lookups.lines.hasLine(key) || (listItem && lookups.linesWithoutListMarker.hasLine(key))) return true;
   return lookups.lines.hasRun(key) || (listItem && lookups.linesWithoutListMarker.hasRun(key));
+}
+
+/**
+ * The walked blocks that equal one extracted line or a run of consecutive
+ * lines, in walk order.
+ */
+function keptExtractedBlocks(blocks, lines) {
+  const lookups = extractedLineLookups(lines);
+  return blocks.filter((block) => keepExtractedBlock(block, lookups));
+}
+
+/**
+ * True when a content block other than a list item equals one extracted
+ * line exactly, compared as normalizeMatchText leaves them. This is the
+ * comparison the matcher used before runs, matchKey, and list markers were
+ * added, and it must stay that way: a block that only matches as a run,
+ * only once matchKey drops invisible characters, or only after the list
+ * marker is removed (a two-<p> quote, a <br>-split credit, a paragraph with
+ * a zero-width space) would otherwise replace a body the walker has no
+ * block for, such as <div> paragraphs, with itself.
+ */
+function equalsOneLineExactly(blocks, lines) {
+  const exactLines = new Set(lines.filter((line) => line.length > 0));
+  return contentBlocks(blocks).some((block) => {
+    if (block.listItem === true) return false;
+    const text = normalizeMatchText(block.text || '');
+    return matchKey(text).length > 0 && exactLines.has(text);
+  });
 }
 
 function contentBlocks(blocks) {
@@ -693,17 +724,19 @@ export async function prepareFromHtml({
   const root = parseHtml(sourceHtml);
   const meta = mergeMetadata(extractMetadata(root), extracted);
   const articleRoot = findFirst(root, (n) => n.type === 'element' && n.tag === 'article') || root;
-  const lookups = extractedLineLookups(extracted.text);
-  let rawBlocks = walkBlocks(articleRoot, {}).filter((block) => keepExtractedBlock(block, lookups));
-  // Full Trafilatura-line fallback only when the walker kept no eligible
-  // block other than list items. Do not replace a partial walker match:
-  // Trafilatura may still emit hidden or newsletter lines the walker
-  // correctly excluded. Matching is whole-block, so a fragment that only
-  // appears inside a line cannot suppress this fallback, and list items
-  // alone (a menu or page numbers Trafilatura kept) cannot either.
-  if (!contentBlocks(rawBlocks).some((block) => block.listItem !== true)) {
-    rawBlocks = blocksFromExtractedText(extracted.text);
-  }
+  const walkedBlocks = walkBlocks(articleRoot, {});
+  const lines = extractedMatchLines(extracted.text);
+  // Keep matched walker blocks only when a content block other than a list
+  // item equals one extracted line exactly (equalsOneLineExactly). Otherwise
+  // fall back to one block per Trafilatura line. When walker blocks are kept,
+  // unmatched lines are not added back: Trafilatura may still emit hidden or
+  // newsletter lines the walker correctly excluded. Matching is whole-block,
+  // so a fragment that only appears inside a line cannot stop this fallback,
+  // and list items alone (a menu or page numbers Trafilatura kept) cannot
+  // either.
+  const rawBlocks = equalsOneLineExactly(walkedBlocks, lines)
+    ? keptExtractedBlocks(walkedBlocks, lines)
+    : blocksFromExtractedText(extracted.text);
 
   const builder = new SpanBuilder();
   rawBlocks.forEach((block, i) => {

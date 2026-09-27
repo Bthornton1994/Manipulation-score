@@ -439,8 +439,17 @@ function normalizeMatchText(text) {
 // list item's first line with "- " (plus nesting indent, which
 // normalizeMatchText trims). No other marker.
 const EXTRACTED_LIST_MARKER = /^- /;
-// Leading characters used to find a run's first line in the lookup.
-const RUN_ANCHOR_CHARS = 8;
+// Run search budget: RUN_SEARCH_MIN_STEPS plus RUN_SEARCH_STEPS_PER_CHAR
+// steps per character of extracted line text and walked block text. See
+// keptExtractedBlocks. Section 10.2 of
+// docs/media-lens-live-url-v2-architecture.md states both values.
+export const RUN_SEARCH_STEPS_PER_CHAR = 16;
+export const RUN_SEARCH_MIN_STEPS = 100000;
+// The run search compares polynomial hashes modulo a prime below 2^26, so a
+// hash times the base stays an exact integer in a double. Every hash match is
+// confirmed by comparing the text.
+export const RUN_HASH_PRIME = 67108859;
+export const RUN_HASH_BASE = 1000003;
 
 /**
  * Comparison key for block and line text. Whitespace is not significant:
@@ -453,78 +462,154 @@ function matchKey(normalizedText) {
   return normalizedText.replace(/[ \p{Cc}\p{Cf}\p{Co}]/gu, '');
 }
 
+function hashPower(exponent) {
+  let power = 1;
+  let factor = RUN_HASH_BASE;
+  for (let rest = exponent; rest > 0; rest = Math.floor(rest / 2)) {
+    if (rest % 2 === 1) power = (power * factor) % RUN_HASH_PRIME;
+    factor = (factor * factor) % RUN_HASH_PRIME;
+  }
+  return power;
+}
+
 /**
- * Exact lookup over extracted line keys. hasLine(key) is true when key
- * equals one line. hasRun(key) is true when key equals a run of two or more
- * consecutive lines (Trafilatura splits <br>, multi-<p> quotes, and nested
- * list items onto separate lines). There is no substring or containment
- * match.
- *
- * A run is found from its first line: a prefix of key with the length of a
- * line that shares its leading characters and equals that line. The run
- * must then end exactly on a line end.
+ * Exact lookup over extracted line keys. has(key) is true when key equals
+ * one line. runs(keys, budget) returns the keys that equal a run of two or
+ * more consecutive lines (Trafilatura splits <br>, multi-<p> quotes, and
+ * nested list items onto separate lines). There is no substring or
+ * containment match. The run index is built on the first runs() call.
  */
-function lineLookup(keys) {
-  const joined = keys.join('');
-  const startsByKey = new Map();
-  const lengthsByAnchor = new Map();
-  const lineEnds = new Set();
-  let offset = 0;
-  for (const key of keys) {
-    if (!startsByKey.has(key)) startsByKey.set(key, []);
-    startsByKey.get(key).push(offset);
-    const anchor = key.slice(0, RUN_ANCHOR_CHARS);
-    if (!lengthsByAnchor.has(anchor)) lengthsByAnchor.set(anchor, new Set());
-    lengthsByAnchor.get(anchor).add(key.length);
-    offset += key.length;
-    lineEnds.add(offset);
-  }
-
-  // Blocks arrive in document order, so each list of candidate starts is
-  // searched from the end of the last run found, wrapping around. The
-  // candidates and the result are the same as a scan from the beginning;
-  // only the order changes, which keeps repeated first lines (interview
-  // "Q:" labels) from rescanning every earlier occurrence.
-  let cursor = 0;
-  function firstStartAtOrAfter(starts, position) {
-    let low = 0;
-    let high = starts.length;
-    while (low < high) {
-      const middle = (low + high) >> 1;
-      if (starts[middle] < position) low = middle + 1;
-      else high = middle;
+function lineIndex(lineKeys) {
+  const lines = new Set(lineKeys);
+  let runs = null;
+  return {
+    has(key) {
+      return lines.has(key);
+    },
+    runs(keys, budget) {
+      if (keys.length === 0) return new Set();
+      if (runs === null) runs = runSearch(lineKeys);
+      return runs(keys, budget);
     }
-    return low === starts.length ? 0 : low;
+  };
+}
+
+/**
+ * A run starts with a line that is a shorter prefix of the key and ends
+ * exactly on a line end. Each key is read once to find every line that is a
+ * prefix of it. Keys are then grouped by that first line and by their
+ * length, and each group reads the places its first line occurs once,
+ * comparing the hash of the run of that length with the keys' hashes. Groups
+ * are read in the order their first line first occurs, then by length, so
+ * the steps used, and the result, do not depend on the order of the keys.
+ *
+ * budget.steps counts the characters read (keys, candidate first lines, and
+ * runs compared as text) and the places and keys checked. Once it passes
+ * budget.limit, the search stops and returns null.
+ */
+function runSearch(lineKeys) {
+  const count = lineKeys.length;
+  const joined = lineKeys.join('');
+  const lineStart = new Int32Array(count);
+  const lineHash = new Int32Array(count);
+  // Prefix hash of the joined keys at each line boundary, -1 elsewhere.
+  const boundaryHash = new Int32Array(joined.length + 1).fill(-1);
+  let offset = 0;
+  let prefix = 0;
+  boundaryHash[0] = 0;
+  for (let index = 0; index < count; index += 1) {
+    const line = lineKeys[index];
+    let hash = 0;
+    for (let at = 0; at < line.length; at += 1) {
+      const code = line.charCodeAt(at);
+      hash = (hash * RUN_HASH_BASE + code) % RUN_HASH_PRIME;
+      prefix = (prefix * RUN_HASH_BASE + code) % RUN_HASH_PRIME;
+    }
+    lineStart[index] = offset;
+    lineHash[index] = hash;
+    offset += line.length;
+    boundaryHash[offset] = prefix;
+  }
+  // firstIndex: each distinct line's first occurrence. nextIndex: the next
+  // occurrence of the same line, -1 after the last.
+  const firstIndex = new Map();
+  const nextIndex = new Int32Array(count);
+  for (let index = count - 1; index >= 0; index -= 1) {
+    const next = firstIndex.get(lineKeys[index]);
+    nextIndex[index] = next === undefined ? -1 : next;
+    firstIndex.set(lineKeys[index], index);
+  }
+  // firstShape: one distinct line per length and hash. nextShape chains any
+  // other distinct line with the same length and hash.
+  const firstShape = new Map();
+  const nextShape = new Int32Array(count).fill(-1);
+  for (const index of firstIndex.values()) {
+    const shape = lineKeys[index].length * RUN_HASH_PRIME + lineHash[index];
+    if (firstShape.has(shape)) nextShape[index] = firstShape.get(shape);
+    firstShape.set(shape, index);
   }
 
-  function findRun(key) {
-    for (let size = 1; size <= RUN_ANCHOR_CHARS && size < key.length; size += 1) {
-      for (const length of lengthsByAnchor.get(key.slice(0, size)) || []) {
-        if (length >= key.length) continue;
-        const starts = startsByKey.get(key.slice(0, length));
-        if (!starts) continue;
-        const from = firstStartAtOrAfter(starts, cursor);
-        for (let step = 0; step < starts.length; step += 1) {
-          const start = starts[(from + step) % starts.length];
-          if (lineEnds.has(start + key.length) && joined.startsWith(key, start)) {
-            cursor = start + key.length;
-            return true;
+  return function runs(keys, budget) {
+    const spend = (steps) => {
+      budget.steps += steps;
+      return budget.steps <= budget.limit;
+    };
+
+    // First line (as its first index) -> key length -> key hash -> keys.
+    const groups = new Map();
+    for (const key of new Set(keys)) {
+      if (key.length > joined.length) continue;
+      if (!spend(key.length)) return null;
+      const firstLines = [];
+      let hash = 0;
+      for (let at = 0; at < key.length; at += 1) {
+        hash = (hash * RUN_HASH_BASE + key.charCodeAt(at)) % RUN_HASH_PRIME;
+        if (at + 1 === key.length) break;
+        const shape = firstShape.get((at + 1) * RUN_HASH_PRIME + hash);
+        for (let index = shape === undefined ? -1 : shape; index !== -1; index = nextShape[index]) {
+          if (!spend(at + 1)) return null;
+          if (key.startsWith(lineKeys[index])) firstLines.push(index);
+        }
+      }
+      for (const first of firstLines) {
+        if (!groups.has(first)) groups.set(first, new Map());
+        const byLength = groups.get(first);
+        if (!byLength.has(key.length)) byLength.set(key.length, new Map());
+        const byHash = byLength.get(key.length);
+        if (!byHash.has(hash)) byHash.set(hash, []);
+        byHash.get(hash).push(key);
+      }
+    }
+
+    const order = [];
+    for (const [first, byLength] of groups) {
+      for (const [length, byHash] of byLength) order.push({ first, length, byHash });
+    }
+    order.sort((a, b) => a.first - b.first || a.length - b.length);
+
+    const found = new Set();
+    for (const { first, length, byHash } of order) {
+      let pending = 0;
+      for (const group of byHash.values()) for (const key of group) if (!found.has(key)) pending += 1;
+      const power = hashPower(length);
+      for (let index = first; index !== -1 && pending > 0; index = nextIndex[index]) {
+        if (!spend(1)) return null;
+        const start = lineStart[index];
+        const end = start + length;
+        if (end > joined.length || boundaryHash[end] === -1) continue;
+        const runHash = (((boundaryHash[end] - ((boundaryHash[start] * power) % RUN_HASH_PRIME)) % RUN_HASH_PRIME) + RUN_HASH_PRIME) % RUN_HASH_PRIME;
+        for (const key of byHash.get(runHash) || []) {
+          if (!spend(1)) return null;
+          if (found.has(key)) continue;
+          if (!spend(length)) return null;
+          if (joined.startsWith(key, start)) {
+            found.add(key);
+            pending -= 1;
           }
         }
       }
     }
-    return false;
-  }
-
-  const runResults = new Map();
-  return {
-    hasLine(key) {
-      return startsByKey.has(key);
-    },
-    hasRun(key) {
-      if (!runResults.has(key)) runResults.set(key, findRun(key));
-      return runResults.get(key);
-    }
+    return found;
   };
 }
 
@@ -534,33 +619,47 @@ function extractedMatchLines(text) {
     .map((line) => normalizeMatchText(line));
 }
 
-function extractedLineLookups(lines) {
-  const keysOf = (texts) => texts.map(matchKey).filter((key) => key.length > 0);
-  return {
-    lines: lineLookup(keysOf(lines)),
-    linesWithoutListMarker: lineLookup(keysOf(lines.map((line) => line.replace(EXTRACTED_LIST_MARKER, ''))))
-  };
-}
-
-/**
- * Walked <li> blocks may also match after the extractor's list marker is
- * removed. Single-line lookups run before either run search.
- */
-function keepExtractedBlock(block, lookups) {
-  const key = matchKey(normalizeMatchText(block.text || ''));
-  if (!key) return false;
-  const listItem = block.listItem === true;
-  if (lookups.lines.hasLine(key) || (listItem && lookups.linesWithoutListMarker.hasLine(key))) return true;
-  return lookups.lines.hasRun(key) || (listItem && lookups.linesWithoutListMarker.hasRun(key));
-}
-
 /**
  * The walked blocks that equal one extracted line or a run of consecutive
- * lines, in walk order.
+ * lines, in walk order. A walked <li> may also match after the extractor's
+ * list marker is removed from each line.
+ *
+ * The run search has a budget of RUN_SEARCH_MIN_STEPS plus
+ * RUN_SEARCH_STEPS_PER_CHAR steps per character of line and block text, shared
+ * by both lookups. A page that needs more (one line repeated many thousands of
+ * times and starting blocks of many different lengths) keeps no block as a
+ * run: only blocks equal to one line are kept.
  */
 function keptExtractedBlocks(blocks, lines) {
-  const lookups = extractedLineLookups(lines);
-  return blocks.filter((block) => keepExtractedBlock(block, lookups));
+  const keysOf = (texts) => texts.map(matchKey).filter((key) => key.length > 0);
+  const lineKeys = keysOf(lines);
+  const unmarkedLines = lines.map((line) => line.replace(EXTRACTED_LIST_MARKER, ''));
+  const plain = lineIndex(lineKeys);
+  const unmarked = unmarkedLines.some((line, index) => line !== lines[index]) ? lineIndex(keysOf(unmarkedLines)) : plain;
+  const keyed = blocks
+    .map((block) => ({ block, key: matchKey(normalizeMatchText(block.text || '')), listItem: block.listItem === true }))
+    .filter(({ key }) => key.length > 0);
+  const equalsLine = ({ key, listItem }) => plain.has(key) || (listItem && unmarked.has(key));
+  const rest = keyed.filter((entry) => !equalsLine(entry));
+
+  const lineChars = lineKeys.reduce((total, key) => total + key.length, 0);
+  const blockChars = keyed.reduce((total, { key }) => total + key.length, 0);
+  const budget = { steps: 0, limit: RUN_SEARCH_MIN_STEPS + RUN_SEARCH_STEPS_PER_CHAR * (lineChars + blockChars) };
+  const runs = plain.runs(
+    rest.map(({ key }) => key),
+    budget
+  );
+  // With no list marker in the text, unmarked is plain and was just searched.
+  const listRuns =
+    runs &&
+    (unmarked === plain
+      ? new Set()
+      : unmarked.runs(
+          rest.filter(({ key, listItem }) => listItem && !runs.has(key)).map(({ key }) => key),
+          budget
+        ));
+  const equalsRun = ({ key, listItem }) => listRuns !== null && (runs.has(key) || (listItem && listRuns.has(key)));
+  return keyed.filter((entry) => equalsLine(entry) || equalsRun(entry)).map(({ block }) => block);
 }
 
 /**

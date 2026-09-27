@@ -10,7 +10,15 @@ import { analyze } from '../media-lens/worker/analyze.js';
 import { createJevAdapter } from '../media-lens/worker/adapters/jev.js';
 import { createNewsjackAdapter } from '../media-lens/worker/adapters/newsjack.js';
 import { loadConfig } from '../media-lens/worker/config.js';
-import { enginePreparation, prepareFromHtml, prepareFromPastedText } from '../media-lens/worker/prepare.js';
+import {
+  RUN_HASH_BASE,
+  RUN_HASH_PRIME,
+  RUN_SEARCH_MIN_STEPS,
+  RUN_SEARCH_STEPS_PER_CHAR,
+  enginePreparation,
+  prepareFromHtml,
+  prepareFromPastedText
+} from '../media-lens/worker/prepare.js';
 import {
   PY3LANGID_VERSION,
   TRAFILATURA_VERSION,
@@ -1106,6 +1114,43 @@ function interview(count) {
   return { html: `<article>${html.join('')}</article>`, lines, spans: count * 2 + 1 };
 }
 
+function unansweredInterview(count) {
+  // Trafilatura drops the button, so no <p> equals its "Q:" run and every
+  // run search finds nothing.
+  const html = ['<h1>Budget interview</h1>'];
+  const lines = ['Budget interview'];
+  for (let i = 0; i < count; i += 1) {
+    const question = `Question ${i} asks how the drainage budget will change next year?`;
+    html.push(`<p><strong>Q:</strong><br>${question}<button>Share</button></p>`);
+    lines.push('Q:', question);
+  }
+  return { html: `<article>${html.join('')}</article>`, lines, spans: 1 };
+}
+
+function sharedOpeningInterview(count) {
+  const html = ['<h1>Budget interview</h1>'];
+  const lines = ['Budget interview'];
+  for (let i = 0; i < count; i += 1) {
+    const question = `How will the drainage budget change next year in district number ${i}?`;
+    html.push(`<p><strong>Q:</strong><br>${question}<button>Share</button></p>`);
+    lines.push('Q:', question);
+  }
+  return { html: `<article>${html.join('')}</article>`, lines, spans: 1 };
+}
+
+function prefixLabels(count) {
+  // "Mr. Smith" is a prefix of "Mr. Smithers", and both labels repeat.
+  const html = ['<h1>Budget interview</h1>'];
+  const lines = ['Budget interview'];
+  for (let i = 0; i < count; i += 1) {
+    const first = `Answer ${i} from the first speaker about the harbor budget.`;
+    const second = `Answer ${i} from the second speaker about the harbor budget.`;
+    html.push(`<p><strong>Mr. Smith</strong><br>${first}</p><p><strong>Mr. Smithers</strong><br>${second}</p>`);
+    lines.push('Mr. Smith', first, 'Mr. Smithers', second);
+  }
+  return { html: `<article>${html.join('')}</article>`, lines, spans: count * 2 + 1 };
+}
+
 async function fastestPreparationMs({ html, lines, spans }) {
   let fastest = Infinity;
   for (let run = 0; run < 3; run += 1) {
@@ -1150,6 +1195,17 @@ test('matching time grows about linearly for large lists and repeated interview 
   }
 });
 
+test('run searches that find nothing, and labels that are prefixes of other labels, take about linear time', async () => {
+  // The earlier search read every place a repeated first line occurs for
+  // each block that found no run, and for each "Mr. Smithers" block it read
+  // every "Mr. Smith" first. Both measured 57x to 79x for 8x the input.
+  for (const build of [unansweredInterview, sharedOpeningInterview, prefixLabels]) {
+    const small = await fastestPreparationMs(build(1500));
+    const large = await fastestPreparationMs(build(12000));
+    assert.ok(large / small < 20, `${build.name}: ${Math.round(small)} ms at 1,500 vs ${Math.round(large)} ms at 12,000`);
+  }
+});
+
 test('an interview page where no block equals one line falls back to one block per extracted line', async () => {
   const { lines } = interview(3);
   const html = interview(3).html.replace('<h1>Budget interview</h1>', '<div>Budget interview</div>');
@@ -1163,6 +1219,313 @@ test('an interview page where no block equals one line falls back to one block p
     prepared.spans.map((span) => span.text),
     lines
   );
+});
+
+async function keptTexts(html, lines) {
+  const prepared = await prepareFromHtml({
+    html: `<article><h1>${lines[0]}</h1>${html}</article>`,
+    sourceUrl: 'https://fictional-daily.example/runs',
+    inputMode: 'fixture',
+    extractImpl: extractedLines(lines)
+  });
+  return prepared.spans.map((span) => span.text);
+}
+
+test('a block with the same first line and length as an extracted run but different text is not kept', async () => {
+  const long = 'The regional council published its review of the drainage program on Tuesday:';
+  for (const label of ['Q:', long]) {
+    const lines = ['Budget', label, 'Why did the budget grow?'];
+    assert.deepEqual(await keptTexts(`<p>${label}<br>Why did the budget grow?</p><p>${label}<br>Why did the budget rise?</p>`, lines), [
+      'Budget',
+      `${label} Why did the budget grow?`
+    ]);
+  }
+  const lines = ['Budget', 'Q:', 'Why did it grow?', 'Ask the council.'];
+  assert.deepEqual(await keptTexts('<p>Q:<br>Why did it grow?<br>Ask the auditor.</p><p>Q:<br>Why did it grow?<br>Ask the council.</p>', lines), [
+    'Budget',
+    'Q: Why did it grow? Ask the council.'
+  ]);
+});
+
+test('a run must start on a line start and end on a line end', async () => {
+  const lines = ['Budget', 'Q:', 'Why did the budget grow?', 'Ask the council.'];
+  assert.deepEqual(
+    await keptTexts('<p>Q:<br>Why did the budget grow?<br>Ask the</p><p>did the budget grow?<br>Ask the council.</p><p>Q:<br>Why did</p>', lines),
+    ['Budget']
+  );
+});
+
+test('runs are kept whatever the order of blocks, misses, and repeated first lines', async () => {
+  const missesThenHits = { html: [], lines: ['Budget interview'], kept: ['Budget interview'] };
+  for (let i = 0; i < 200; i += 1) {
+    const question = `Missed question ${i} about the drainage budget?`;
+    missesThenHits.html.push(`<p>Q:<br>${question}<button>Share</button></p>`);
+    missesThenHits.lines.push('Q:', question);
+  }
+  for (let i = 0; i < 200; i += 1) {
+    const question = `Kept question ${i} about the drainage budget?`;
+    missesThenHits.html.push(`<p>Q:<br>${question}</p>`);
+    missesThenHits.lines.push('Q:', question);
+    missesThenHits.kept.push(`Q: ${question}`);
+  }
+  assert.deepEqual(await keptTexts(missesThenHits.html.join(''), missesThenHits.lines), missesThenHits.kept);
+
+  // Labels the walker has no block for repeat the first line before each run.
+  const hiddenLabels = { html: [], lines: ['Budget interview'], kept: ['Budget interview'] };
+  for (let i = 0; i < 300; i += 1) {
+    const question = `Question ${i} about the drainage budget?`;
+    hiddenLabels.html.push(`<div>Q:</div><p>Q:<br>${question}</p>`);
+    hiddenLabels.lines.push('Q:', 'Q:', question);
+    hiddenLabels.kept.push(`Q: ${question}`);
+  }
+  assert.deepEqual(await keptTexts(hiddenLabels.html.join(''), hiddenLabels.lines), hiddenLabels.kept);
+
+  const reversed = ['Budget', 'Q:', 'Second question?', 'Q:', 'First question?'];
+  assert.deepEqual(await keptTexts('<p>Q:<br>First question?</p><p>Q:<br>Second question?</p>', reversed), [
+    'Budget',
+    'Q: First question?',
+    'Q: Second question?'
+  ]);
+});
+
+test('a block whose run has the same hash as an extracted run but different text is not kept', async () => {
+  // The two words have the same length and the same run hash, so only the
+  // text comparison tells the second block apart from the extracted run.
+  const runHash = (text) => [...text].reduce((hash, char) => (hash * RUN_HASH_BASE + char.charCodeAt(0)) % RUN_HASH_PRIME, 0);
+  assert.equal(runHash('Q:hlkvnkix'), runHash('Q:dowttwku'));
+  const lines = ['Budget', 'Q:', 'hlkvnkix'];
+  assert.deepEqual(await keptTexts('<p>Q:<br>hlkvnkix</p><p>Q:<br>dowttwku</p>', lines), ['Budget', 'Q: hlkvnkix']);
+});
+
+test('a repeated line that only shares a hash with the start of a block is not searched as its first line', async () => {
+  // "hlkvnkix" and "dowttwku" have the same length and hash. Taking the
+  // repeated line as the first line of 200 blocks of different lengths would
+  // read all 60,000 places for each block and pass the budget.
+  const lines = ['Budget interview', 'Kept label', 'kept answer'];
+  for (let i = 0; i < 60000; i += 1) lines.push('hlkvnkix');
+  const blocks = ['<p>Kept label<br>kept answer</p>'];
+  for (let j = 0; j < 200; j += 1) blocks.push(`<p>dowttwku${'x'.repeat(2 * j + 1)}</p>`);
+  assert.deepEqual(await keptTexts(blocks.join(''), lines), ['Budget interview', 'Kept label kept answer']);
+});
+
+test('a run that spans every extracted line is kept', async () => {
+  assert.deepEqual(await keptTexts('<p>Harbor update<br>Dredging is delayed.</p>', ['Harbor update', 'Dredging is delayed.']), [
+    'Harbor update',
+    'Harbor update Dredging is delayed.'
+  ]);
+});
+
+test('a repeated run does not hide a different run of the same length and first line', async () => {
+  const lines = ['Budget', 'Q:', 'Answer A.', 'Q:', 'Answer A.', 'Q:', 'Answer B.'];
+  assert.deepEqual(await keptTexts('<p>Q:<br>Answer A.</p><p>Q:<br>Answer B.</p>', lines), ['Budget', 'Q: Answer A.', 'Q: Answer B.']);
+});
+
+function transcript(turns) {
+  // Every turn starts with the same long speaker label, and no line repeats.
+  const random = seededRandom(1789);
+  const words = ['budget', 'harbor', 'council', 'permit', 'dredging', 'channel', 'crews', 'spring', 'report', 'costs', 'residents', 'state'];
+  const sentence = (count) => {
+    const picked = Array.from({ length: count }, () => words[Math.floor(random() * words.length)]);
+    return `${picked.join(' ')}.`;
+  };
+  const html = [];
+  const lines = ['Remarks at the budget briefing'];
+  const kept = ['Remarks at the budget briefing'];
+  for (let turn = 0; turn < turns; turn += 1) {
+    const first = `THE PRESIDENT: Turn ${turn} ${sentence(5 + Math.floor(random() * 40))}`;
+    const second = sentence(3 + Math.floor(random() * 10));
+    html.push(`<p>${first}<br><br>${second}</p>`);
+    lines.push(first, second);
+    kept.push(`${first} ${second}`);
+  }
+  return { html: html.join(''), lines, kept };
+}
+
+test('a transcript whose turns share a long speaker label keeps every <br>-split turn', async () => {
+  const { html, lines, kept } = transcript(400);
+  assert.deepEqual(await keptTexts(html, lines), kept);
+});
+
+function oddMisses({ labels, misses }) {
+  // `labels` "Q:" lines and `misses` blocks of "Q:" plus an odd number of
+  // characters. The "Q:" lines end at even offsets and every miss key has an
+  // odd length, so no run from a "Q:" line ends on a line end: each miss only
+  // costs its key, its first line, and one step per "Q:" line.
+  const lines = ['Budget interview', 'Kept label', 'kept answer'];
+  for (let i = 0; i < labels; i += 1) lines.push('Q:');
+  const blocks = ['<p>Kept label<br>kept answer</p>'];
+  for (let j = 0; j < misses; j += 1) blocks.push(`<p>Q:<br>${'x'.repeat(2 * j + 1)}</p>`);
+  return { html: blocks.join(''), lines };
+}
+
+test('the run search budget is 100,000 steps plus 16 steps per character, counted as documented', async () => {
+  // Steps: each unmatched block key's characters, each candidate first line's
+  // characters, each place read, each key checked at a hash match, and each
+  // run compared as text. The kept run costs 19 + 9 + 1 + 1 + 19; each miss
+  // costs its key, its "Q:" first line, and one step per "Q:" line.
+  const stepsAndLimit = (misses, labels) => {
+    const missKeyChars = misses * misses + 2 * misses;
+    return {
+      steps: 19 + 9 + 1 + 1 + 19 + missKeyChars + 2 * misses + misses * labels,
+      limit: RUN_SEARCH_MIN_STEPS + RUN_SEARCH_STEPS_PER_CHAR * (34 + 15 + 19 + missKeyChars + 2 * labels)
+    };
+  };
+  // Each "Q:" line adds `misses` steps and 2 characters, so find a page whose
+  // run search uses exactly its budget.
+  let misses = 2 * RUN_SEARCH_STEPS_PER_CHAR + 1;
+  let labels = null;
+  for (; labels === null; misses += 1) {
+    const { steps, limit } = stepsAndLimit(misses, 0);
+    const perLabel = misses - 2 * RUN_SEARCH_STEPS_PER_CHAR;
+    if ((limit - steps) % perLabel === 0) labels = (limit - steps) / perLabel;
+  }
+  misses -= 1;
+  const exact = stepsAndLimit(misses, labels);
+  assert.equal(exact.steps, exact.limit);
+  const within = oddMisses({ labels, misses });
+  assert.deepEqual(await keptTexts(within.html, within.lines), ['Budget interview', 'Kept label kept answer']);
+  const over = oddMisses({ labels: labels + 1, misses });
+  assert.deepEqual(await keptTexts(over.html, over.lines), ['Budget interview']);
+});
+
+test('a block that ends inside a line is not kept even when the text up to there has a special hash', async () => {
+  // The prefix hash of "BudgetQ:vdaamgtx" is RUN_HASH_PRIME - 1, the value
+  // the search stores for "not a line end". Only the line-end check keeps
+  // this block out.
+  const prefixHash = [...'BudgetQ:vdaamgtx'].reduce((hash, char) => (hash * RUN_HASH_BASE + char.charCodeAt(0)) % RUN_HASH_PRIME, 0);
+  assert.equal(prefixHash, RUN_HASH_PRIME - 1);
+  assert.deepEqual(await keptTexts('<p>Q:<br>vdaamgtx</p>', ['Budget', 'Q:', 'vdaamgtxtail']), ['Budget']);
+});
+
+test('a page that needs more run search than its budget keeps only blocks equal to one line', async () => {
+  // One line repeated tens of thousands of times starts blocks of hundreds
+  // of different lengths. Each (first line, length) group reads every place
+  // the line occurs, which passes the budget.
+  const lines = ['Budget interview', 'The director answered every question.', 'Kept label', 'kept answer'];
+  const blocks = ['<p>The director answered every question.</p>', '<p>Kept label<br>kept answer</p>'];
+  assert.deepEqual(await keptTexts(blocks.join(''), lines), ['Budget interview', 'The director answered every question.', 'Kept label kept answer']);
+  for (let length = 1; length <= 400; length += 1) blocks.push(`<p>Q:<br>${'x'.repeat(length)}</p>`);
+  for (let i = 0; i < 60000; i += 1) lines.push('Q:');
+  assert.deepEqual(await keptTexts(blocks.join(''), lines), ['Budget interview', 'The director answered every question.']);
+
+  // Hundreds of lines that are each a prefix of every block: checking the
+  // candidate first lines alone passes the budget.
+  const ladder = ['Budget interview', 'Kept label', 'kept answer'];
+  for (let length = 1; length <= 300; length += 1) ladder.push('a'.repeat(length));
+  const ladderBlocks = ['<p>Kept label<br>kept answer</p>'];
+  for (let i = 0; i < 100; i += 1) ladderBlocks.push(`<p>${'a'.repeat(300)}b${i}</p>`);
+  assert.deepEqual(await keptTexts(ladderBlocks.join(''), ladder), ['Budget interview']);
+});
+
+test('the list-marker run search shares the budget, and running out there keeps no run at all', async () => {
+  const lines = ['Budget interview', 'Kept label', 'kept answer'];
+  for (let i = 0; i < 20000; i += 1) lines.push('- Q:');
+  const blocks = ['<p>Kept label<br>kept answer</p>'];
+  for (let j = 0; j < 400; j += 1) blocks.push(`<ul><li>Q:<br>${'x'.repeat(2 * j + 1)}</li></ul>`);
+  assert.deepEqual(await keptTexts(blocks.join(''), lines), ['Budget interview']);
+
+  // Each search fits the budget alone; together they do not.
+  const shared = ['Budget interview', 'Kept label', 'kept answer'];
+  for (let i = 0; i < 20000; i += 1) shared.push('Q:');
+  for (let i = 0; i < 20000; i += 1) shared.push('- A:');
+  const sharedBlocks = ['<p>Kept label<br>kept answer</p>'];
+  for (let j = 0; j < 50; j += 1) sharedBlocks.push(`<p>Q:<br>${'x'.repeat(2 * j + 1)}</p>`, `<ul><li>A:<br>${'y'.repeat(2 * j + 1)}</li></ul>`);
+  assert.deepEqual(await keptTexts(sharedBlocks.join(''), shared), ['Budget interview']);
+  assert.deepEqual(await keptTexts(sharedBlocks.filter((block) => !block.startsWith('<ul>')).join(''), shared), [
+    'Budget interview',
+    'Kept label kept answer'
+  ]);
+});
+
+test('runs found early stop their search, so a repeated first line does not use up the budget', async () => {
+  // Forty runs of 2 to 41 "Q:" lines, each found at the first "Q:" line.
+  const lines = ['Budget interview'];
+  for (let i = 0; i < 60000; i += 1) lines.push('Q:');
+  const blocks = [];
+  const kept = ['Budget interview'];
+  for (let count = 2; count <= 41; count += 1) {
+    blocks.push(`<p>${Array(count).fill('Q:').join('<br>')}</p>`);
+    kept.push(Array(count).fill('Q:').join(' '));
+  }
+  assert.deepEqual(await keptTexts(blocks.join(''), lines), kept);
+});
+
+test('a block found through its own first line is not searched again under a repeated shorter first line, in any block order', async () => {
+  // Each block starts with both "Q:" (repeated 60,000 times, after the
+  // labels) and its own label line, which comes first in the text and finds
+  // it. Searching every "Q:" place again for forty blocks would pass the
+  // budget and drop every run.
+  const lines = ['Budget interview'];
+  const blocks = [];
+  const kept = ['Budget interview'];
+  for (let i = 0; i < 40; i += 1) {
+    const label = `Q: Label ${i}`;
+    const answer = `answer${'z'.repeat(i)}`;
+    lines.push(label, answer);
+    blocks.push(`<p>${label}<br>${answer}</p>`);
+    kept.push(`${label} ${answer}`);
+  }
+  for (let i = 0; i < 60000; i += 1) lines.push('Q:');
+  const miss = '<p>Q:<br>unanswered</p>';
+  const texts = await keptTexts(blocks.join('') + miss, lines);
+  assert.deepEqual(texts, kept);
+  const reversed = await keptTexts(miss + [...blocks].reverse().join(''), lines);
+  assert.deepEqual(reversed, ['Budget interview', ...kept.slice(1).reverse()]);
+});
+
+function seededRandom(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+test('kept blocks match an exhaustive search over every line start and line end', async () => {
+  // Reference: a block is kept when its text, without whitespace and the
+  // invisible characters used here, equals one line or the joined text of
+  // consecutive lines; a <li> may also match lines without the "- " marker.
+  const key = (text) => text.replace(/[\s​­]/g, '');
+  const matches = (target, lineKeys) =>
+    lineKeys.some((_, first) => {
+      let joined = '';
+      for (let last = first; last < lineKeys.length && joined.length < target.length; last += 1) {
+        joined += lineKeys[last];
+        if (joined === target) return true;
+      }
+      return false;
+    });
+  const words = ['a', 'aa', 'ab', 'b', 'Q:', 'Mr. Smith', 'Mr. Smithers', 'ers', 'x​y', 'so­ft', 'a b'];
+  const random = seededRandom(20260927);
+  const pick = (list) => list[Math.floor(random() * list.length)];
+  for (let page = 0; page < 300; page += 1) {
+    const lines = ['Headline'];
+    const count = 3 + Math.floor(random() * 10);
+    for (let i = 0; i < count; i += 1) lines.push(random() < 0.2 ? `- ${pick(words)}` : pick(words));
+    const blocks = [];
+    for (let i = 0; i < 8; i += 1) {
+      const first = 1 + Math.floor(random() * (lines.length - 1));
+      const last = Math.min(lines.length - 1, first + Math.floor(random() * 3));
+      let parts = lines.slice(first, last + 1).map((line) => line.replace(/^- /, ''));
+      if (random() < 0.3) parts = [...parts, pick(words)];
+      if (random() < 0.2) parts = [pick(words), ...parts];
+      blocks.push({ listItem: random() < 0.3, parts });
+    }
+    const html = blocks
+      .map(({ listItem, parts }) => (listItem ? `<ul><li>${parts.join('<br>')}</li></ul>` : `<p>${parts.join('<br>')}</p>`))
+      .join('');
+    const lineKeys = lines.map(key);
+    const unmarkedKeys = lines.map((line) => key(line.replace(/^- /, '')));
+    const expected = ['Headline'];
+    for (const { listItem, parts } of blocks) {
+      const target = key(parts.join(''));
+      if (matches(target, lineKeys) || (listItem && matches(target, unmarkedKeys))) expected.push(parts.join(' ').replace(/\s+/g, ' ').trim());
+    }
+    assert.deepEqual(await keptTexts(html, lines), expected, `page ${page}: ${JSON.stringify(lines)} ${html}`);
+  }
 });
 
 test('architecture section 10.2 matches first-article Trafilatura matching', async () => {
@@ -1181,6 +1544,13 @@ test('architecture section 10.2 matches first-article Trafilatura matching', asy
   assert.match(section, /does not prevent the fallback/);
   assert.match(section, /List items alone, such as a menu or page numbers that Trafilatura kept, do not prevent this fallback/);
   assert.match(section, /still loses its `<div>` body until the walker has blocks for `<div>` paragraphs/);
+  assert.match(section, /keeps no block as a run/);
+  assert.ok(
+    section.includes(
+      `budget of ${RUN_SEARCH_MIN_STEPS.toLocaleString('en-US')} steps plus ${RUN_SEARCH_STEPS_PER_CHAR} steps per character`
+    )
+  );
+  assert.match(section, /does not depend on the order of the walked blocks/);
   assert.equal(section.includes('If no content block other than a list item remains'), false);
   assert.equal(/\blinear\b/.test(section), false);
   assert.equal(/contains a Trafilatura paragraph line|is contained in a Trafilatura paragraph line/.test(section), false);

@@ -1917,6 +1917,45 @@ test('a container with a block, figure, sectioning, or details element anywhere 
   }
 });
 
+test('a script tag string or a hidden element inside a container does not make it a non-leaf', async () => {
+  // The tokenizer reads a tag inside a script string, such as an ad slot
+  // written by document.write, as an element, and a hidden promo element may
+  // hold a block. Neither contributes text: the walker and innerText strip
+  // script, style, template, and hidden nodes, and the tokenizer drops
+  // comments. Read as a non-leaf, the container would be walked through and
+  // its own paragraph, which no block holds, would be lost when walker
+  // blocks are kept.
+  const own = 'Fishing crews say larger boats can only enter the channel at high tide.';
+  const lead = 'The harbor authority said on Thursday that dredging will not begin until next spring.';
+  const tail = 'State regulators are still reviewing a permit for the disposal site.';
+  const lines = ['Harbor dredging delayed again', lead, own, tail];
+  for (const intruder of [
+    `<script>document.write('<div id="ad-slot-2"></div>')</script>`,
+    '<span><div hidden>promo</div></span>',
+    '<div aria-hidden="true"><p>promo</p></div>',
+    '<span style="display:none"><ul><li>promo</li></ul></span>',
+    '<style>.ad { display: none } </style>',
+    '<template><p>promo</p></template>',
+    '<!-- <div class="ad-slot">promo</div> -->'
+  ]) {
+    for (const tag of ['div', 'section']) {
+      const prepared = await prepareFromHtml({
+        html: `<article><h1>${lines[0]}</h1><p>${lead}</p><${tag}>${own}${intruder}</${tag}><p>${tail}</p></article>`,
+        sourceUrl: 'https://fictional-daily.example/leaf-ignores-stripped',
+        inputMode: 'fixture',
+        extractImpl: extractedLines(lines)
+      });
+      assert.deepEqual(
+        prepared.spans.map((span) => [span.role, span.text]),
+        [['headline', lines[0]], ['authorial', lead], ['authorial', own], ['authorial', tail]],
+        `${tag}: ${intruder}`
+      );
+      assert.equal(prepared.preparedText.includes('promo'), false, `${tag}: ${intruder}`);
+      assert.equal(prepared.preparedText.includes('ad-slot'), false, `${tag}: ${intruder}`);
+    }
+  }
+});
+
 test('a leaf div standfirst or Advertisement label equal to one extracted line does not keep walker blocks', async () => {
   // The body is in <div> paragraphs that each hold an empty ad slot, so the
   // walker has no block for them. A leaf <div> that equals one line was not
@@ -1991,6 +2030,7 @@ test('architecture section 10.2 matches first-article Trafilatura matching', asy
     /leaf CMS containers \(`div`\/`section` with no block, list, table, figure, sectioning, or details element anywhere inside them, even below an inline wrapper\)/
   );
   assert.match(section, /Leaf `<div>` and `<section>` paragraphs are walked blocks/);
+  assert.match(section, /Leaf-ness ignores `script`, `style`, `template`, comments, and hidden nodes/);
   assert.match(section, /still loses body text the walker has no block for/);
   assert.match(section, /A leaf `<div>` or `<section>` that equals a line, such as a standfirst or an `Advertisement` label in a `<div>`, does not prevent it/);
   assert.match(section, /only when a content block other than a list item or a leaf `<div>` or `<section>` equals one Trafilatura line exactly/);

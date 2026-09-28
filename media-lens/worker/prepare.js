@@ -389,9 +389,18 @@ function addParagraphSpans(builder, paragraphIndex, { role, roleBasis, text, att
   }
 }
 
+// Leaf-ness ignores script, style, template, and hidden nodes the same way
+// walkBlocks and innerText strip them: a tag string inside a script (a
+// document.write of an ad slot) or a hidden promo element contributes no text
+// and must not turn the container into a non-leaf, or its own text would be
+// lost when walker blocks are kept. Comments are not tree nodes.
 function hasNonLeafDescendant(node) {
   return (node.children || []).some(
-    (child) => child.type === 'element' && (NON_LEAF_TAGS.has(child.tag) || hasNonLeafDescendant(child))
+    (child) =>
+      child.type === 'element' &&
+      !RAW_TEXT_TAGS.has(child.tag) &&
+      !isHiddenNode(child) &&
+      (NON_LEAF_TAGS.has(child.tag) || hasNonLeafDescendant(child))
   );
 }
 

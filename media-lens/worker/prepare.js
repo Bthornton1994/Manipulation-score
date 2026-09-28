@@ -451,15 +451,35 @@ export const RUN_SEARCH_MIN_STEPS = 100000;
 export const RUN_HASH_PRIME = 67108859;
 export const RUN_HASH_BASE = 1000003;
 
+// Control, format, and private-use characters: zero-width spaces, soft
+// hyphens, direction marks, embeddings, overrides, and isolates, and Unicode
+// tag characters. Trafilatura removes them, except NEXT_LINE.
+const INVISIBLE_CHARS = /[\p{Cc}\p{Cf}\p{Co}]/gu;
+// U+0085, a control character that Python, and so Trafilatura, reads as
+// whitespace.
+const NEXT_LINE = /\u0085/g;
+
 /**
  * Comparison key for block and line text. Whitespace is not significant:
  * the walker joins nested block elements (a nested list, a second <p> in a
  * quote) without a space where Trafilatura starts a new line or adds one.
- * Control, format, and private-use characters (zero-width space, soft
- * hyphen, direction marks) are dropped too: Trafilatura removes them.
+ * INVISIBLE_CHARS are dropped too: Trafilatura removes them.
  */
 function matchKey(normalizedText) {
-  return normalizedText.replace(/[ \p{Cc}\p{Cf}\p{Co}]/gu, '');
+  return normalizedText.replace(INVISIBLE_CHARS, '').replaceAll(' ', '');
+}
+
+/**
+ * Text of a kept walker block: the walker's text without INVISIBLE_CHARS.
+ * matchKey ignores them, so a block keeps its match when they are removed,
+ * and the extracted line it matched does not have them. Removing them keeps
+ * text Trafilatura dropped, such as tag characters or a direction override
+ * that hide or reorder words, out of the prepared text. A next-line character
+ * becomes a space first, as in Trafilatura's text; removing it would join
+ * the words on either side.
+ */
+function keptText(text) {
+  return collapseWhitespace(text.replace(NEXT_LINE, ' ').replace(INVISIBLE_CHARS, ''));
 }
 
 function hashPower(exponent) {
@@ -621,8 +641,9 @@ function extractedMatchLines(text) {
 
 /**
  * The walked blocks that equal one extracted line or a run of consecutive
- * lines, in walk order. A walked <li> may also match after the extractor's
- * list marker is removed from each line.
+ * lines, in walk order, each with its text as keptText leaves it. A walked
+ * <li> may also match after the extractor's list marker is removed from each
+ * line.
  *
  * The run search has a budget of RUN_SEARCH_MIN_STEPS plus
  * RUN_SEARCH_STEPS_PER_CHAR steps per character of line and block text, shared
@@ -659,7 +680,7 @@ function keptExtractedBlocks(blocks, lines) {
           budget
         ));
   const equalsRun = ({ key, listItem }) => listRuns !== null && (runs.has(key) || (listItem && listRuns.has(key)));
-  return keyed.filter((entry) => equalsLine(entry) || equalsRun(entry)).map(({ block }) => block);
+  return keyed.filter((entry) => equalsLine(entry) || equalsRun(entry)).map(({ block }) => ({ ...block, text: keptText(block.text) }));
 }
 
 /**

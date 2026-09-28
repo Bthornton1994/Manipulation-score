@@ -414,7 +414,7 @@ function walkBlocks(node, { inSkipContainer } = {}) {
       splitQuotes = false;
     }
 
-    blocks.push({ role, roleBasis, text, attribution: { speaker: null, cue: null }, splitQuotes });
+    blocks.push({ role, roleBasis, text, attribution: { speaker: null, cue: null }, splitQuotes, listItem: node.tag === 'li' });
     return blocks;
   }
 
@@ -435,19 +435,271 @@ function normalizeMatchText(text) {
     .replace(/\u00a0/g, ' ');
 }
 
-function matchParagraphs(text) {
-  const paragraphs = new Set();
-  for (const part of String(text || '').split(/\n+/)) {
-    const normalized = normalizeMatchText(part);
-    if (normalized) paragraphs.add(normalized);
-  }
-  return paragraphs;
+// With include_formatting=False (extract_html.py), Trafilatura 2.2.0 starts a
+// list item's first line with "- " (plus nesting indent, which
+// normalizeMatchText trims). No other marker.
+const EXTRACTED_LIST_MARKER = /^- /;
+// Run search budget: RUN_SEARCH_MIN_STEPS plus RUN_SEARCH_STEPS_PER_CHAR
+// steps per character of extracted line text and walked block text. See
+// keptExtractedBlocks. Section 10.2 of
+// docs/media-lens-live-url-v2-architecture.md states both values.
+export const RUN_SEARCH_STEPS_PER_CHAR = 16;
+export const RUN_SEARCH_MIN_STEPS = 100000;
+// The run search compares polynomial hashes modulo a prime below 2^26, so a
+// hash times the base stays an exact integer in a double. Every hash match is
+// confirmed by comparing the text.
+export const RUN_HASH_PRIME = 67108859;
+export const RUN_HASH_BASE = 1000003;
+
+// Control, format, and private-use characters: zero-width spaces, soft
+// hyphens, direction marks, embeddings, overrides, and isolates, and Unicode
+// tag characters. Trafilatura removes them, except NEXT_LINE.
+const INVISIBLE_CHARS = /[\p{Cc}\p{Cf}\p{Co}]/gu;
+// U+0085, a control character that Python, and so Trafilatura, reads as
+// whitespace.
+const NEXT_LINE = /\u0085/g;
+
+/**
+ * Comparison key for block and line text. Whitespace is not significant:
+ * the walker joins nested block elements (a nested list, a second <p> in a
+ * quote) without a space where Trafilatura starts a new line or adds one.
+ * INVISIBLE_CHARS are dropped too: Trafilatura removes them.
+ */
+function matchKey(normalizedText) {
+  return normalizedText.replace(INVISIBLE_CHARS, '').replaceAll(' ', '');
 }
 
-function keepExtractedBlock(block, paragraphs) {
-  const normalized = normalizeMatchText(block.text || '');
-  if (!normalized) return false;
-  return paragraphs.has(normalized);
+/**
+ * Text of a kept walker block: the walker's text without INVISIBLE_CHARS.
+ * matchKey ignores them, so a block keeps its match when they are removed,
+ * and the extracted line it matched does not have them. Removing them keeps
+ * text Trafilatura dropped, such as tag characters or a direction override
+ * that hide or reorder words, out of the prepared text. A next-line character
+ * becomes a space first, as in Trafilatura's text; removing it would join
+ * the words on either side.
+ */
+function keptText(text) {
+  return collapseWhitespace(text.replace(NEXT_LINE, ' ').replace(INVISIBLE_CHARS, ''));
+}
+
+function hashPower(exponent) {
+  let power = 1;
+  let factor = RUN_HASH_BASE;
+  for (let rest = exponent; rest > 0; rest = Math.floor(rest / 2)) {
+    if (rest % 2 === 1) power = (power * factor) % RUN_HASH_PRIME;
+    factor = (factor * factor) % RUN_HASH_PRIME;
+  }
+  return power;
+}
+
+/**
+ * Exact lookup over extracted line keys. has(key) is true when key equals
+ * one line. runs(keys, budget) returns the keys that equal a run of two or
+ * more consecutive lines (Trafilatura splits <br>, multi-<p> quotes, and
+ * nested list items onto separate lines). There is no substring or
+ * containment match. The run index is built on the first runs() call.
+ */
+function lineIndex(lineKeys) {
+  const lines = new Set(lineKeys);
+  let runs = null;
+  return {
+    has(key) {
+      return lines.has(key);
+    },
+    runs(keys, budget) {
+      if (keys.length === 0) return new Set();
+      if (runs === null) runs = runSearch(lineKeys);
+      return runs(keys, budget);
+    }
+  };
+}
+
+/**
+ * A run starts with a line that is a shorter prefix of the key and ends
+ * exactly on a line end. Each key is read once to find every line that is a
+ * prefix of it. Keys are then grouped by that first line and by their
+ * length, and each group reads the places its first line occurs once,
+ * comparing the hash of the run of that length with the keys' hashes. Groups
+ * are read in the order their first line first occurs, then by length, so
+ * the steps used, and the result, do not depend on the order of the keys.
+ *
+ * budget.steps counts the characters read (keys, candidate first lines, and
+ * runs compared as text) and the places and keys checked. Once it passes
+ * budget.limit, the search stops and returns null.
+ */
+function runSearch(lineKeys) {
+  const count = lineKeys.length;
+  const joined = lineKeys.join('');
+  const lineStart = new Int32Array(count);
+  const lineHash = new Int32Array(count);
+  // Prefix hash of the joined keys at each line boundary, -1 elsewhere.
+  const boundaryHash = new Int32Array(joined.length + 1).fill(-1);
+  let offset = 0;
+  let prefix = 0;
+  boundaryHash[0] = 0;
+  for (let index = 0; index < count; index += 1) {
+    const line = lineKeys[index];
+    let hash = 0;
+    for (let at = 0; at < line.length; at += 1) {
+      const code = line.charCodeAt(at);
+      hash = (hash * RUN_HASH_BASE + code) % RUN_HASH_PRIME;
+      prefix = (prefix * RUN_HASH_BASE + code) % RUN_HASH_PRIME;
+    }
+    lineStart[index] = offset;
+    lineHash[index] = hash;
+    offset += line.length;
+    boundaryHash[offset] = prefix;
+  }
+  // firstIndex: each distinct line's first occurrence. nextIndex: the next
+  // occurrence of the same line, -1 after the last.
+  const firstIndex = new Map();
+  const nextIndex = new Int32Array(count);
+  for (let index = count - 1; index >= 0; index -= 1) {
+    const next = firstIndex.get(lineKeys[index]);
+    nextIndex[index] = next === undefined ? -1 : next;
+    firstIndex.set(lineKeys[index], index);
+  }
+  // firstShape: one distinct line per length and hash. nextShape chains any
+  // other distinct line with the same length and hash.
+  const firstShape = new Map();
+  const nextShape = new Int32Array(count).fill(-1);
+  for (const index of firstIndex.values()) {
+    const shape = lineKeys[index].length * RUN_HASH_PRIME + lineHash[index];
+    if (firstShape.has(shape)) nextShape[index] = firstShape.get(shape);
+    firstShape.set(shape, index);
+  }
+
+  return function runs(keys, budget) {
+    const spend = (steps) => {
+      budget.steps += steps;
+      return budget.steps <= budget.limit;
+    };
+
+    // First line (as its first index) -> key length -> key hash -> keys.
+    const groups = new Map();
+    for (const key of new Set(keys)) {
+      if (key.length > joined.length) continue;
+      if (!spend(key.length)) return null;
+      const firstLines = [];
+      let hash = 0;
+      for (let at = 0; at < key.length; at += 1) {
+        hash = (hash * RUN_HASH_BASE + key.charCodeAt(at)) % RUN_HASH_PRIME;
+        if (at + 1 === key.length) break;
+        const shape = firstShape.get((at + 1) * RUN_HASH_PRIME + hash);
+        for (let index = shape === undefined ? -1 : shape; index !== -1; index = nextShape[index]) {
+          if (!spend(at + 1)) return null;
+          if (key.startsWith(lineKeys[index])) firstLines.push(index);
+        }
+      }
+      for (const first of firstLines) {
+        if (!groups.has(first)) groups.set(first, new Map());
+        const byLength = groups.get(first);
+        if (!byLength.has(key.length)) byLength.set(key.length, new Map());
+        const byHash = byLength.get(key.length);
+        if (!byHash.has(hash)) byHash.set(hash, []);
+        byHash.get(hash).push(key);
+      }
+    }
+
+    const order = [];
+    for (const [first, byLength] of groups) {
+      for (const [length, byHash] of byLength) order.push({ first, length, byHash });
+    }
+    order.sort((a, b) => a.first - b.first || a.length - b.length);
+
+    const found = new Set();
+    for (const { first, length, byHash } of order) {
+      let pending = 0;
+      for (const group of byHash.values()) for (const key of group) if (!found.has(key)) pending += 1;
+      const power = hashPower(length);
+      for (let index = first; index !== -1 && pending > 0; index = nextIndex[index]) {
+        if (!spend(1)) return null;
+        const start = lineStart[index];
+        const end = start + length;
+        if (end > joined.length || boundaryHash[end] === -1) continue;
+        const runHash = (((boundaryHash[end] - ((boundaryHash[start] * power) % RUN_HASH_PRIME)) % RUN_HASH_PRIME) + RUN_HASH_PRIME) % RUN_HASH_PRIME;
+        for (const key of byHash.get(runHash) || []) {
+          if (!spend(1)) return null;
+          if (found.has(key)) continue;
+          if (!spend(length)) return null;
+          if (joined.startsWith(key, start)) {
+            found.add(key);
+            pending -= 1;
+          }
+        }
+      }
+    }
+    return found;
+  };
+}
+
+function extractedMatchLines(text) {
+  return String(text || '')
+    .split(/\n+/)
+    .map((line) => normalizeMatchText(line));
+}
+
+/**
+ * The walked blocks that equal one extracted line or a run of consecutive
+ * lines, in walk order, each with its text as keptText leaves it. A walked
+ * <li> may also match after the extractor's list marker is removed from each
+ * line.
+ *
+ * The run search has a budget of RUN_SEARCH_MIN_STEPS plus
+ * RUN_SEARCH_STEPS_PER_CHAR steps per character of line and block text, shared
+ * by both lookups. A page that needs more (one line repeated many thousands of
+ * times and starting blocks of many different lengths) keeps no block as a
+ * run: only blocks equal to one line are kept.
+ */
+function keptExtractedBlocks(blocks, lines) {
+  const keysOf = (texts) => texts.map(matchKey).filter((key) => key.length > 0);
+  const lineKeys = keysOf(lines);
+  const unmarkedLines = lines.map((line) => line.replace(EXTRACTED_LIST_MARKER, ''));
+  const plain = lineIndex(lineKeys);
+  const unmarked = unmarkedLines.some((line, index) => line !== lines[index]) ? lineIndex(keysOf(unmarkedLines)) : plain;
+  const keyed = blocks
+    .map((block) => ({ block, key: matchKey(normalizeMatchText(block.text || '')), listItem: block.listItem === true }))
+    .filter(({ key }) => key.length > 0);
+  const equalsLine = ({ key, listItem }) => plain.has(key) || (listItem && unmarked.has(key));
+  const rest = keyed.filter((entry) => !equalsLine(entry));
+
+  const lineChars = lineKeys.reduce((total, key) => total + key.length, 0);
+  const blockChars = keyed.reduce((total, { key }) => total + key.length, 0);
+  const budget = { steps: 0, limit: RUN_SEARCH_MIN_STEPS + RUN_SEARCH_STEPS_PER_CHAR * (lineChars + blockChars) };
+  const runs = plain.runs(
+    rest.map(({ key }) => key),
+    budget
+  );
+  // With no list marker in the text, unmarked is plain and was just searched.
+  const listRuns =
+    runs &&
+    (unmarked === plain
+      ? new Set()
+      : unmarked.runs(
+          rest.filter(({ key, listItem }) => listItem && !runs.has(key)).map(({ key }) => key),
+          budget
+        ));
+  const equalsRun = ({ key, listItem }) => listRuns !== null && (runs.has(key) || (listItem && listRuns.has(key)));
+  return keyed.filter((entry) => equalsLine(entry) || equalsRun(entry)).map(({ block }) => ({ ...block, text: keptText(block.text) }));
+}
+
+/**
+ * True when a content block other than a list item equals one extracted
+ * line exactly, compared as normalizeMatchText leaves them. This is the
+ * comparison the matcher used before runs, matchKey, and list markers were
+ * added, and it must stay that way: a block that only matches as a run,
+ * only once matchKey drops invisible characters, or only after the list
+ * marker is removed (a two-<p> quote, a <br>-split credit, a paragraph with
+ * a zero-width space) would otherwise replace a body the walker has no
+ * block for, such as <div> paragraphs, with itself.
+ */
+function equalsOneLineExactly(blocks, lines) {
+  const exactLines = new Set(lines.filter((line) => line.length > 0));
+  return contentBlocks(blocks).some((block) => {
+    if (block.listItem === true) return false;
+    const text = normalizeMatchText(block.text || '');
+    return matchKey(text).length > 0 && exactLines.has(text);
+  });
 }
 
 function contentBlocks(blocks) {
@@ -592,11 +844,19 @@ export async function prepareFromHtml({
   const root = parseHtml(sourceHtml);
   const meta = mergeMetadata(extractMetadata(root), extracted);
   const articleRoot = findFirst(root, (n) => n.type === 'element' && n.tag === 'article') || root;
-  const paragraphs = matchParagraphs(extracted.text);
-  let rawBlocks = walkBlocks(articleRoot, {}).filter((block) => keepExtractedBlock(block, paragraphs));
-  if (contentBlocks(rawBlocks).length === 0) {
-    rawBlocks = blocksFromExtractedText(extracted.text);
-  }
+  const walkedBlocks = walkBlocks(articleRoot, {});
+  const lines = extractedMatchLines(extracted.text);
+  // Keep matched walker blocks only when a content block other than a list
+  // item equals one extracted line exactly (equalsOneLineExactly). Otherwise
+  // fall back to one block per Trafilatura line. When walker blocks are kept,
+  // unmatched lines are not added back: Trafilatura may still emit hidden or
+  // newsletter lines the walker correctly excluded. Matching is whole-block,
+  // so a fragment that only appears inside a line cannot stop this fallback,
+  // and list items alone (a menu or page numbers Trafilatura kept) cannot
+  // either.
+  const rawBlocks = equalsOneLineExactly(walkedBlocks, lines)
+    ? keptExtractedBlocks(walkedBlocks, lines)
+    : blocksFromExtractedText(extracted.text);
 
   const builder = new SpanBuilder();
   rawBlocks.forEach((block, i) => {

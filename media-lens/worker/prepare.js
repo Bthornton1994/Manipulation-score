@@ -34,6 +34,31 @@ const VOID_ELEMENTS = new Set([
 const RAW_TEXT_TAGS = new Set(['script', 'style', 'template']);
 const SKIP_CONTAINER_TAGS = new Set(['nav', 'header', 'footer', 'aside']);
 const BLOCK_TAGS = new Set(['h1', 'h2', 'h3', 'p', 'blockquote', 'figcaption', 'li']);
+// CMS article bodies are often paragraphs in <div> or <section> rather than
+// <p>. A leaf container, one with no NON_LEAF_TAGS element anywhere inside
+// it, is walked like <p> so that body is not silently dropped when another
+// block keeps walker blocks. A container with such an element inside it,
+// even below an inline wrapper (a Google Docs <b> or a <span> around the
+// paragraphs), is walked through instead: its text would otherwise join
+// every nested paragraph, caption, or sidebar into one block and lose their
+// roles.
+const LEAF_CONTAINER_TAGS = new Set(['div', 'section']);
+const NON_LEAF_TAGS = new Set([
+  ...BLOCK_TAGS,
+  ...LEAF_CONTAINER_TAGS,
+  'ul',
+  'ol',
+  'table',
+  'main',
+  'figure',
+  'header',
+  'footer',
+  'nav',
+  'aside',
+  'article',
+  'hgroup',
+  'details'
+]);
 const BOILERPLATE_CLASS_HINTS = ['share', 'subscribe', 'newsletter', 'advert', 'promo-', 'related-', 'comments'];
 
 const ATTRIBUTION_CUES = [
@@ -364,6 +389,33 @@ function addParagraphSpans(builder, paragraphIndex, { role, roleBasis, text, att
   }
 }
 
+// Leaf-ness ignores script, style, template, and hidden nodes the same way
+// walkBlocks and innerText strip them: a tag string inside a script (a
+// document.write of an ad slot) or a hidden promo element contributes no text
+// and must not turn the container into a non-leaf, or its own text would be
+// lost when walker blocks are kept. Comments are not tree nodes.
+function hasNonLeafDescendant(node) {
+  return (node.children || []).some(
+    (child) =>
+      child.type === 'element' &&
+      !RAW_TEXT_TAGS.has(child.tag) &&
+      !isHiddenNode(child) &&
+      (NON_LEAF_TAGS.has(child.tag) || hasNonLeafDescendant(child))
+  );
+}
+
+/**
+ * Role of a <p>, <li>, <div>, or <section> block from its class attribute:
+ * a byline, a boilerplate hint, or the authorial default.
+ */
+function classRole(classAttr) {
+  if (classAttr.includes('byline')) return { role: 'byline_meta', roleBasis: 'html_structure', splitQuotes: false };
+  if (BOILERPLATE_CLASS_HINTS.some((hint) => classAttr.includes(hint))) {
+    return { role: 'boilerplate', roleBasis: 'html_structure', splitQuotes: false };
+  }
+  return { role: 'authorial', roleBasis: 'default', splitQuotes: true };
+}
+
 function walkBlocks(node, { inSkipContainer } = {}) {
   const blocks = [];
   if (node.type !== 'element') return blocks;
@@ -388,9 +440,7 @@ function walkBlocks(node, { inSkipContainer } = {}) {
 
     const text = collapseWhitespace(innerText(node));
     const classAttr = (node.attrs.class || '').toLowerCase();
-    let role = 'authorial';
-    let roleBasis = 'default';
-    let splitQuotes = true;
+    let { role, roleBasis, splitQuotes } = classRole(classAttr);
 
     if (node.tag === 'h1') {
       role = 'headline';
@@ -404,17 +454,28 @@ function walkBlocks(node, { inSkipContainer } = {}) {
       role = 'caption';
       roleBasis = 'html_structure';
       splitQuotes = false;
-    } else if (classAttr.includes('byline')) {
-      role = 'byline_meta';
-      roleBasis = 'html_structure';
-      splitQuotes = false;
-    } else if (BOILERPLATE_CLASS_HINTS.some((hint) => classAttr.includes(hint))) {
-      role = 'boilerplate';
-      roleBasis = 'html_structure';
-      splitQuotes = false;
     }
 
     blocks.push({ role, roleBasis, text, attribution: { speaker: null, cue: null }, splitQuotes, listItem: node.tag === 'li' });
+    return blocks;
+  }
+
+  // A leaf <div> or <section> is walked like <p>. It is not a list item, so
+  // it never matches after the list marker is removed, and it is a
+  // leafContainer, so it never keeps walker blocks on its own
+  // (equalsOneLineExactly).
+  if (!skipHere && LEAF_CONTAINER_TAGS.has(node.tag) && !hasNonLeafDescendant(node)) {
+    const text = collapseWhitespace(innerText(node));
+    if (text) {
+      const classAttr = (node.attrs.class || '').toLowerCase();
+      blocks.push({
+        ...classRole(classAttr),
+        text,
+        attribution: { speaker: null, cue: null },
+        listItem: false,
+        leafContainer: true
+      });
+    }
     return blocks;
   }
 
@@ -684,19 +745,23 @@ function keptExtractedBlocks(blocks, lines) {
 }
 
 /**
- * True when a content block other than a list item equals one extracted
- * line exactly, compared as normalizeMatchText leaves them. This is the
- * comparison the matcher used before runs, matchKey, and list markers were
- * added, and it must stay that way: a block that only matches as a run,
- * only once matchKey drops invisible characters, or only after the list
- * marker is removed (a two-<p> quote, a <br>-split credit, a paragraph with
- * a zero-width space) would otherwise replace a body the walker has no
- * block for, such as <div> paragraphs, with itself.
+ * True when a content block other than a list item or a leaf container
+ * equals one extracted line exactly, compared as normalizeMatchText leaves
+ * them. This is the comparison the matcher used before runs, matchKey, list
+ * markers, and leaf containers were added, and it must stay that way: a
+ * block that only matches as a run, only once matchKey drops invisible
+ * characters, or only after the list marker is removed (a two-<p> quote, a
+ * <br>-split credit, a paragraph with a zero-width space) would otherwise
+ * replace a body the walker has no block for, such as text directly inside
+ * a <div> that also has a block element inside it, with itself. A leaf
+ * <div> or <section> that equals one line (a standfirst, an Advertisement
+ * label) was not a block before leaf containers were walked and did not
+ * prevent that fallback then, so it does not prevent it now.
  */
 function equalsOneLineExactly(blocks, lines) {
   const exactLines = new Set(lines.filter((line) => line.length > 0));
   return contentBlocks(blocks).some((block) => {
-    if (block.listItem === true) return false;
+    if (block.listItem === true || block.leafContainer === true) return false;
     const text = normalizeMatchText(block.text || '');
     return matchKey(text).length > 0 && exactLines.has(text);
   });
@@ -847,13 +912,14 @@ export async function prepareFromHtml({
   const walkedBlocks = walkBlocks(articleRoot, {});
   const lines = extractedMatchLines(extracted.text);
   // Keep matched walker blocks only when a content block other than a list
-  // item equals one extracted line exactly (equalsOneLineExactly). Otherwise
-  // fall back to one block per Trafilatura line. When walker blocks are kept,
-  // unmatched lines are not added back: Trafilatura may still emit hidden or
-  // newsletter lines the walker correctly excluded. Matching is whole-block,
-  // so a fragment that only appears inside a line cannot stop this fallback,
-  // and list items alone (a menu or page numbers Trafilatura kept) cannot
-  // either.
+  // item or a leaf container equals one extracted line exactly
+  // (equalsOneLineExactly). Otherwise fall back to one block per Trafilatura
+  // line. When walker blocks are kept, unmatched lines are not added back:
+  // Trafilatura may still emit hidden or newsletter lines the walker
+  // correctly excluded. Matching is whole-block, so a fragment that only
+  // appears inside a line cannot stop this fallback, and list items or leaf
+  // containers alone (a menu, page numbers, or a standfirst Trafilatura
+  // kept) cannot either.
   const rawBlocks = equalsOneLineExactly(walkedBlocks, lines)
     ? keptExtractedBlocks(walkedBlocks, lines)
     : blocksFromExtractedText(extracted.text);

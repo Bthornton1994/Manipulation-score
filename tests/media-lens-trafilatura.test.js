@@ -1588,8 +1588,8 @@ test('kept blocks match an exhaustive search over every line start and line end'
 test('leaf div/section article body is not silently dropped when headline still matches', async () => {
   // Many CMS templates put paragraphs in <div> or <section>, not <p>. The walker
   // previously only emitted h1/h2/h3/p/blockquote/figcaption/li. A matching <h1>
-  // kept contentBlocks non-empty, skipped the Trafilatura-line fallback, and
-  // omitted the entire div body from preparedText / Jev.
+  // kept walker blocks (equalsOneLineExactly), skipped the Trafilatura-line
+  // fallback, and omitted the entire div body from preparedText / Jev.
   const headline = 'Company faces inquiry after safety report';
   const para1 = 'The city council opened an inquiry after residents raised alarms about factory emissions near the river.';
   const para2 =
@@ -1621,8 +1621,8 @@ test('leaf div/section article body is not silently dropped when headline still 
       title: headline,
       author: null,
       date: null,
-      // Include headline so the walked <h1> is kept (contentBlocks non-empty),
-      // which is exactly the path that previously skipped Trafilatura fallback.
+      // Include the headline so the walked <h1> equals one line and keeps
+      // walker blocks, the path that previously skipped the fallback.
       text: [headline, para1, para2, para3].join('\n')
     })
   });
@@ -1637,8 +1637,14 @@ test('leaf div/section article body is not silently dropped when headline still 
   }
 });
 
-test('nested CMS div paragraphs are kept under real Trafilatura extraction', async () => {
+test('nested CMS div paragraphs are kept with their roles under real Trafilatura extraction', async () => {
+  // Trafilatura 2.2.0 drops this <h1> as the page title, so the <h2> kicker
+  // is the block that equals one line and keeps walker blocks: a leaf <div>
+  // never does on its own. With walker blocks kept, each leaf <div> is an
+  // authorial block; the fallback would have made the first paragraph the
+  // headline and dropped the subhead role.
   const headline = 'Company faces inquiry after safety report';
+  const kicker = 'What investigators found';
   const para1 = 'The city council opened an inquiry after residents raised alarms about factory emissions near the river.';
   const para2 =
     'Investigators found that the company hid safety test failures from regulators for more than two years.';
@@ -1651,6 +1657,7 @@ test('nested CMS div paragraphs are kept under real Trafilatura extraction', asy
 <h1>${headline}</h1>
 <div class="article-body">
 <div>${para1}</div>
+<h2>${kicker}</h2>
 <div>${para2}</div>
 <div>${para3}</div>
 </div>
@@ -1666,6 +1673,42 @@ test('nested CMS div paragraphs are kept under real Trafilatura extraction', asy
   assert.match(prepared.preparedText, /criminal charges are warranted/);
   assert.match(prepared.preparedText, /city council opened an inquiry/);
   assert.equal(prepared.preparedText.includes('Privacy'), false);
+  assert.deepEqual(
+    prepared.spans.map((span) => [span.role, span.role_basis, span.text]),
+    [
+      ['authorial', 'default', para1],
+      ['subhead', 'html_structure', kicker],
+      ['authorial', 'default', para2],
+      ['authorial', 'default', para3]
+    ]
+  );
+  for (const span of prepared.spans) {
+    assert.equal(prepared.preparedText.slice(span.start, span.end), span.text);
+  }
+});
+
+test('a leaf div is not a list item: it does not match after the list marker is removed', async () => {
+  // Only a walked <li> may match a "- " line once the marker is removed. A
+  // leaf <div> with the same text is not kept, and the <li> with that text is.
+  const body = 'The harbor authority said on Thursday that dredging will not begin until next spring.';
+  const lines = ['Harbor dredging delayed again', '- Harbor', body];
+  for (const [block, kept] of [
+    ['<div>Harbor</div>', ['Harbor dredging delayed again', body]],
+    ['<section>Harbor</section>', ['Harbor dredging delayed again', body]],
+    ['<ul><li>Harbor</li></ul>', ['Harbor dredging delayed again', 'Harbor', body]]
+  ]) {
+    const prepared = await prepareFromHtml({
+      html: `<article><h1>${lines[0]}</h1>${block}<p>${body}</p></article>`,
+      sourceUrl: 'https://fictional-daily.example/leaf-not-list',
+      inputMode: 'fixture',
+      extractImpl: extractedLines(lines)
+    });
+    assert.deepEqual(
+      prepared.spans.map((span) => span.text),
+      kept,
+      block
+    );
+  }
 });
 
 test('leaf div body between matching paragraphs is not silently dropped', async () => {
@@ -1738,6 +1781,193 @@ Investigators found that the company hid safety test failures from regulators fo
   }
 });
 
+test('a Google Docs wrapper around the body is walked through, so its paragraphs and blockquote keep their roles under real Trafilatura extraction', async () => {
+  // Text pasted from Google Docs arrives as <p> and <blockquote> inside a
+  // <b id="docs-internal-guid-..."> inline wrapper inside the body <div>. The
+  // <div> has no block child, but it has block descendants, so it is not a
+  // leaf: its paragraphs are walked, the first <p> equals one line and keeps
+  // walker blocks, and the blockquote keeps the quoted role. Read as a leaf,
+  // the <div> would be one block joining all three, which equals no single
+  // line, so the page would fall back and lose the quoted role.
+  const headline = 'Company faces inquiry after safety report';
+  const para1 = 'The city council opened an inquiry after residents raised alarms about factory emissions near the river.';
+  const quote = 'We cannot keep patching the same streets every spring.';
+  const para3 = 'Officials said further hearings will examine whether criminal charges are warranted under state law.';
+  const html = `<!doctype html>
+<html lang="en"><head><title>Safety probe</title></head>
+<body>
+<nav>Home About Contact Privacy</nav>
+<article>
+<h1>${headline}</h1>
+<div class="article-body"><b style="font-weight:normal" id="docs-internal-guid-1a2b3c4d"><p dir="ltr"><span>${para1}</span></p><blockquote><p dir="ltr"><span>${quote}</span></p></blockquote><p dir="ltr"><span>${para3}</span></p></b></div>
+</article>
+</body></html>`;
+  const prepared = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/docs-wrapper',
+    inputMode: 'fixture'
+  });
+  assert.equal(prepared.extraction.status, 'ok');
+  assert.equal(prepared.preparedText.includes('Privacy'), false);
+  assert.deepEqual(
+    prepared.spans.map((span) => [span.role, span.role_basis, span.text]),
+    [
+      ['authorial', 'default', para1],
+      ['quoted', 'blockquote', quote],
+      ['authorial', 'default', para3]
+    ]
+  );
+  for (const span of prepared.spans) {
+    assert.equal(prepared.preparedText.slice(span.start, span.end), span.text);
+  }
+});
+
+test('a figure inside a paragraph div and a blockquote inside an inline wrapper are walked through, so the caption and quoted roles are kept under real Trafilatura extraction', async () => {
+  // Trafilatura 2.2.0 removes a <figure> unless it holds a table, in which
+  // case it keeps the caption and the table rows as lines. Read as a leaf,
+  // the paragraph <div> would be one block joining its text, the table cells,
+  // and the caption, which equals no line or run, so nothing of it would be
+  // kept; and the pull-quote <div> would be one authorial block. Walked
+  // through, the figcaption is a caption and the blockquote is quoted. The
+  // blockquote equals one line and keeps walker blocks; Trafilatura drops
+  // the <h1> as the page title. The paragraph text directly inside the <div>
+  // next to the figure has no block, so it is lost: the known limitation for
+  // text the walker has no block for.
+  const headline = 'Company faces inquiry after safety report';
+  const lead = 'The city council opened an inquiry after residents raised alarms about factory emissions near the river.';
+  const beside = 'Investigators found that the company hid safety test failures from regulators for more than two years.';
+  const caption = 'Delays to the north channel dredging by year, from harbor authority filings.';
+  const quote = 'We cannot keep patching the same streets every spring.';
+  const close = 'Officials said further hearings will examine whether criminal charges are warranted under state law.';
+  const html = `<!doctype html>
+<html lang="en"><head><title>Safety probe</title></head>
+<body>
+<nav>Home About Contact Privacy</nav>
+<article>
+<h1>${headline}</h1>
+<div class="article-body">
+<div>${lead}</div>
+<div class="with-media">${beside}<figure><table><tr><th>Year</th><th>Delays</th></tr><tr><td>2025</td><td>3</td></tr></table><figcaption>${caption}</figcaption></figure></div>
+<div class="pull"><span><blockquote><p>${quote}</p></blockquote></span></div>
+<div>${close}</div>
+</div>
+</article>
+</body></html>`;
+  const prepared = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/figure-intruder',
+    inputMode: 'fixture'
+  });
+  assert.equal(prepared.extraction.status, 'ok');
+  assert.equal(prepared.preparedText.includes('Privacy'), false);
+  assert.equal(prepared.preparedText.includes('Year'), false);
+  assert.deepEqual(
+    prepared.spans.map((span) => [span.role, span.role_basis, span.text]),
+    [
+      ['authorial', 'default', lead],
+      ['caption', 'html_structure', caption],
+      ['quoted', 'blockquote', quote],
+      ['authorial', 'default', close]
+    ]
+  );
+  assert.equal(prepared.preparedText.includes(beside), false);
+  for (const span of prepared.spans) {
+    assert.equal(prepared.preparedText.slice(span.start, span.end), span.text);
+  }
+});
+
+test('a container with a block, figure, sectioning, or details element anywhere inside it is not a leaf', async () => {
+  // Each <div> holds its own text and an intruding element. Read as a leaf,
+  // the <div> would be one block joining both, which equals the run of the
+  // two lines and would be kept as one authorial span: a sidebar or a
+  // caption glued to a paragraph. Walked through, the intruder's own blocks
+  // are kept with their roles, skip containers are skipped, and the text
+  // directly inside the <div> has no block.
+  const own = 'The harbor authority said on Thursday that dredging will not begin until next spring.';
+  const inner = 'Fishing crews say larger boats can only enter the channel at high tide.';
+  const tail = 'State regulators are still reviewing a permit for the disposal site.';
+  const lines = ['Harbor dredging delayed again', own, inner, tail];
+  for (const [intruder, kept] of [
+    [`<span><p>${inner}</p></span>`, [['authorial', inner]]],
+    [`<b style="font-weight:normal"><blockquote><p>${inner}</p></blockquote></b>`, [['quoted', inner]]],
+    [`<figure><img src="/a.jpg" alt=""><figcaption>${inner}</figcaption></figure>`, [['caption', inner]]],
+    [`<header><p>${inner}</p></header>`, []],
+    [`<footer><p>${inner}</p></footer>`, []],
+    [`<nav><p>${inner}</p></nav>`, []],
+    [`<aside>${inner}</aside>`, []],
+    [`<article><p>${inner}</p></article>`, [['authorial', inner]]],
+    [`<hgroup><h2>${inner}</h2></hgroup>`, [['subhead', inner]]],
+    [`<details><summary>More</summary><p>${inner}</p></details>`, [['authorial', inner]]],
+    [`<span><ul><li>${inner}</li></ul></span>`, [['authorial', inner]]],
+    [`<span><section>${inner}</section></span>`, [['authorial', inner]]]
+  ]) {
+    for (const tag of ['div', 'section']) {
+      const prepared = await prepareFromHtml({
+        html: `<article><h1>${lines[0]}</h1><${tag}>${own}${intruder}</${tag}><p>${tail}</p></article>`,
+        sourceUrl: 'https://fictional-daily.example/not-a-leaf',
+        inputMode: 'fixture',
+        extractImpl: extractedLines(lines)
+      });
+      assert.deepEqual(
+        prepared.spans.map((span) => [span.role, span.text]),
+        [['headline', lines[0]], ...kept, ['authorial', tail]],
+        `${tag}: ${intruder}`
+      );
+    }
+  }
+});
+
+test('a leaf div standfirst or Advertisement label equal to one extracted line does not keep walker blocks', async () => {
+  // The body is in <div> paragraphs that each hold an empty ad slot, so the
+  // walker has no block for them. A leaf <div> that equals one line was not
+  // a block before leaf containers were walked and did not stop the fallback
+  // then; it must not stop it now, or the body would be lost as it is next
+  // to a headline that equals one line.
+  for (const [name, block, text] of [
+    ['a standfirst', '<div class="standfirst">The third delay in two years leaves fishing crews waiting on the tide.</div>', 'fishing crews waiting on the tide'],
+    ['an Advertisement label', '<div>Advertisement</div>', 'Advertisement']
+  ]) {
+    const prepared = await prepareFromHtml({ html: harborPage(block), sourceUrl: 'https://fictional-daily.example/harbor-leaf', inputMode: 'fixture' });
+    assert.equal(prepared.extraction.status, 'ok', name);
+    assert.equal(prepared.spans[0]?.role, 'headline', name);
+    assert.equal(prepared.spans[0]?.text, 'Harbor dredging delayed again as permit review drags on', name);
+    for (const paragraph of HARBOR_BODY) {
+      assert.ok(prepared.preparedText.includes(paragraph), `${name}: ${paragraph}`);
+    }
+    assert.match(prepared.preparedText, new RegExp(text), name);
+    for (const span of prepared.spans) {
+      assert.equal(prepared.preparedText.slice(span.start, span.end), span.text);
+    }
+  }
+});
+
+test('a leaf div or section equal to one extracted line does not keep walker blocks, and a <p> with the same text does', async () => {
+  const body = [
+    'The harbor authority said on Thursday that dredging will not begin until next spring.',
+    'Fishing crews say larger boats can only enter the channel at high tide.'
+  ];
+  const standfirst = 'The third delay in two years leaves fishing crews waiting on the tide.';
+  const lines = ['Harbor dredging delayed again', standfirst, ...body];
+  for (const [block, kept] of [
+    [`<div class="standfirst">${standfirst}</div>`, lines],
+    [`<section class="standfirst">${standfirst}</section>`, lines],
+    ['<div>Advertisement</div>', lines],
+    [`<p class="standfirst">${standfirst}</p>`, [standfirst]]
+  ]) {
+    const prepared = await prepareFromHtml({
+      html: `<article><span>${lines[0]}</span>${block}<span>${body[0]}</span><span>${body[1]}</span></article>`,
+      sourceUrl: 'https://fictional-daily.example/leaf-anchor',
+      inputMode: 'fixture',
+      extractImpl: extractedLines(block.includes('Advertisement') ? [lines[0], 'Advertisement', ...body] : lines)
+    });
+    assert.deepEqual(
+      prepared.spans.map((span) => span.text),
+      block.includes('Advertisement') ? [lines[0], 'Advertisement', ...body] : kept,
+      block
+    );
+  }
+});
+
 test('architecture section 10.2 matches first-article Trafilatura matching', async () => {
   const doc = await readFile('docs/media-lens-live-url-v2-architecture.md', 'utf8');
   const section = doc.split('### 10.2 Preparation')[1].split('### 10.3')[0];
@@ -1753,14 +1983,19 @@ test('architecture section 10.2 matches first-article Trafilatura matching', asy
   assert.match(section, /ignores whitespace and invisible control, format, and private-use characters/);
   assert.equal(section.includes("Kept span text is the walker's text."), false);
   assert.match(section, /only contains a line, or only appears inside one, is not a match/);
-  assert.match(section, /only when a content block other than a list item equals one Trafilatura line exactly/);
   assert.match(section, /only as a run of lines, only once invisible characters are ignored, or only after the list marker is removed/);
   assert.match(section, /does not prevent the fallback/);
   assert.match(section, /List items alone, such as a menu or page numbers that Trafilatura kept, do not prevent this fallback/);
-  assert.match(section, /leaf CMS containers \(`div`\/`section` with no nested block, list, or table child\)/);
+  assert.match(
+    section,
+    /leaf CMS containers \(`div`\/`section` with no block, list, table, figure, sectioning, or details element anywhere inside them, even below an inline wrapper\)/
+  );
   assert.match(section, /Leaf `<div>` and `<section>` paragraphs are walked blocks/);
   assert.match(section, /still loses body text the walker has no block for/);
+  assert.match(section, /A leaf `<div>` or `<section>` that equals a line, such as a standfirst or an `Advertisement` label in a `<div>`, does not prevent it/);
+  assert.match(section, /only when a content block other than a list item or a leaf `<div>` or `<section>` equals one Trafilatura line exactly/);
   assert.equal(section.includes('until the walker has blocks for `<div>` paragraphs'), false);
+  assert.equal(section.includes('no nested block, list, or table child'), false);
   assert.match(section, /keeps no block as a run/);
   assert.ok(
     section.includes(

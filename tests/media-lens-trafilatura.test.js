@@ -898,6 +898,7 @@ test('a kept paragraph leaves out tag characters and direction controls that Tra
   assert.ok(extractedText.split('\n').some((line) => line.replace(/\s+/g, ' ') === clean));
   assert.equal(extractedText.includes(walked), false);
   // Walker blocks are used: the fallback would include the hidden paragraph.
+  assert.ok(extractedText.includes(hidden));
   assert.equal(prepared.preparedText.includes(hidden), false);
   assert.ok(prepared.spans.some((span) => span.text === clean));
   const invisible = /[\u{e0000}-\u{e007f}\u202a-\u202e\u2066-\u2069]/u;

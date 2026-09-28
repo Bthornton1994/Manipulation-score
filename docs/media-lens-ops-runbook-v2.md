@@ -142,6 +142,31 @@ Host budget keys on the exact hostname and a registrable-domain approximation (n
 
 Other existing caps: 512 KiB request body, 60k prepared chars, 200 spans, 160 Jev calls/analysis, 8s Jev call, 15s analysis, 8s URL fetch (one budget for the whole redirect chain, not per hop), 3s connect per hop, 8 KiB response headers, 2 MiB URL bytes (wire and decoded), 3 redirects. Omitted limits fall back to these defaults; none can be unset to unbounded. Live URL oversized input uses the exact abstention copy: “This public page is too long for Media Lens live analysis. No manipulation analysis or score was generated. Try a shorter public article.” Oversized bodies are `413` unless the analyze rate limit already fired (`429` wins).
 
+### Article preparation (Trafilatura)
+
+Live URL fetch returns HTML to `prepare.js`, which calls pinned local Trafilatura 2.2.0 through `media-lens/worker/trafilatura-extract.js`. The Python child receives markup only; it does not fetch the article URL. Install and version pins: `media-lens/worker/trafilatura/DEPS.md`. Release preflight: `docs/media-lens-frontend-deployment.md` §Before step 3.
+
+| Requirement | Value | Notes |
+| --- | --- | --- |
+| Python | 3.12 or newer on the worker `PATH` | Older interpreters fail before spawn (`python_version`) |
+| Packages | Trafilatura 2.2.0, py3langid 0.4.0 | Installed by `media-lens/worker/trafilatura/install.sh <venv>` |
+| Extraction timeout | 15 s | Per child; timed-out children are killed |
+| Concurrent extractions | 2 | Process-local gate; a third waits or returns `busy` |
+| Stdin cap | 3 MiB | HTML passed to the extractor |
+| Stdout cap | 8 MiB | Oversize output returns `output_limit` |
+
+Common operator symptoms:
+
+| Symptom | Likely cause | Action |
+| --- | --- | --- |
+| Every URL analysis abstains with “Article extraction failed…” and `engine.preparation.extractor_version` is `null` | Virtualenv missing from unit `PATH`, or `python3` older than 3.12 | Install the venv, add its `bin` to the systemd unit `PATH`, restart the worker; confirm with the step-3 command in `docs/media-lens-frontend-deployment.md` |
+| Same abstention after a deploy that only updated JS | Host never had the venv | Run `install.sh`, record the host change on Issue #118, restart |
+| Occasional `busy` under burst load | Two extractions already running | Expected; retry. Lower traffic or raise concurrency only after measuring worker memory |
+| “The article body could not be extracted…” (`empty`) | Page has no extractable main text (paywall shell, non-HTML body, JS-only content) | Operational, not a host misconfig; do not bypass with cookies or mirrors |
+| “The page could not be parsed…” (`parse_failed`) | Malformed HTML or extractor exception | Inspect redacted audit lines; if persistent on one host only, verify the venv pin matches `requirements.txt` |
+
+Extraction failures abstain before any Jev call, so they do not increment the TypeSafe budget.
+
 ### Jev call cap and analysis timeout
 
 | Control | Default | Env override | Effect |
@@ -241,6 +266,7 @@ Ownership below is copied from the Issue #118 ops-blanks record (2026-09-21 PT, 
 | Schema-invalid graphs reaching clients | Pipeline already validate-or-abstains; if bypassed, kill live Jev |
 | Abuse (bulk scoring people) | Rate limit / bind localhost; acceptable-use enforcement is human |
 | TypeSafe outage | Jev `unavailable` abstention; worker can still serve fixture |
+| Article extraction failures on every URL (`engine.preparation.extractor_version: null` or `extraction_status` not `ok`) | Check Python 3.12+ and the Trafilatura venv on the worker `PATH` (§3 Article preparation); restart after repair. Not a Jev or budget issue |
 | Unreadable, invalid, or unwritable budget record | Live Jev already fails closed with its own copy, including after a failed write. Fix the file's or directory's permissions (as the unit's sandbox sees them), free disk space, or remove a stale lock while the worker is stopped. Do not lower counts. Record it on Issue #118 with the `jev_calls` of the analysis whose write failed, then restart the worker |
 
 Public communications must not claim that Media Lens “detected an attack” against a named outlet or person. Stick to operational facts (HTTP status, error code, commit SHA).

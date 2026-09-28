@@ -140,7 +140,7 @@ Only the analyses/minute limiter runs before the body is read. Live-URL, per-hos
 
 Host budget keys on the exact hostname and a registrable-domain approximation (not the full Public Suffix List). Concurrent fetch is also serialized inside `safe-fetch.js`. Exhaustion returns `429 rate_limited`. Setting a live-URL max to `0` rejects all live URL attempts (an extra local brake, not a substitute for the kill switch).
 
-Other existing caps: 512 KiB request body, 60k prepared chars, 200 spans, 160 Jev calls/analysis, 8s Jev call, 15s analysis, 8s URL fetch, 2 MiB URL bytes, 3 redirects. Live URL oversized input uses the exact abstention copy: “This public page is too long for Media Lens live analysis. No manipulation analysis or score was generated. Try a shorter public article.” Oversized bodies are `413` unless the analyze rate limit already fired (`429` wins).
+Other existing caps: 512 KiB request body, 60k prepared chars, 200 spans, 160 Jev calls/analysis, 8s Jev call, 15s analysis, 8s URL fetch (one budget for the whole redirect chain, not per hop), 3s connect per hop, 8 KiB response headers, 2 MiB URL bytes (wire and decoded), 3 redirects. Omitted limits fall back to these defaults; none can be unset to unbounded. Live URL oversized input uses the exact abstention copy: “This public page is too long for Media Lens live analysis. No manipulation analysis or score was generated. Try a shorter public article.” Oversized bodies are `413` unless the analyze rate limit already fired (`429` wins).
 
 ### Jev call cap and analysis timeout
 

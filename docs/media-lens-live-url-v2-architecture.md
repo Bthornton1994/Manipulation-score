@@ -326,7 +326,7 @@ If pinning cannot be implemented on the Node version in CI, live URL must remain
 5. After `connect`, read `socket.remoteAddress` and `socket.remotePort`. If `remoteAddress` (normalized) ≠ pin, **abort** (`PIN_MISMATCH`). This catches unexpected NAT, dual-stack remap, and proxy injection.
 6. Do not send cookies, `Authorization`, or stored credentials. Do not enable a cookie jar.
 7. Method: `GET` only. No redirect-to-POST.
-8. Timeouts: existing `urlFetchTimeoutMs` (default 8s) covers DNS + connect + headers + body. A separate connect timeout of 3s is recommended so a blackholed pin fails fast.
+8. Timeouts: existing `urlFetchTimeoutMs` (default 8s) covers DNS + connect + headers + body. A separate connect timeout of 3s is recommended so a blackholed pin fails fast. Clarified 2026-09-28: the 8s budget is shared by the whole redirect chain (§8), so hops cannot multiply it while the single live-URL slot is held. The response-header cap (`urlFetchMaxHeaderBytes`, 8 KiB) must reach Node as `maxHeaderSize`; the §10.1 compressed-byte cap counts wire bytes against the same 2 MiB budget as decoded bytes.
 
 ### 7.3 Why `fetch(url)` is insufficient
 

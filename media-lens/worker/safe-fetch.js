@@ -9,6 +9,10 @@
 // hostname allowlist is configured, every hop (including the first) is
 // re-checked against it before DNS pin or connect.
 //
+// Resource limits fail closed: one fetch budget (`timeoutMs`) covers the
+// whole redirect chain, so hops cannot multiply it; omitted limits fall
+// back to the defaults, never to "unbounded".
+//
 // Live URL remains disabled unless MEDIA_LENS_ENABLE_LIVE_URL=true. This
 // module is not a production-readiness claim.
 
@@ -23,11 +27,19 @@ import {
   taggedError
 } from './address-policy.js';
 import { hostIsAllowlisted } from './host-key.js';
-import { feedRequestHeaders, finalizePinnedResponse, headerValue, performPinnedGet } from './pinned-http.js';
+import {
+  DEFAULT_CONNECT_TIMEOUT_MS,
+  DEFAULT_MAX_BYTES,
+  DEFAULT_MAX_HEADER_BYTES,
+  DEFAULT_TIMEOUT_MS,
+  feedRequestHeaders,
+  finalizePinnedResponse,
+  headerValue,
+  performPinnedGet,
+  positiveLimit
+} from './pinned-http.js';
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
-const DEFAULT_CONNECT_TIMEOUT_MS = 3000;
-const DEFAULT_MAX_HEADER_BYTES = 8192;
 const DEFAULT_PARSE_TIMEOUT_MS = 2000;
 const DEFAULT_MAX_REDIRECTS = 3;
 
@@ -197,9 +209,9 @@ function enqueuePinnedGet(targetUrl, options) {
 async function fetchPinnedGetUnlocked(
   targetUrl,
   {
-    timeoutMs,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
     connectTimeoutMs = DEFAULT_CONNECT_TIMEOUT_MS,
-    maxBytes,
+    maxBytes = DEFAULT_MAX_BYTES,
     maxRedirects = DEFAULT_MAX_REDIRECTS,
     maxHeaderBytes = DEFAULT_MAX_HEADER_BYTES,
     parseTimeoutMs = DEFAULT_PARSE_TIMEOUT_MS,
@@ -220,6 +232,9 @@ async function fetchPinnedGetUnlocked(
   let currentUrl = targetUrl;
   let previousScheme = null;
   const request = requestImpl || defaultRequestImpl;
+  timeoutMs = positiveLimit(timeoutMs, DEFAULT_TIMEOUT_MS);
+  connectTimeoutMs = positiveLimit(connectTimeoutMs, DEFAULT_CONNECT_TIMEOUT_MS);
+  maxBytes = positiveLimit(maxBytes, DEFAULT_MAX_BYTES);
   if (profile === 'feed') {
     const { parsed } = parseArticleUrl(targetUrl);
     if (parsed.protocol !== 'https:') {
@@ -227,23 +242,35 @@ async function fetchPinnedGetUnlocked(
     }
   }
 
-  for (let hop = 0; hop <= maxRedirects; hop++) {
-    const { parsed } = parseArticleUrl(currentUrl);
+  // One deadline for the whole chain. Every hop's DNS, connect, headers,
+  // and body share it, so three redirects cannot turn an 8 s budget into
+  // 32 s while the single live-URL slot is held.
+  const chain = withTimeoutSignal(timeoutMs, outerSignal);
+  const deadline = Date.now() + timeoutMs;
+  const remaining = () => deadline - Date.now();
+  try {
+    for (let hop = 0; hop <= maxRedirects; hop++) {
+      if (chain.signal.aborted || remaining() <= 0) {
+        throw taggedError(`Fetching ${currentUrl} timed out`, 'TIMEOUT');
+      }
+      const { parsed } = parseArticleUrl(currentUrl);
 
-    if (previousScheme === 'https:' && parsed.protocol === 'http:') {
-      throw taggedError('HTTPS to HTTP redirects are not allowed', 'REDIRECT_DOWNGRADE');
-    }
+      if (previousScheme === 'https:' && parsed.protocol === 'http:') {
+        throw taggedError('HTTPS to HTTP redirects are not allowed', 'REDIRECT_DOWNGRADE');
+      }
 
-    // Canary allowlist is hop-scoped. Empty/unset means public-address
-    // policy only (hostIsAllowlisted returns true). Off-list hops fail
-    // closed before pin/connect so the hop cannot return 200.
-    if (!hostIsAllowlisted(parsed.hostname, urlAllowlist)) {
-      throw taggedError('This host is not on the operator URL allowlist.', 'live_url_not_allowlisted');
-    }
+      // Canary allowlist is hop-scoped. Empty/unset means public-address
+      // policy only (hostIsAllowlisted returns true). Off-list hops fail
+      // closed before pin/connect so the hop cannot return 200.
+      if (!hostIsAllowlisted(parsed.hostname, urlAllowlist)) {
+        throw taggedError('This host is not on the operator URL allowlist.', 'live_url_not_allowlisted');
+      }
 
-    const pin = await pinHost(parsed.hostname, { lookupImpl, classifyImpl });
-    const timeout = withTimeoutSignal(timeoutMs, outerSignal);
-    try {
+      const pin = await pinHost(parsed.hostname, { lookupImpl, classifyImpl });
+      const hopBudgetMs = remaining();
+      if (chain.signal.aborted || hopBudgetMs <= 0) {
+        throw taggedError(`Fetching ${currentUrl} timed out`, 'TIMEOUT');
+      }
       let response;
       try {
         response = await request({
@@ -252,9 +279,9 @@ async function fetchPinnedGetUnlocked(
           pin,
           method: 'GET',
           headers: profile === 'feed' ? feedRequestHeaders(parsed) : undefined,
-          signal: timeout.signal,
-          timeoutMs,
-          connectTimeoutMs,
+          signal: chain.signal,
+          timeoutMs: hopBudgetMs,
+          connectTimeoutMs: Math.min(connectTimeoutMs, hopBudgetMs),
           maxHeaderBytes,
           maxBytes,
           createConnectionImpl,
@@ -262,7 +289,7 @@ async function fetchPinnedGetUnlocked(
         });
       } catch (err) {
         if (err?.code) throw err;
-        if (err?.name === 'AbortError' || timeout.signal.aborted) {
+        if (err?.name === 'AbortError' || chain.signal.aborted) {
           throw taggedError(`Fetching ${currentUrl} timed out`, 'TIMEOUT');
         }
         throw taggedError(`Fetch failed: ${err.message}`, 'FETCH_ERROR');
@@ -271,7 +298,7 @@ async function fetchPinnedGetUnlocked(
       const finalized = await finalizePinnedResponse(response, {
         pin,
         maxBytes,
-        signal: timeout.signal,
+        signal: chain.signal,
         parseTimeoutMs
       });
 
@@ -311,10 +338,10 @@ async function fetchPinnedGetUnlocked(
         fetchedAt: new Date().toISOString(),
         fetchStatus: '200'
       };
-    } finally {
-      timeout.cleanup();
     }
-  }
 
-  throw taggedError('Too many redirects', 'TOO_MANY_REDIRECTS');
+    throw taggedError('Too many redirects', 'TOO_MANY_REDIRECTS');
+  } finally {
+    chain.cleanup();
+  }
 }

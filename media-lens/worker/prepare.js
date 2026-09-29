@@ -59,6 +59,19 @@ const NON_LEAF_TAGS = new Set([
   'hgroup',
   'details'
 ]);
+// Email-HTML / newsletter / legacy CMS bodies often live only in <td>/<th>.
+// Without treating leaf cells as blocks, a matching <h1>/<p> keeps
+// contentBlocks non-empty, skips the Trafilatura-line fallback, and silently
+// drops the cell body from analysis. Distinct from leaf <div>/<section>.
+const LEAF_TABLE_CELL_TAGS = new Set(['td', 'th']);
+const BLOCKISH_CHILD_TAGS = new Set([
+  ...BLOCK_TAGS,
+  ...LEAF_TABLE_CELL_TAGS,
+  'ul',
+  'ol',
+  'table',
+  'main'
+]);
 const BOILERPLATE_CLASS_HINTS = ['share', 'subscribe', 'newsletter', 'advert', 'promo-', 'related-', 'comments'];
 
 const ATTRIBUTION_CUES = [
@@ -404,9 +417,13 @@ function hasNonLeafDescendant(node) {
   );
 }
 
+function hasBlockishChild(node) {
+  return (node.children || []).some((child) => child.type === 'element' && BLOCKISH_CHILD_TAGS.has(child.tag));
+}
+
 /**
- * Role of a <p>, <li>, <div>, or <section> block from its class attribute:
- * a byline, a boilerplate hint, or the authorial default.
+ * Role of a <p>, <li>, <div>, <section>, or leaf table cell from its class
+ * attribute: a byline, a boilerplate hint, or the authorial default.
  */
 function classRole(classAttr) {
   if (classAttr.includes('byline')) return { role: 'byline_meta', roleBasis: 'html_structure', splitQuotes: false };
@@ -474,6 +491,25 @@ function walkBlocks(node, { inSkipContainer } = {}) {
         attribution: { speaker: null, cue: null },
         listItem: false,
         leafContainer: true
+      });
+    }
+    return blocks;
+  }
+
+  // Leaf table cells (no nested block/list/table): treat like <p>.
+  // Otherwise a matching <h1>/<p> keeps contentBlocks non-empty, skips the
+  // Trafilatura-line fallback, and silently drops the cell body.
+  // Unlike a leaf <div>/<section>, a cell is not a leafContainer, so a cell
+  // that equals one line can keep walker blocks.
+  if (!skipHere && LEAF_TABLE_CELL_TAGS.has(node.tag) && !hasBlockishChild(node)) {
+    const text = collapseWhitespace(innerText(node));
+    if (text) {
+      const classAttr = (node.attrs.class || '').toLowerCase();
+      blocks.push({
+        ...classRole(classAttr),
+        text,
+        attribution: { speaker: null, cue: null },
+        listItem: false
       });
     }
     return blocks;

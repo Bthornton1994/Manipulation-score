@@ -2007,12 +2007,102 @@ test('a leaf div or section equal to one extracted line does not keep walker blo
   }
 });
 
+test('leaf table-cell article body is not silently dropped when headline still matches', async () => {
+  // Email-HTML / newsletter / legacy CMS layouts put the body only in <td>/<th>.
+  // The walker previously only emitted h1/h2/h3/p/blockquote/figcaption/li. A
+  // matching <h1> kept contentBlocks non-empty, skipped the Trafilatura-line
+  // fallback, and omitted the entire cell body from preparedText / Jev.
+  const headline = 'Company faces inquiry after safety report';
+  const para1 = 'The city council opened an inquiry after residents raised alarms about factory emissions near the river.';
+  const para2 =
+    'Investigators found that the company hid safety test failures from regulators for more than two years.';
+  const para3 = 'Officials said further hearings will examine whether criminal charges are warranted under state law.';
+  const html = `<!doctype html>
+<html lang="en"><head><title>Safety probe</title></head>
+<body>
+<nav>Home About Contact Privacy</nav>
+<article>
+<h1>${headline}</h1>
+<table role="presentation">
+<tr><td>${para1}</td></tr>
+<tr><td><div>${para2}</div></td></tr>
+<tr><th>${para3}</th></tr>
+</table>
+</article>
+</body></html>`;
+  const prepared = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/table-cell-body',
+    inputMode: 'fixture',
+    extractImpl: async () => ({
+      status: 'ok',
+      extractor_version: TRAFILATURA_VERSION,
+      language_detector_version: PY3LANGID_VERSION,
+      detected_language: 'en',
+      html_lang: 'en',
+      title: headline,
+      author: null,
+      date: null,
+      // Include headline so the walked <h1> is kept (contentBlocks non-empty),
+      // which is exactly the path that previously skipped Trafilatura fallback.
+      text: [headline, para1, para2, para3].join('\n')
+    })
+  });
+  assert.equal(prepared.extraction.status, 'ok');
+  assert.match(prepared.preparedText, /Company faces inquiry/);
+  assert.match(prepared.preparedText, /Investigators found that the company hid safety test failures/);
+  assert.match(prepared.preparedText, /criminal charges are warranted/);
+  assert.match(prepared.preparedText, /city council opened an inquiry/);
+  assert.equal(prepared.preparedText.includes('Privacy'), false);
+  for (const span of prepared.spans) {
+    assert.equal(prepared.preparedText.slice(span.start, span.end), span.text);
+  }
+});
+
+test('table cell with nested paragraphs still emits the nested blocks', async () => {
+  const headline = 'Company faces inquiry after safety report';
+  const para1 = 'The city council opened an inquiry after residents raised alarms about factory emissions near the river.';
+  const para2 =
+    'Investigators found that the company hid safety test failures from regulators for more than two years.';
+  const html = `<!doctype html>
+<html lang="en"><head><title>Nested p in td</title></head>
+<body>
+<article>
+<h1>${headline}</h1>
+<table><tr><td>
+<p>${para1}</p>
+<p>${para2}</p>
+</td></tr></table>
+</article>
+</body></html>`;
+  const prepared = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/table-cell-nested-p',
+    inputMode: 'fixture',
+    extractImpl: async () => ({
+      status: 'ok',
+      extractor_version: TRAFILATURA_VERSION,
+      language_detector_version: PY3LANGID_VERSION,
+      detected_language: 'en',
+      html_lang: 'en',
+      title: headline,
+      author: null,
+      date: null,
+      text: [headline, para1, para2].join('\n')
+    })
+  });
+  assert.equal(prepared.extraction.status, 'ok');
+  assert.match(prepared.preparedText, /city council opened an inquiry/);
+  assert.match(prepared.preparedText, /Investigators found that the company hid safety test failures/);
+});
+
 test('architecture section 10.2 matches first-article Trafilatura matching', async () => {
   const doc = await readFile('docs/media-lens-live-url-v2-architecture.md', 'utf8');
   const section = doc.split('### 10.2 Preparation')[1].split('### 10.3')[0];
   assert.equal(section.includes('largest text-bearing block'), false);
   assert.match(section, /first `<article>`/);
   assert.match(section, /Trafilatura paragraph/);
+  assert.match(section, /leaf table cells/);
   assert.match(section, /fall back to one block per Trafilatura line/);
   assert.match(section, /`<br>`-split paragraphs/);
   assert.match(section, /exactly equals one Trafilatura paragraph line or a run of consecutive Trafilatura paragraph lines/);
@@ -2035,7 +2125,7 @@ test('architecture section 10.2 matches first-article Trafilatura matching', asy
   assert.match(section, /A leaf `<div>` or `<section>` that equals a line, such as a standfirst or an `Advertisement` label in a `<div>`, does not prevent it/);
   assert.match(section, /only when a content block other than a list item or a leaf `<div>` or `<section>` equals one Trafilatura line exactly/);
   assert.equal(section.includes('until the walker has blocks for `<div>` paragraphs'), false);
-  assert.equal(section.includes('no nested block, list, or table child'), false);
+  assert.match(section, /leaf table cells \(`td`\/`th` with no nested block, list, or table child\)/);
   assert.match(section, /keeps no block as a run/);
   assert.ok(
     section.includes(

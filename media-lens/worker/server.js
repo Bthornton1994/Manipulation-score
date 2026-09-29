@@ -319,17 +319,8 @@ function liveUrlGate({ payload, config, audit, consumeLiveUrl, consumeLiveUrlHos
     };
   }
 
-  if (!consumeLiveUrl()) {
-    audit.emit(AUDIT_EVENTS.RATE_LIMIT, {
-      mode: config.mode,
-      input_mode: 'url',
-      error: 'rate_limited',
-      limiter: 'live_url',
-      ...urlFields
-    });
-    return { error: 'rate_limited', status: 429, message: 'Too many live URL attempts. Wait a minute and try again.' };
-  }
-
+  // Authorize the URL (parse + allowlist) before burning live-URL budgets.
+  // Rejected SSRF/allowlist attempts must not lock out legitimate fetches.
   let parsedHost = null;
   try {
     parsedHost = parseArticleUrl(payload.url).bareHost;
@@ -355,6 +346,17 @@ function liveUrlGate({ payload, config, audit, consumeLiveUrl, consumeLiveUrlHos
       ...urlFields
     });
     return { error: 'live_url_not_allowlisted', status: 400, message: 'This host is not on the operator URL allowlist.' };
+  }
+
+  if (!consumeLiveUrl()) {
+    audit.emit(AUDIT_EVENTS.RATE_LIMIT, {
+      mode: config.mode,
+      input_mode: 'url',
+      error: 'rate_limited',
+      limiter: 'live_url',
+      ...urlFields
+    });
+    return { error: 'rate_limited', status: 429, message: 'Too many live URL attempts. Wait a minute and try again.' };
   }
 
   const hostKeys = rateLimitHostKeys(parsedHost);

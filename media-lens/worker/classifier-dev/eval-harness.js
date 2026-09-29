@@ -131,6 +131,29 @@ export function evaluatePath(cases, predictions, { labelKey, negativeId }) {
   };
 }
 
+export function pathLabelOptions(path) {
+  if (!EVAL_PATHS.includes(path)) throw new Error(`unknown eval path ${path}`);
+  const labelKey = path === 'direct_jev' || path === 'deterministic_policy' ? 'jev' : 'cdev';
+  const negativeId = labelKey === 'jev' ? 'none' : 'no_detected_signal';
+  return { labelKey, negativeId };
+}
+
+export function validateGraderStability(cases, predictions, options) {
+  const first = evaluatePath(cases, predictions, options);
+  const second = evaluatePath(cases, predictions, options);
+  const reordered = evaluatePath(cases, [...predictions].reverse(), options);
+  const encoded = JSON.stringify(first);
+  const repeatAgreement = encoded === JSON.stringify(second);
+  const orderAgreement = encoded === JSON.stringify(reordered);
+  return {
+    disclaimer: EVAL_DISCLAIMER,
+    repeat_agreement: repeatAgreement,
+    order_agreement: orderAgreement,
+    pass: repeatAgreement && orderAgreement,
+    claimed_thresholds_met: false
+  };
+}
+
 export function evaluateEvalHarness(cases, pathPredictions) {
   const paths = {};
   for (const path of EVAL_PATHS) {
@@ -138,9 +161,7 @@ export function evaluateEvalHarness(cases, pathPredictions) {
     if (!Array.isArray(predictions)) {
       throw new Error(`missing predictions for path ${path}`);
     }
-    const labelKey = path === 'direct_jev' || path === 'deterministic_policy' ? 'jev' : 'cdev';
-    const negativeId = labelKey === 'jev' ? 'none' : 'no_detected_signal';
-    paths[path] = evaluatePath(cases, predictions, { labelKey, negativeId });
+    paths[path] = evaluatePath(cases, predictions, pathLabelOptions(path));
   }
   return {
     disclaimer: EVAL_DISCLAIMER,

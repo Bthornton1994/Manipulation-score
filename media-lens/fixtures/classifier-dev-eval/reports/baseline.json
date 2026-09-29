@@ -1,0 +1,808 @@
+{
+  "schema": "media-lens-cdev-hillclimb-report.v1",
+  "disclaimer": "Synthetic/public-safe fixtures for software consistency only. Not representative real-world accuracy. Thresholds are documented, not met, and not claimed.",
+  "evaluation_only": true,
+  "claimed_thresholds_met": false,
+  "harness": "media-lens/worker/classifier-dev/eval-harness.js",
+  "workflow": "media-lens/worker/classifier-dev/hillclimb.js",
+  "harness_version": "cdev-hillclimb-0.1.0",
+  "base_sha": "1398d17d69b1ad2f93a80823d7a68b1b6e6baf93",
+  "model": null,
+  "model_version": null,
+  "effort": "N/A",
+  "prompts": [],
+  "tools": [
+    "deterministic_policy",
+    "evaluatePath"
+  ],
+  "cost_usd": 0,
+  "network_calls": 0,
+  "repeats": 2,
+  "latency_source": "fixture_declared_or_policy_constant",
+  "live_url_enabled": false,
+  "report": "baseline",
+  "holdout_span_text_included": false,
+  "split_integrity_pass": true,
+  "recorded_deterministic_policy_matches_function": true,
+  "recorded_deterministic_policy_mismatches": [],
+  "uncertainty": {
+    "repeat_macro_f1_delta": 0,
+    "small_n": true,
+    "population_interval": null,
+    "note": "Repeat noise on this deterministic grader is 0. The case count is too small to support a population accuracy claim."
+  },
+  "inputs": {
+    "train_ids": [
+      "eval-none-neutral",
+      "eval-urgency-pressure",
+      "eval-certainty-marker",
+      "eval-personal-attack",
+      "eval-short-insufficient",
+      "eval-hedged-time",
+      "eval-omitted-figure"
+    ],
+    "holdout_ids": [
+      "eval-quoted-attribution",
+      "eval-attributed-deadline",
+      "eval-guarantee-leaflet",
+      "eval-ellipsis-only"
+    ],
+    "catalog_n": 11
+  },
+  "train": {
+    "include_span_text_on_failures": true,
+    "recorded": {
+      "direct_jev": {
+        "metrics": {
+          "n": 7,
+          "scored": 5,
+          "macro_p": 1,
+          "macro_r": 1,
+          "macro_f1": 1,
+          "fp": 0,
+          "fn": 0,
+          "abstention_rate": 0.2857142857142857,
+          "latency_ms_mean": 4,
+          "claimed_thresholds_met": false
+        },
+        "confusion": {
+          "labels": [
+            "certainty_beyond_evidence",
+            "none",
+            "urgency"
+          ],
+          "matrix": [
+            [
+              1,
+              0,
+              0
+            ],
+            [
+              0,
+              3,
+              0
+            ],
+            [
+              0,
+              0,
+              1
+            ]
+          ]
+        },
+        "grader_pass": true,
+        "plumbing_pass": true,
+        "plumbing_errors": [],
+        "mismatches": [],
+        "abstentions": [
+          {
+            "case_id": "eval-short-insufficient",
+            "text": "See below.",
+            "expected": "none"
+          },
+          {
+            "case_id": "eval-omitted-figure",
+            "text": "The figure is omitted in this copy.",
+            "expected": "none"
+          }
+        ]
+      },
+      "cdev_fast": {
+        "metrics": {
+          "n": 7,
+          "scored": 5,
+          "macro_p": 1,
+          "macro_r": 1,
+          "macro_f1": 1,
+          "fp": 0,
+          "fn": 0,
+          "abstention_rate": 0.2857142857142857,
+          "latency_ms_mean": 10.857142857142858,
+          "claimed_thresholds_met": false
+        },
+        "confusion": {
+          "labels": [
+            "fear_urgency",
+            "insufficient_evidence",
+            "no_detected_signal",
+            "personal_attack",
+            "unsupported_certainty"
+          ],
+          "matrix": [
+            [
+              1,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              2,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              1,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              1
+            ]
+          ]
+        },
+        "grader_pass": true,
+        "plumbing_pass": true,
+        "plumbing_errors": [],
+        "mismatches": [],
+        "abstentions": [
+          {
+            "case_id": "eval-short-insufficient",
+            "text": "See below.",
+            "expected": "insufficient_evidence"
+          },
+          {
+            "case_id": "eval-omitted-figure",
+            "text": "The figure is omitted in this copy.",
+            "expected": "insufficient_evidence"
+          }
+        ]
+      },
+      "cdev_smart": {
+        "metrics": {
+          "n": 7,
+          "scored": 5,
+          "macro_p": 1,
+          "macro_r": 1,
+          "macro_f1": 1,
+          "fp": 0,
+          "fn": 0,
+          "abstention_rate": 0.2857142857142857,
+          "latency_ms_mean": 34.714285714285715,
+          "claimed_thresholds_met": false
+        },
+        "confusion": {
+          "labels": [
+            "fear_urgency",
+            "insufficient_evidence",
+            "no_detected_signal",
+            "personal_attack",
+            "unsupported_certainty"
+          ],
+          "matrix": [
+            [
+              1,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              2,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              1,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              1
+            ]
+          ]
+        },
+        "grader_pass": true,
+        "plumbing_pass": true,
+        "plumbing_errors": [],
+        "mismatches": [],
+        "abstentions": [
+          {
+            "case_id": "eval-short-insufficient",
+            "text": "See below.",
+            "expected": "insufficient_evidence"
+          },
+          {
+            "case_id": "eval-omitted-figure",
+            "text": "The figure is omitted in this copy.",
+            "expected": "insufficient_evidence"
+          }
+        ]
+      },
+      "cascade": {
+        "metrics": {
+          "n": 7,
+          "scored": 4,
+          "macro_p": 1,
+          "macro_r": 1,
+          "macro_f1": 1,
+          "fp": 0,
+          "fn": 0,
+          "abstention_rate": 0.42857142857142855,
+          "latency_ms_mean": 17.571428571428573,
+          "claimed_thresholds_met": false
+        },
+        "confusion": {
+          "labels": [
+            "fear_urgency",
+            "insufficient_evidence",
+            "no_detected_signal",
+            "personal_attack",
+            "unsupported_certainty"
+          ],
+          "matrix": [
+            [
+              1,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              2,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              1
+            ]
+          ]
+        },
+        "grader_pass": true,
+        "plumbing_pass": true,
+        "plumbing_errors": [],
+        "mismatches": [],
+        "abstentions": [
+          {
+            "case_id": "eval-personal-attack",
+            "text": "Ignore the proposal; she is a fool and always has been.",
+            "expected": "personal_attack"
+          },
+          {
+            "case_id": "eval-short-insufficient",
+            "text": "See below.",
+            "expected": "insufficient_evidence"
+          },
+          {
+            "case_id": "eval-omitted-figure",
+            "text": "The figure is omitted in this copy.",
+            "expected": "insufficient_evidence"
+          }
+        ]
+      },
+      "deterministic_policy": {
+        "metrics": {
+          "n": 7,
+          "scored": 7,
+          "macro_p": 0.43333333333333335,
+          "macro_r": 0.6,
+          "macro_f1": 0.503225806451613,
+          "fp": 1,
+          "fn": 1,
+          "abstention_rate": 0,
+          "latency_ms_mean": 1,
+          "claimed_thresholds_met": false
+        },
+        "confusion": {
+          "labels": [
+            "certainty_beyond_evidence",
+            "none",
+            "urgency"
+          ],
+          "matrix": [
+            [
+              1,
+              0,
+              0
+            ],
+            [
+              1,
+              4,
+              0
+            ],
+            [
+              0,
+              1,
+              0
+            ]
+          ]
+        },
+        "grader_pass": true,
+        "plumbing_pass": true,
+        "plumbing_errors": [],
+        "mismatches": [
+          {
+            "case_id": "eval-urgency-pressure",
+            "text": "Act before midnight or there will be no time left to check.",
+            "expected": "urgency",
+            "predicted": "none"
+          },
+          {
+            "case_id": "eval-personal-attack",
+            "text": "Ignore the proposal; she is a fool and always has been.",
+            "expected": "none",
+            "predicted": "certainty_beyond_evidence"
+          }
+        ],
+        "abstentions": []
+      }
+    },
+    "deterministic_policy": {
+      "metrics": {
+        "n": 7,
+        "scored": 7,
+        "macro_p": 0.43333333333333335,
+        "macro_r": 0.6,
+        "macro_f1": 0.503225806451613,
+        "fp": 1,
+        "fn": 1,
+        "abstention_rate": 0,
+        "latency_ms_mean": 1,
+        "claimed_thresholds_met": false
+      },
+      "confusion": {
+        "labels": [
+          "certainty_beyond_evidence",
+          "none",
+          "urgency"
+        ],
+        "matrix": [
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            4,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ]
+        ]
+      },
+      "grader_pass": true,
+      "plumbing_pass": true,
+      "plumbing_errors": [],
+      "mismatches": [
+        {
+          "case_id": "eval-urgency-pressure",
+          "text": "Act before midnight or there will be no time left to check.",
+          "expected": "urgency",
+          "predicted": "none"
+        },
+        {
+          "case_id": "eval-personal-attack",
+          "text": "Ignore the proposal; she is a fool and always has been.",
+          "expected": "none",
+          "predicted": "certainty_beyond_evidence"
+        }
+      ],
+      "abstentions": []
+    }
+  },
+  "holdout": {
+    "include_span_text_on_failures": false,
+    "recorded": {
+      "direct_jev": {
+        "metrics": {
+          "n": 4,
+          "scored": 3,
+          "macro_p": 1,
+          "macro_r": 1,
+          "macro_f1": 1,
+          "fp": 0,
+          "fn": 0,
+          "abstention_rate": 0.25,
+          "latency_ms_mean": 4.25,
+          "claimed_thresholds_met": false
+        },
+        "confusion": {
+          "labels": [
+            "certainty_beyond_evidence",
+            "none"
+          ],
+          "matrix": [
+            [
+              1,
+              0
+            ],
+            [
+              0,
+              2
+            ]
+          ]
+        },
+        "grader_pass": true,
+        "plumbing_pass": true,
+        "plumbing_errors": [],
+        "mismatches": [],
+        "abstentions": [
+          {
+            "case_id": "eval-ellipsis-only",
+            "expected": "none"
+          }
+        ]
+      },
+      "cdev_fast": {
+        "metrics": {
+          "n": 4,
+          "scored": 3,
+          "macro_p": 0.5,
+          "macro_r": 0.6666666666666666,
+          "macro_f1": 0.5714285714285715,
+          "fp": 0,
+          "fn": 1,
+          "abstention_rate": 0.25,
+          "latency_ms_mean": 10.5,
+          "claimed_thresholds_met": false
+        },
+        "confusion": {
+          "labels": [
+            "attribution_quotation_ambiguity",
+            "insufficient_evidence",
+            "no_detected_signal",
+            "unsupported_certainty"
+          ],
+          "matrix": [
+            [
+              0,
+              0,
+              1,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              1,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              1
+            ]
+          ]
+        },
+        "grader_pass": true,
+        "plumbing_pass": true,
+        "plumbing_errors": [],
+        "mismatches": [
+          {
+            "case_id": "eval-attributed-deadline",
+            "expected": "attribution_quotation_ambiguity",
+            "predicted": "no_detected_signal"
+          }
+        ],
+        "abstentions": [
+          {
+            "case_id": "eval-ellipsis-only",
+            "expected": "insufficient_evidence"
+          }
+        ]
+      },
+      "cdev_smart": {
+        "metrics": {
+          "n": 4,
+          "scored": 3,
+          "macro_p": 0.5,
+          "macro_r": 0.6666666666666666,
+          "macro_f1": 0.5714285714285715,
+          "fp": 1,
+          "fn": 0,
+          "abstention_rate": 0.25,
+          "latency_ms_mean": 35.75,
+          "claimed_thresholds_met": false
+        },
+        "confusion": {
+          "labels": [
+            "attribution_quotation_ambiguity",
+            "insufficient_evidence",
+            "no_detected_signal",
+            "unsupported_certainty"
+          ],
+          "matrix": [
+            [
+              1,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              1
+            ]
+          ]
+        },
+        "grader_pass": true,
+        "plumbing_pass": true,
+        "plumbing_errors": [],
+        "mismatches": [
+          {
+            "case_id": "eval-quoted-attribution",
+            "expected": "no_detected_signal",
+            "predicted": "attribution_quotation_ambiguity"
+          }
+        ],
+        "abstentions": [
+          {
+            "case_id": "eval-ellipsis-only",
+            "expected": "insufficient_evidence"
+          }
+        ]
+      },
+      "cascade": {
+        "metrics": {
+          "n": 4,
+          "scored": 3,
+          "macro_p": 0.5,
+          "macro_r": 0.6666666666666666,
+          "macro_f1": 0.5714285714285715,
+          "fp": 0,
+          "fn": 1,
+          "abstention_rate": 0.25,
+          "latency_ms_mean": 6.25,
+          "claimed_thresholds_met": false
+        },
+        "confusion": {
+          "labels": [
+            "attribution_quotation_ambiguity",
+            "insufficient_evidence",
+            "no_detected_signal",
+            "unsupported_certainty"
+          ],
+          "matrix": [
+            [
+              0,
+              0,
+              1,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              1,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              1
+            ]
+          ]
+        },
+        "grader_pass": true,
+        "plumbing_pass": true,
+        "plumbing_errors": [],
+        "mismatches": [
+          {
+            "case_id": "eval-attributed-deadline",
+            "expected": "attribution_quotation_ambiguity",
+            "predicted": "no_detected_signal"
+          }
+        ],
+        "abstentions": [
+          {
+            "case_id": "eval-ellipsis-only",
+            "expected": "insufficient_evidence"
+          }
+        ]
+      },
+      "deterministic_policy": {
+        "metrics": {
+          "n": 4,
+          "scored": 4,
+          "macro_p": 1,
+          "macro_r": 1,
+          "macro_f1": 1,
+          "fp": 0,
+          "fn": 0,
+          "abstention_rate": 0,
+          "latency_ms_mean": 1,
+          "claimed_thresholds_met": false
+        },
+        "confusion": {
+          "labels": [
+            "certainty_beyond_evidence",
+            "none"
+          ],
+          "matrix": [
+            [
+              1,
+              0
+            ],
+            [
+              0,
+              3
+            ]
+          ]
+        },
+        "grader_pass": true,
+        "plumbing_pass": true,
+        "plumbing_errors": [],
+        "mismatches": [],
+        "abstentions": []
+      }
+    },
+    "deterministic_policy": {
+      "metrics": {
+        "n": 4,
+        "scored": 4,
+        "macro_p": 1,
+        "macro_r": 1,
+        "macro_f1": 1,
+        "fp": 0,
+        "fn": 0,
+        "abstention_rate": 0,
+        "latency_ms_mean": 1,
+        "claimed_thresholds_met": false
+      },
+      "confusion": {
+        "labels": [
+          "certainty_beyond_evidence",
+          "none"
+        ],
+        "matrix": [
+          [
+            1,
+            0
+          ],
+          [
+            0,
+            3
+          ]
+        ]
+      },
+      "grader_pass": true,
+      "plumbing_pass": true,
+      "plumbing_errors": [],
+      "mismatches": [],
+      "abstentions": []
+    }
+  },
+  "model_sweep": {
+    "status": "BLOCKED",
+    "reason": "ANTHROPIC_API_KEY is absent. No Messages API call is implemented in this pilot.",
+    "network_calls": 0,
+    "cost_usd": 0,
+    "effort": "N/A",
+    "effort_sweep": "not_run",
+    "effort_levels_in_provider_docs": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "effort_sweep_skipped_because": "A live effort sweep would be new spend. Provider docs list effort levels, and this pilot does not call them.",
+    "messages_api_migration_applied": false,
+    "messages_api_caller_present": false,
+    "command": "MEDIA_LENS_EVAL_LIVE_MODEL_SWEEP=report node scripts/classifier-dev-hillclimb.js model-sweep",
+    "claimed_thresholds_met": false
+  },
+  "routing": {
+    "recommendation": "For this bounded fixture, grader, and report task, the routing recommendation is Sonnet 5.5 (claude-sonnet-5-5). Keep the Opus-oriented workflow for methodology judgment, safety-claim wording, and unbounded product changes. This pilot does not change global model assignments.",
+    "compared_task": "bounded eval and hillclimb tooling",
+    "sonnet_model_id": "claude-sonnet-5-5",
+    "opus_api_model_id": null,
+    "quality": "not_measured_live",
+    "safety": "Model routing is not a safety control. Merge readiness for this pilot uses the deterministic grader and tests. An LLM is not the judge. Live URL, feeds, Medialyst, and classifier.dev stay off.",
+    "cost": "Fixture path cost_usd is 0. Live comparison cost was not measured.",
+    "latency": "Reported latency is fixture-declared or the local policy constant of 1 ms. Live latency was not measured.",
+    "uncertainty": "No paired model repeats. Deterministic grader repeat delta is 0. Case counts are small, so a nonzero F1 move would still be software consistency, not population accuracy.",
+    "messages_api_migration_applied": false
+  },
+  "evidence_supports": [
+    "The deterministic grader agrees with itself on a repeated grade of the same outputs and on a reversed prediction order.",
+    "The tune command reads cases.train.json and holdout-ids.json. It does not open cases.holdout.json or the full catalog.",
+    "Round 1 moves train macro F1 and leaves holdout macro F1 unchanged, so the candidate is reverted.",
+    "The fixture path records cost_usd 0 and network_calls 0."
+  ],
+  "evidence_does_not_support": [
+    "Real-world accuracy, sensitivity, specificity, or fairness.",
+    "Meeting documented acceptance thresholds. claimed_thresholds_met is false.",
+    "Production readiness, live URL quality, feed quality, or classifier.dev quality.",
+    "A kept edit to deterministic_policy. The installed rule remains the baseline.",
+    "A measured quality, cost, or latency difference between an Opus-oriented workflow and Sonnet 5.5. The live sweep is BLOCKED."
+  ]
+}

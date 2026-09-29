@@ -1,0 +1,9 @@
+{
+  "disclaimer": "Sealed holdout identifiers only. Span text and labels live in cases.holdout.json, which the tune command must not open.",
+  "ids": [
+    "eval-quoted-attribution",
+    "eval-attributed-deadline",
+    "eval-guarantee-leaflet",
+    "eval-ellipsis-only"
+  ]
+}

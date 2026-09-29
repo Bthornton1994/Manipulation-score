@@ -10,6 +10,13 @@
 // Zero new dependencies. HTTP/1.1 only. No keep-alive reuse.
 // Article fetch: GET. Provider clients (Jev / classifier.dev): POST.
 // Does not follow redirects.
+//
+// Resource limits fail closed. The response-header cap is applied through
+// Node's `maxHeaderSize` request option (the only name Node honors). Body
+// reads cap wire bytes and decoded bytes at the same budget, so a body
+// that expands on decode or a stream of empty compressed members cannot
+// outlast the byte limit. A caller that omits a limit gets the default,
+// never an unbounded read.
 
 import http from 'node:http';
 import https from 'node:https';
@@ -37,8 +44,19 @@ export const FEED_CONTENT_TYPES = new Set([
   'application/xml'
 ]);
 const ALLOWED_ENCODINGS = new Set(['identity', 'gzip', 'x-gzip', 'deflate', 'br']);
-const DEFAULT_CONNECT_TIMEOUT_MS = 3000;
-const DEFAULT_MAX_HEADER_BYTES = 8192;
+export const DEFAULT_TIMEOUT_MS = 8000;
+export const DEFAULT_CONNECT_TIMEOUT_MS = 3000;
+export const DEFAULT_MAX_HEADER_BYTES = 8192;
+export const DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
+
+/**
+ * Coerce a caller-supplied limit to a positive finite number, else the
+ * default. `undefined`, `null`, `0`, negatives, NaN, and strings never
+ * disable a cap.
+ */
+export function positiveLimit(value, fallback) {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
+}
 
 export function makePinnedLookup(pin) {
   return (hostname, options, callback) => {
@@ -127,6 +145,26 @@ function createDecoder(encoding, maxBytes) {
 
 async function readDecodedBody(stream, { encoding, maxBytes, signal }) {
   const decoder = createDecoder(encoding, maxBytes);
+  // Compressed bodies: cap the wire bytes at the same budget as the decoded
+  // bytes. Without this, a stream of empty gzip members (20 bytes each,
+  // decoding to nothing) is bounded only by the timeout. Identity bodies
+  // are counted in the loop below, where wire and decoded bytes coincide.
+  let wireBytes = 0;
+  let wireOverflow = false;
+  if (decoder) {
+    stream.on('data', (chunk) => {
+      wireBytes += chunk.length;
+      if (wireBytes > maxBytes && !wireOverflow) {
+        wireOverflow = true;
+        try {
+          stream.destroy?.();
+        } catch {
+          // ignore
+        }
+        decoder.destroy(taggedError('Response exceeded the size limit', 'TOO_LARGE'));
+      }
+    });
+  }
   const source = decoder ? stream.pipe(decoder) : stream;
   const onAbort = () => {
     try {
@@ -157,6 +195,7 @@ async function readDecodedBody(stream, { encoding, maxBytes, signal }) {
       chunks.push(Buffer.from(chunk));
     }
   } catch (err) {
+    if (wireOverflow) throw taggedError('Response exceeded the size limit', 'TOO_LARGE');
     if (err?.code === 'TOO_LARGE' || err?.code === 'TIMEOUT') throw err;
     if (signal?.aborted || err?.name === 'AbortError') {
       throw taggedError('Fetching timed out', 'TIMEOUT');
@@ -266,6 +305,11 @@ export function performPinnedRequest({
   if (verb !== 'GET' && verb !== 'POST') {
     return Promise.reject(taggedError(`Unsupported method ${verb}`, 'FETCH_ERROR'));
   }
+  timeoutMs = positiveLimit(timeoutMs, DEFAULT_TIMEOUT_MS);
+  connectTimeoutMs = positiveLimit(connectTimeoutMs, DEFAULT_CONNECT_TIMEOUT_MS);
+  // Node reads the response-header cap from `maxHeaderSize`; `maxHeaderBytes`
+  // is this module's option name and is mapped below. Integer bytes only.
+  const headerCap = Math.floor(positiveLimit(maxHeaderBytes, DEFAULT_MAX_HEADER_BYTES));
   const isHttps = parsed.protocol === 'https:';
   const transport = isHttps ? https : http;
   const requestHostname = stripIPv6Brackets(parsed.hostname);
@@ -327,7 +371,7 @@ export function performPinnedRequest({
       agent,
       lookup,
       timeout: timeoutMs,
-      maxHeaderBytes,
+      maxHeaderSize: headerCap,
       insecureHTTPParser: false,
       signal
     };
@@ -408,6 +452,10 @@ export function performPinnedRequest({
         finish(taggedError('Fetching timed out', 'TIMEOUT'));
         return;
       }
+      if (err?.code === 'HPE_HEADER_OVERFLOW') {
+        finish(taggedError('Response headers exceeded the size limit', 'FETCH_ERROR'));
+        return;
+      }
       if (String(err?.code || '').includes('CERT') || /certificate/i.test(err?.message || '')) {
         finish(taggedError(`TLS error: ${err.message}`, 'TLS_ERROR'));
         return;
@@ -437,6 +485,8 @@ export async function finalizePinnedResponse(response, { pin, maxBytes, signal, 
   if (!response || !response.remoteAddress || !ipIdentitiesEqual(response.remoteAddress, pin.address)) {
     throw taggedError('Pinned destination did not match the connected peer', 'PIN_MISMATCH');
   }
+  // An omitted or invalid byte cap is the default, never "unbounded".
+  maxBytes = positiveLimit(maxBytes, DEFAULT_MAX_BYTES);
 
   const locations = locationHeaderCount(response);
   const location = headerValue(response.headers, 'location');

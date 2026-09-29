@@ -1749,6 +1749,94 @@ test('leaf div body between matching paragraphs is not silently dropped', async 
   assert.match(prepared.preparedText, /city council opened an inquiry/);
 });
 
+test('leaf main article body is not silently dropped when headline still matches', async () => {
+  // HTML5 templates often put the story in <main> with only text or inline
+  // spans. main was a non-leaf walk-through tag but never leaf-emitted, so a
+  // matching <h1> kept walker blocks, skipped Trafilatura fallback, and left
+  // preparedText / Jev on the headline alone. Distinct from leaf div/section
+  // (#160) and leaf td/th (#162).
+  const headline = 'Company faces inquiry after safety report';
+  const para1 = 'The city council opened an inquiry after residents raised alarms about factory emissions near the river.';
+  const para2 =
+    'Investigators found that the company hid safety test failures from regulators for more than two years.';
+  for (const bodyHtml of [
+    `<main>${para1}</main><main>${para2}</main>`,
+    `<main><span>${para1}</span></main><main><span>${para2}</span></main>`
+  ]) {
+    const html = `<!doctype html>
+<html lang="en"><head><title>Main body</title></head>
+<body>
+<nav>Home About Contact Privacy</nav>
+<article>
+<h1>${headline}</h1>
+${bodyHtml}
+</article>
+</body></html>`;
+    const prepared = await prepareFromHtml({
+      html,
+      sourceUrl: 'https://fictional-daily.example/main-body',
+      inputMode: 'fixture',
+      extractImpl: async () => ({
+        status: 'ok',
+        extractor_version: TRAFILATURA_VERSION,
+        language_detector_version: PY3LANGID_VERSION,
+        detected_language: 'en',
+        html_lang: 'en',
+        title: headline,
+        author: null,
+        date: null,
+        text: [headline, para1, para2].join('\n')
+      })
+    });
+    assert.equal(prepared.extraction.status, 'ok', bodyHtml);
+    assert.match(prepared.preparedText, /city council opened an inquiry/, bodyHtml);
+    assert.match(prepared.preparedText, /Investigators found that the company hid safety test failures/, bodyHtml);
+    assert.equal(prepared.preparedText.includes('Privacy'), false, bodyHtml);
+    for (const span of prepared.spans) {
+      assert.equal(prepared.preparedText.slice(span.start, span.end), span.text);
+    }
+  }
+});
+
+test('direct text under article is not silently dropped when headline still matches', async () => {
+  // Some feeds emit the body as a text node sibling of <h1> inside <article>.
+  // The walker previously ignored element-less text children, so a matching
+  // headline kept walker blocks and omitted the body.
+  const headline = 'Company faces inquiry after safety report';
+  const body =
+    'The city council opened an inquiry after residents raised alarms about factory emissions near the river.';
+  const html = `<!doctype html>
+<html lang="en"><head><title>Direct text</title></head>
+<body>
+<article>
+<h1>${headline}</h1>
+${body}
+</article>
+</body></html>`;
+  const prepared = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/direct-text',
+    inputMode: 'fixture',
+    extractImpl: async () => ({
+      status: 'ok',
+      extractor_version: TRAFILATURA_VERSION,
+      language_detector_version: PY3LANGID_VERSION,
+      detected_language: 'en',
+      html_lang: 'en',
+      title: headline,
+      author: null,
+      date: null,
+      text: [headline, body].join('\n')
+    })
+  });
+  assert.equal(prepared.extraction.status, 'ok');
+  assert.match(prepared.preparedText, /city council opened an inquiry/);
+  assert.deepEqual(
+    prepared.spans.map((span) => span.text),
+    [headline, body]
+  );
+});
+
 test('br-split text, list items, and a leaf div are kept together when other blocks match', async () => {
   const html = `<!doctype html>
 <html lang="en"><head><title>Combined body</title></head>
@@ -2117,13 +2205,19 @@ test('architecture section 10.2 matches first-article Trafilatura matching', asy
   assert.match(section, /List items alone, such as a menu or page numbers that Trafilatura kept, do not prevent this fallback/);
   assert.match(
     section,
-    /leaf CMS containers \(`div`\/`section` with no block, list, table, figure, sectioning, or details element anywhere inside them, even below an inline wrapper\)/
+    /leaf CMS containers \(`div`\/`section`\/`main` with no block, list, table, figure, sectioning, or details element anywhere inside them, even below an inline wrapper\)/
   );
-  assert.match(section, /Leaf `<div>` and `<section>` paragraphs are walked blocks/);
+  assert.match(section, /Leaf `<div>`, `<section>`, and `<main>` paragraphs are walked blocks/);
   assert.match(section, /Leaf-ness ignores `script`, `style`, `template`, comments, and hidden nodes/);
   assert.match(section, /still loses body text the walker has no block for/);
-  assert.match(section, /A leaf `<div>` or `<section>` that equals a line, such as a standfirst or an `Advertisement` label in a `<div>`, does not prevent it/);
-  assert.match(section, /only when a content block other than a list item or a leaf `<div>` or `<section>` equals one Trafilatura line exactly/);
+  assert.match(
+    section,
+    /A leaf `<div>`, `<section>`, or `<main>` \(or direct text under `<article>`\) that equals a line, such as a standfirst or an `Advertisement` label in a `<div>`, does not prevent it/
+  );
+  assert.match(
+    section,
+    /only when a content block other than a list item or a leaf `<div>`, `<section>`, or `<main>` \(or direct text under `<article>`\) equals one Trafilatura line exactly/
+  );
   assert.equal(section.includes('until the walker has blocks for `<div>` paragraphs'), false);
   assert.match(section, /leaf table cells \(`td`\/`th` with no nested block, list, or table child\)/);
   assert.match(section, /keeps no block as a run/);

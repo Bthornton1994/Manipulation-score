@@ -34,22 +34,22 @@ const VOID_ELEMENTS = new Set([
 const RAW_TEXT_TAGS = new Set(['script', 'style', 'template']);
 const SKIP_CONTAINER_TAGS = new Set(['nav', 'header', 'footer', 'aside']);
 const BLOCK_TAGS = new Set(['h1', 'h2', 'h3', 'p', 'blockquote', 'figcaption', 'li']);
-// CMS article bodies are often paragraphs in <div> or <section> rather than
-// <p>. A leaf container, one with no NON_LEAF_TAGS element anywhere inside
-// it, is walked like <p> so that body is not silently dropped when another
-// block keeps walker blocks. A container with such an element inside it,
-// even below an inline wrapper (a Google Docs <b> or a <span> around the
-// paragraphs), is walked through instead: its text would otherwise join
-// every nested paragraph, caption, or sidebar into one block and lose their
-// roles.
-const LEAF_CONTAINER_TAGS = new Set(['div', 'section']);
+// CMS article bodies are often paragraphs in <div>, <section>, or <main>
+// rather than <p>. A leaf container, one with no NON_LEAF_TAGS element
+// anywhere inside it, is walked like <p> so that body is not silently
+// dropped when another block keeps walker blocks. A container with such an
+// element inside it, even below an inline wrapper (a Google Docs <b> or a
+// <span> around the paragraphs), is walked through instead: its text would
+// otherwise join every nested paragraph, caption, or sidebar into one block
+// and lose their roles. <main> is included; <header>/<footer>/<aside>/<nav>
+// stay skip containers and are not leaf-emitted.
+const LEAF_CONTAINER_TAGS = new Set(['div', 'section', 'main']);
 const NON_LEAF_TAGS = new Set([
   ...BLOCK_TAGS,
   ...LEAF_CONTAINER_TAGS,
   'ul',
   'ol',
   'table',
-  'main',
   'figure',
   'header',
   'footer',
@@ -62,7 +62,7 @@ const NON_LEAF_TAGS = new Set([
 // Email-HTML / newsletter / legacy CMS bodies often live only in <td>/<th>.
 // Without treating leaf cells as blocks, a matching <h1>/<p> keeps
 // contentBlocks non-empty, skips the Trafilatura-line fallback, and silently
-// drops the cell body from analysis. Distinct from leaf <div>/<section>.
+// drops the cell body from analysis. Distinct from leaf <div>/<section>/<main>.
 const LEAF_TABLE_CELL_TAGS = new Set(['td', 'th']);
 const BLOCKISH_CHILD_TAGS = new Set([
   ...BLOCK_TAGS,
@@ -477,8 +477,8 @@ function walkBlocks(node, { inSkipContainer } = {}) {
     return blocks;
   }
 
-  // A leaf <div> or <section> is walked like <p>. It is not a list item, so
-  // it never matches after the list marker is removed, and it is a
+  // A leaf <div>, <section>, or <main> is walked like <p>. It is not a list
+  // item, so it never matches after the list marker is removed, and it is a
   // leafContainer, so it never keeps walker blocks on its own
   // (equalsOneLineExactly).
   if (!skipHere && LEAF_CONTAINER_TAGS.has(node.tag) && !hasNonLeafDescendant(node)) {
@@ -499,8 +499,8 @@ function walkBlocks(node, { inSkipContainer } = {}) {
   // Leaf table cells (no nested block/list/table): treat like <p>.
   // Otherwise a matching <h1>/<p> keeps contentBlocks non-empty, skips the
   // Trafilatura-line fallback, and silently drops the cell body.
-  // Unlike a leaf <div>/<section>, a cell is not a leafContainer, so a cell
-  // that equals one line can keep walker blocks.
+  // Unlike a leaf <div>/<section>/<main>, a cell is not a leafContainer, so a
+  // cell that equals one line can keep walker blocks.
   if (!skipHere && LEAF_TABLE_CELL_TAGS.has(node.tag) && !hasBlockishChild(node)) {
     const text = collapseWhitespace(innerText(node));
     if (text) {
@@ -516,6 +516,27 @@ function walkBlocks(node, { inSkipContainer } = {}) {
   }
 
   for (const child of node.children || []) {
+    // Direct text under <article> is otherwise discarded while a matching
+    // <h1> keeps walker blocks and skips the Trafilatura fallback. Mixed
+    // text inside a non-leaf <div>/<section>/<main> still has no block
+    // (those parents are walked through for nested roles).
+    if (child.type === 'text') {
+      if (!skipHere && node.tag === 'article') {
+        const text = collapseWhitespace(child.value || '');
+        if (text) {
+          blocks.push({
+            role: 'authorial',
+            roleBasis: 'default',
+            text,
+            attribution: { speaker: null, cue: null },
+            splitQuotes: true,
+            listItem: false,
+            leafContainer: true
+          });
+        }
+      }
+      continue;
+    }
     blocks.push(...walkBlocks(child, { inSkipContainer: skipHere }));
   }
   return blocks;
@@ -790,9 +811,10 @@ function keptExtractedBlocks(blocks, lines) {
  * <br>-split credit, a paragraph with a zero-width space) would otherwise
  * replace a body the walker has no block for, such as text directly inside
  * a <div> that also has a block element inside it, with itself. A leaf
- * <div> or <section> that equals one line (a standfirst, an Advertisement
- * label) was not a block before leaf containers were walked and did not
- * prevent that fallback then, so it does not prevent it now.
+ * <div>, <section>, or <main> (or direct text under <article>)
+ * that equals one line (a standfirst, an Advertisement label) was not a
+ * block before leaf containers were walked and did not prevent that
+ * fallback then, so it does not prevent it now.
  */
 function equalsOneLineExactly(blocks, lines) {
   const exactLines = new Set(lines.filter((line) => line.length > 0));

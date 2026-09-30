@@ -280,7 +280,8 @@ export async function analyze({
         message: 'This analysis exceeded the configured Jev call cap, so no manipulation analysis or score was generated.',
         config,
         userAssertedPublic,
-        consentAt
+        consentAt,
+        liveJevCalls
       });
     }
 

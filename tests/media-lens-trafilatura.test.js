@@ -1837,6 +1837,80 @@ ${body}
   );
 });
 
+test('direct text under body without article is not silently dropped when headline still matches', async () => {
+  // Legacy CMS, email-HTML wrappers, and minimal templates with no <article>
+  // put the body as a text node sibling of <h1> under <body>. The walker
+  // starts at #root there, so the text was discarded while the matching
+  // headline kept walker blocks and skipped the Trafilatura fallback.
+  const headline = 'Company faces inquiry after safety report';
+  const body =
+    'The city council opened an inquiry after residents raised alarms about factory emissions near the river.';
+  const byline = 'By Fictional Reporter';
+  const html = `<!doctype html>
+<html lang="en"><head><title>Body text</title></head>
+<body>
+<nav>Home About Contact Privacy</nav>
+<h1>${headline}</h1>
+${body}
+<p class="byline">${byline}</p>
+</body></html>`;
+  const prepared = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/body-text',
+    inputMode: 'fixture',
+    extractImpl: async () => ({
+      status: 'ok',
+      extractor_version: TRAFILATURA_VERSION,
+      language_detector_version: PY3LANGID_VERSION,
+      detected_language: 'en',
+      html_lang: 'en',
+      title: headline,
+      author: null,
+      date: null,
+      text: [headline, body, byline].join('\n')
+    })
+  });
+  assert.equal(prepared.extraction.status, 'ok');
+  assert.match(prepared.preparedText, /city council opened an inquiry/);
+  assert.equal(prepared.preparedText.includes('Privacy'), false);
+  assert.ok(prepared.spans.some((span) => span.text === body));
+  assert.equal(prepared.spans.some((span) => span.text.includes('Privacy')), false);
+  for (const span of prepared.spans) {
+    assert.equal(prepared.preparedText.slice(span.start, span.end), span.text);
+  }
+});
+
+test('direct text under body without article equal to one extracted line does not keep walker blocks, and a <p> with the same text does', async () => {
+  // Direct text under <body> is marked like a leaf container, as it is under
+  // <article>. Here the body is in inline elements the walker has no block
+  // for, so a standfirst or Advertisement label directly under <body> that
+  // equals one line must not keep walker blocks, or the body would be lost.
+  const headline = 'Harbor dredging delayed again';
+  const body = [
+    'The harbor authority said on Thursday that dredging will not begin until next spring.',
+    'Fishing crews say larger boats can only enter the channel at high tide.'
+  ];
+  const standfirst = 'The third delay in two years leaves fishing crews waiting on the tide.';
+  for (const [block, line, kept] of [
+    [standfirst, standfirst, null],
+    ['Advertisement', 'Advertisement', null],
+    [`<p class="standfirst">${standfirst}</p>`, standfirst, [standfirst]]
+  ]) {
+    const lines = [headline, line, ...body];
+    const prepared = await prepareFromHtml({
+      html: `<!doctype html><html lang="en"><body><span>${headline}</span>${block}<span>${body[0]}</span><span>${body[1]}</span></body></html>`,
+      sourceUrl: 'https://fictional-daily.example/body-leaf-anchor',
+      inputMode: 'fixture',
+      extractImpl: extractedLines(lines)
+    });
+    assert.deepEqual(
+      prepared.spans.map((span) => span.text),
+      kept ?? lines,
+      block
+    );
+  }
+});
+
 test('br-split text, list items, and a leaf div are kept together when other blocks match', async () => {
   const html = `<!doctype html>
 <html lang="en"><head><title>Combined body</title></head>
@@ -2212,11 +2286,15 @@ test('architecture section 10.2 matches first-article Trafilatura matching', asy
   assert.match(section, /still loses body text the walker has no block for/);
   assert.match(
     section,
-    /A leaf `<div>`, `<section>`, or `<main>` \(or direct text under `<article>`\) that equals a line, such as a standfirst or an `Advertisement` label in a `<div>`, does not prevent it/
+    /A leaf `<div>`, `<section>`, or `<main>` \(or direct text under `<article>` or `<body>`\) that equals a line, such as a standfirst or an `Advertisement` label in a `<div>`, does not prevent it/
   );
   assert.match(
     section,
-    /only when a content block other than a list item or a leaf `<div>`, `<section>`, or `<main>` \(or direct text under `<article>`\) equals one Trafilatura line exactly/
+    /only when a content block other than a list item or a leaf `<div>`, `<section>`, or `<main>` \(or direct text under `<article>` or `<body>`\) equals one Trafilatura line exactly/
+  );
+  assert.match(
+    section,
+    /non-empty direct text children of `<article>`, or of `<body>` when the page has no `<article>` \(marked like leaf containers so they alone cannot keep walker blocks\)/
   );
   assert.equal(section.includes('until the walker has blocks for `<div>` paragraphs'), false);
   assert.match(section, /leaf table cells \(`td`\/`th` with no nested block, list, or table child\)/);

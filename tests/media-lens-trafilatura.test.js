@@ -1837,6 +1837,53 @@ ${body}
   );
 });
 
+test('direct text under body without article is not silently dropped when headline still matches', async () => {
+  // Legacy CMS, email-HTML wrappers, and minimal templates often omit
+  // <article> and put the story as a text sibling of <h1> under <body>.
+  // Without emitting that text, a matching headline kept walker blocks,
+  // skipped Trafilatura fallback, and left preparedText / Jev on the
+  // headline (and any matching byline) alone. Distinct from direct text
+  // under <article> (#166).
+  const headline = 'Company faces inquiry after safety report';
+  const body =
+    'The city council opened an inquiry after residents raised alarms about factory emissions near the river.';
+  const byline = 'By A. Reporter';
+  const html = `<!doctype html>
+<html lang="en"><head><title>Body text</title></head>
+<body>
+<nav>Home About Contact Privacy</nav>
+<h1>${headline}</h1>
+${body}
+<p class="byline">${byline}</p>
+</body></html>`;
+  const prepared = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/body-direct-text',
+    inputMode: 'fixture',
+    extractImpl: async () => ({
+      status: 'ok',
+      extractor_version: TRAFILATURA_VERSION,
+      language_detector_version: PY3LANGID_VERSION,
+      detected_language: 'en',
+      html_lang: 'en',
+      title: headline,
+      author: null,
+      date: null,
+      text: [headline, body, byline].join('\n')
+    })
+  });
+  assert.equal(prepared.extraction.status, 'ok');
+  assert.match(prepared.preparedText, /city council opened an inquiry/);
+  assert.equal(prepared.preparedText.includes('Privacy'), false);
+  assert.deepEqual(
+    prepared.spans.map((span) => span.text),
+    [headline, body, byline]
+  );
+  for (const span of prepared.spans) {
+    assert.equal(prepared.preparedText.slice(span.start, span.end), span.text);
+  }
+});
+
 test('br-split text, list items, and a leaf div are kept together when other blocks match', async () => {
   const html = `<!doctype html>
 <html lang="en"><head><title>Combined body</title></head>

@@ -516,12 +516,16 @@ function walkBlocks(node, { inSkipContainer } = {}) {
   }
 
   for (const child of node.children || []) {
-    // Direct text under <article> is otherwise discarded while a matching
-    // <h1> keeps walker blocks and skips the Trafilatura fallback. Mixed
-    // text inside a non-leaf <div>/<section>/<main> still has no block
-    // (those parents are walked through for nested roles).
+    // Direct text under <article> or <body> is otherwise discarded while a
+    // matching <h1> keeps walker blocks and skips the Trafilatura fallback.
+    // Pages without <article> (legacy CMS, email-HTML wrappers, minimal
+    // templates) put the story body as a text sibling of <h1> under <body>;
+    // walking from #root still reaches that text, and it must be emitted the
+    // same way as under <article>. Mixed text inside a non-leaf
+    // <div>/<section>/<main> still has no block (those parents are walked
+    // through for nested roles).
     if (child.type === 'text') {
-      if (!skipHere && node.tag === 'article') {
+      if (!skipHere && (node.tag === 'article' || node.tag === 'body')) {
         const text = collapseWhitespace(child.value || '');
         if (text) {
           blocks.push({
@@ -811,7 +815,7 @@ function keptExtractedBlocks(blocks, lines) {
  * <br>-split credit, a paragraph with a zero-width space) would otherwise
  * replace a body the walker has no block for, such as text directly inside
  * a <div> that also has a block element inside it, with itself. A leaf
- * <div>, <section>, or <main> (or direct text under <article>)
+ * <div>, <section>, or <main> (or direct text under <article>/<body>)
  * that equals one line (a standfirst, an Advertisement label) was not a
  * block before leaf containers were walked and did not prevent that
  * fallback then, so it does not prevent it now.

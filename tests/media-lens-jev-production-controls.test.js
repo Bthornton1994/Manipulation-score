@@ -465,6 +465,59 @@ test('timeout while live Jev is in-flight still records calls once the adapter s
   assert.equal(budget.getSnapshot().calls, 3);
 });
 
+test('live Jev capReached after billed calls still exposes calls for ESTIMATED budget accounting', async () => {
+  const config = loadConfig({ MEDIA_LENS_MODE: 'live', MEDIA_LENS_ENABLE_LIVE: 'true', MEDIA_LENS_TYPESAFE_API_KEY: 'k' });
+  config.limits = { ...config.limits, maxJevCallsPerAnalysis: 160 };
+
+  const prepared = await prepareFromPastedText({
+    text: 'A '.repeat(150) + 'long enough body for cap-reached budget undercount regression.'
+  });
+  const billedCalls = 5;
+  const budget = createTypesafeBudget({ estimatedUsdPerCall: 1, warnUsd: 100, stopUsd: 200 });
+
+  const jevAdapter = {
+    mode: 'live',
+    analyzeSpans: async () => ({
+      answersBySpanId: new Map(),
+      failedSpanIds: new Set(),
+      reviewSpanIds: new Set(),
+      unavailableSpanIds: new Set(),
+      dispositionsBySpanId: new Map(),
+      calls: billedCalls,
+      failures: 0,
+      elapsedMs: 5,
+      modelReported: 'jev-1.13.0',
+      modelMatch: true,
+      capReached: true
+    })
+  };
+
+  const graph = await analyze({
+    prepared,
+    config,
+    jevAdapter,
+    newsjackAdapter: createNewsjackAdapter({ mode: 'disabled' }),
+    typesafeBudget: budget,
+    userAssertedPublic: true,
+    consentAt: '2026-09-21T00:00:00.000Z'
+  });
+
+  assert.ok(graph.abstentions.some((a) => a.reason === 'engine_unavailable' && a.message.includes('exceeded the configured Jev call cap')));
+  assert.equal(graph.engine.jev.calls, billedCalls);
+  assert.equal(graph.engine.jev.mode, 'live');
+  assert.ok(
+    graph.privacy.external_processing.some((entry) => /typesafe/i.test(entry.recipient) && entry.occurred === true),
+    'a cap-reached abstention after billed Jev calls must still record that span text went to TypeSafe'
+  );
+  assert.equal(validate(graph).valid, true);
+
+  // Mirror server.js: record whatever live calls the graph reports.
+  if (jevAdapter.mode === 'live' && (graph.engine?.jev?.calls || 0) > 0) {
+    budget.recordCalls(graph.engine.jev.calls);
+  }
+  assert.equal(budget.getSnapshot().calls, billedCalls);
+});
+
 test('R2: ESTIMATED budget store persists across process restart within the same UTC month', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'media-lens-budget-store-'));
   const storePath = join(dir, 'typesafe-budget.json');

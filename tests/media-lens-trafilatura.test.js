@@ -1837,6 +1837,49 @@ ${body}
   );
 });
 
+test('direct text under body without article is not silently dropped when headline still matches', async () => {
+  // Legacy CMS, email-HTML wrappers, and minimal templates with no <article>
+  // put the body as a text node sibling of <h1> under <body>. The walker
+  // starts at #root there, so the text was discarded while the matching
+  // headline kept walker blocks and skipped the Trafilatura fallback.
+  const headline = 'Company faces inquiry after safety report';
+  const body =
+    'The city council opened an inquiry after residents raised alarms about factory emissions near the river.';
+  const byline = 'By Fictional Reporter';
+  const html = `<!doctype html>
+<html lang="en"><head><title>Body text</title></head>
+<body>
+<nav>Home About Contact Privacy</nav>
+<h1>${headline}</h1>
+${body}
+<p class="byline">${byline}</p>
+</body></html>`;
+  const prepared = await prepareFromHtml({
+    html,
+    sourceUrl: 'https://fictional-daily.example/body-text',
+    inputMode: 'fixture',
+    extractImpl: async () => ({
+      status: 'ok',
+      extractor_version: TRAFILATURA_VERSION,
+      language_detector_version: PY3LANGID_VERSION,
+      detected_language: 'en',
+      html_lang: 'en',
+      title: headline,
+      author: null,
+      date: null,
+      text: [headline, body, byline].join('\n')
+    })
+  });
+  assert.equal(prepared.extraction.status, 'ok');
+  assert.match(prepared.preparedText, /city council opened an inquiry/);
+  assert.equal(prepared.preparedText.includes('Privacy'), false);
+  assert.ok(prepared.spans.some((span) => span.text === body));
+  assert.equal(prepared.spans.some((span) => span.text.includes('Privacy')), false);
+  for (const span of prepared.spans) {
+    assert.equal(prepared.preparedText.slice(span.start, span.end), span.text);
+  }
+});
+
 test('br-split text, list items, and a leaf div are kept together when other blocks match', async () => {
   const html = `<!doctype html>
 <html lang="en"><head><title>Combined body</title></head>

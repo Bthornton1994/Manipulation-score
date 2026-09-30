@@ -279,7 +279,7 @@ function requireLiveModeReady(config) {
   }
 }
 
-function liveUrlGate({ payload, config, audit, consumeLiveUrl, consumeLiveUrlHost }) {
+function liveUrlAuthorize({ payload, config, audit }) {
   const flags = effectiveLiveFlags(config);
   const urlFields = safeUrlAuditFields(payload.url);
   // Fixture workers reject URL mode as URL_MODE_REQUIRES_LIVE before the
@@ -348,6 +348,10 @@ function liveUrlGate({ payload, config, audit, consumeLiveUrl, consumeLiveUrlHos
     return { error: 'live_url_not_allowlisted', status: 400, message: 'This host is not on the operator URL allowlist.' };
   }
 
+  return { ok: true, urlFields, parsedHost };
+}
+
+function liveUrlConsumeRateLimits({ config, audit, urlFields, parsedHost, consumeLiveUrl, consumeLiveUrlHost }) {
   if (!consumeLiveUrl()) {
     audit.emit(AUDIT_EVENTS.RATE_LIMIT, {
       mode: config.mode,
@@ -567,31 +571,46 @@ export function createServer(config = loadConfig(), options = {}) {
           return;
         }
 
-        if (payload.mode === 'url') {
-          const gate = liveUrlGate({ payload, config, audit, consumeLiveUrl, consumeLiveUrlHost });
-          if (!gate.ok) {
-            sendJson(res, gate.status, { error: gate.error, message: gate.message });
-            return;
-          }
-        }
-
-        const { consentAt } = resolveConsentAt(payload.consent_at);
-
         let heldLiveUrlSlot = false;
         if (payload.mode === 'url') {
+          const auth = liveUrlAuthorize({ payload, config, audit });
+          if (!auth.ok) {
+            sendJson(res, auth.status, { error: auth.error, message: auth.message });
+            return;
+          }
+
+          // Hold the concurrency slot before burning per-minute budgets so a
+          // rejected parallel attempt does not lock out the in-flight fetch.
           if (!liveUrlConcurrency.tryEnter()) {
             audit.emit(AUDIT_EVENTS.RATE_LIMIT, {
               mode: config.mode,
               input_mode: 'url',
               error: 'rate_limited',
               limiter: 'live_url_concurrent',
-              ...safeUrlAuditFields(payload.url)
+              ...auth.urlFields
             });
             sendJson(res, 429, { error: 'rate_limited', message: 'A live URL fetch is already in progress on this worker.' });
             return;
           }
           heldLiveUrlSlot = true;
+
+          const budget = liveUrlConsumeRateLimits({
+            config,
+            audit,
+            urlFields: auth.urlFields,
+            parsedHost: auth.parsedHost,
+            consumeLiveUrl,
+            consumeLiveUrlHost
+          });
+          if (!budget.ok) {
+            liveUrlConcurrency.exit();
+            heldLiveUrlSlot = false;
+            sendJson(res, budget.status, { error: budget.error, message: budget.message });
+            return;
+          }
         }
+
+        const { consentAt } = resolveConsentAt(payload.consent_at);
 
         let prepared;
         try {

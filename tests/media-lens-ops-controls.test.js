@@ -746,3 +746,48 @@ test('allowlist and SSRF rejects do not burn the live-URL rate budget', async ()
     server.close();
   }
 });
+
+test('concurrent live-URL rejects do not burn the per-minute rate budget', async () => {
+  const config = liveUrlConfig({ MEDIA_LENS_URL_ALLOWLIST: 'allowed.example' });
+  config.limits = {
+    ...config.limits,
+    maxAnalysesPerMinute: 20,
+    maxLiveUrlPerMinute: 2,
+    maxLiveUrlPerHostPerMinute: 10,
+    maxConcurrentLiveUrl: 1
+  };
+  let fetchHits = 0;
+  const server = await listen(
+    createServer(config, {
+      fetchArticle: async () => {
+        fetchHits += 1;
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        return {
+          html: '<html><body><p>fixture body</p></body></html>',
+          finalUrl: 'http://allowed.example/article',
+          contentType: 'text/html',
+          fetchedAt: new Date().toISOString(),
+          fetchStatus: '200'
+        };
+      }
+    })
+  );
+  try {
+    const urlBody = { user_asserted_public: true, mode: 'url', url: 'http://allowed.example/article' };
+    const inFlight = requestJson(server, { method: 'POST', path: '/analyze', body: urlBody });
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    const rejected = await requestJson(server, { method: 'POST', path: '/analyze', body: urlBody });
+    assert.equal(rejected.status, 429);
+    assert.match(rejected.body.message, /already in progress/i);
+
+    const first = await inFlight;
+    assert.equal(first.status, 200);
+    assert.equal(fetchHits, 1);
+
+    const secondOk = await requestJson(server, { method: 'POST', path: '/analyze', body: urlBody });
+    assert.equal(secondOk.status, 200);
+    assert.equal(fetchHits, 2);
+  } finally {
+    server.close();
+  }
+});

@@ -562,11 +562,15 @@ test('safeUrlAuditFields never returns userinfo, path, query, or IP literals', (
 test('fixed-window and concurrency limiters fail closed', () => {
   const limiter = createFixedWindowLimiter(1, 60_000);
   assert.equal(limiter(), true);
+  limiter.releaseOne();
+  assert.equal(limiter(), true);
   assert.equal(limiter(), false);
 
   const keyed = createKeyedFixedWindowLimiter(1, 60_000);
   assert.equal(keyed('a'), true);
   assert.equal(keyed('a'), false);
+  keyed.release('a');
+  assert.equal(keyed('a'), true);
   assert.equal(keyed('b'), true);
 
   const gate = createConcurrencyGate(1);
@@ -692,6 +696,54 @@ test('fetchArticle on createServer is a test seam and is unused by startServer',
   assert.match(startBlock, /createServer\(config\)/);
   assert.doesNotMatch(startBlock.slice(0, 400), /fetchArticle/);
   assert.doesNotMatch(startBlock.slice(0, 250), /options = \{\}/);
+});
+
+test('per-host live-URL rejects do not burn the worker-wide rate budget', async () => {
+  const config = liveUrlConfig({ MEDIA_LENS_URL_ALLOWLIST: 'busy.example,other.example' });
+  config.limits = {
+    ...config.limits,
+    maxAnalysesPerMinute: 20,
+    maxLiveUrlPerMinute: 2,
+    maxLiveUrlPerHostPerMinute: 1,
+    maxConcurrentLiveUrl: 2
+  };
+  let fetchHits = 0;
+  const server = await listen(
+    createServer(config, {
+      fetchArticle: async (url) => {
+        fetchHits += 1;
+        return {
+          html: '<html><body><p>fixture body</p></body></html>',
+          finalUrl: url,
+          contentType: 'text/html',
+          fetchedAt: new Date().toISOString(),
+          fetchStatus: '200'
+        };
+      }
+    })
+  );
+  try {
+    const busyBody = { user_asserted_public: true, mode: 'url', url: 'http://busy.example/article' };
+    const otherBody = { user_asserted_public: true, mode: 'url', url: 'http://other.example/article' };
+
+    const firstBusy = await requestJson(server, { method: 'POST', path: '/analyze', body: busyBody });
+    assert.equal(firstBusy.status, 200);
+    assert.equal(fetchHits, 1);
+
+    // Host budget exhausted; must not consume the remaining worker-wide slot.
+    const hostLimited = await requestJson(server, { method: 'POST', path: '/analyze', body: busyBody });
+    assert.equal(hostLimited.status, 429);
+    assert.equal(hostLimited.body.error, 'rate_limited');
+    assert.match(hostLimited.body.message, /this host/i);
+    assert.equal(fetchHits, 1);
+
+    // A different allowlisted host still has a worker-wide slot.
+    const otherOk = await requestJson(server, { method: 'POST', path: '/analyze', body: otherBody });
+    assert.equal(otherOk.status, 200);
+    assert.equal(fetchHits, 2);
+  } finally {
+    server.close();
+  }
 });
 
 test('allowlist and SSRF rejects do not burn the live-URL rate budget', async () => {

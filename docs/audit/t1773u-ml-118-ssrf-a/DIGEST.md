@@ -5,7 +5,7 @@ Outcome: SSRF mutation tests now run their mutants on CRLF (Windows) checkouts. 
 - Base: `578e3fc3035c061bd33a67a7ae6095b96dccd969`
 - Evidence tip (code + tests): `5617a239f5c362b7b409f6afe7810f67052370cb`
 - Final branch tip: recorded in the PR body (docs-only commits follow the evidence tip)
-- Draft PR: PR_URL_PENDING
+- Draft PR: https://github.com/Bthornton1994/Manipulation-score/pull/178
 - Gate matrix and remaining slices: [STATUS.md](STATUS.md)
 
 ## Model and runtime

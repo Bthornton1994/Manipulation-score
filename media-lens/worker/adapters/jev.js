@@ -416,6 +416,19 @@ async function callLive({ baseUrl, apiKey, fetchImpl, timeoutMs, state, question
   return { ok: false, error: lastError };
 }
 
+// devTracer comes from worker/dev-tracing/jev-trace.js and is null unless a
+// development caller opts in. It receives metadata only, never span text,
+// state, questions, answers, or the API key.
+function traceSpan(devTracer, questionSet, fields) {
+  if (!devTracer) return;
+  devTracer.record({
+    modelRequested: MODEL_REQUESTED,
+    questionSetName: questionSet.name,
+    questionSetSha256: questionSet.sha256,
+    ...fields
+  });
+}
+
 async function runWithConcurrency(items, limit, worker) {
   const results = new Array(items.length);
   let cursor = 0;
@@ -449,7 +462,8 @@ export function createJevAdapter({
   lookupImpl = undefined,
   classifyImpl = undefined,
   createConnectionImpl = undefined,
-  tlsCa = undefined
+  tlsCa = undefined,
+  devTracer = null
 }) {
   const liveFetch =
     typeof fetchImpl === 'function'
@@ -484,8 +498,10 @@ export function createJevAdapter({
         bucket.calls += 1;
         const answers = raw.answers?.[span.id];
         const validated = validateAndSanitizeAnswers(answers, optionIds, { requireCompleteDistribution: false });
+        const traceBase = { mode, modelReported: raw.model_reported || null, latencyMs: 0 };
         if (!validated.ok) {
           recordUnavailable(bucket, span.id, validated.reason || 'malformed_answers');
+          traceSpan(devTracer, questionSet, { ...traceBase, outcome: 'unavailable', errorCategory: validated.reason || 'malformed_answers' });
           continue;
         }
         if (validated.review) {
@@ -493,6 +509,7 @@ export function createJevAdapter({
         } else {
           recordOk(bucket, span.id, validated.answers);
         }
+        traceSpan(devTracer, questionSet, { ...traceBase, outcome: validated.review ? 'review' : 'ok' });
       }
       return finalizeSpanResult(bucket, startedAt, raw.model_reported || null);
     }
@@ -508,12 +525,14 @@ export function createJevAdapter({
         if (cap != null && bucket.calls >= cap) {
           bucket.capReached = true;
           recordUnavailable(bucket, span.id, 'jev_call_cap');
+          traceSpan(devTracer, questionSet, { mode, latencyMs: 0, outcome: 'unavailable', errorCategory: 'jev_call_cap' });
           return;
         }
         bucket.calls += 1;
         const before = spans[index - 1]?.text || null;
         const after = spans[index + 1]?.text || null;
         const state = buildRequestState({ artifact, span, before, after });
+        const callStartedAt = Date.now();
         const result = await callLive({
           baseUrl,
           apiKey,
@@ -523,8 +542,15 @@ export function createJevAdapter({
           questions: questionSet.questions,
           outerSignal: signal
         });
+        const traceBase = {
+          mode,
+          latencyMs: Date.now() - callStartedAt,
+          modelReported: result.body?.model ?? null,
+          usage: result.body?.usage ?? null
+        };
         if (!result.ok) {
           recordUnavailable(bucket, span.id, result.error);
+          traceSpan(devTracer, questionSet, { ...traceBase, outcome: 'unavailable', errorCategory: result.error });
           return;
         }
         if (result.body?.model) modelReported = result.body.model;
@@ -533,6 +559,11 @@ export function createJevAdapter({
         });
         if (!validated.ok) {
           recordUnavailable(bucket, span.id, validated.reason || 'malformed_answers');
+          traceSpan(devTracer, questionSet, {
+            ...traceBase,
+            outcome: 'unavailable',
+            errorCategory: validated.reason || 'malformed_answers'
+          });
           return;
         }
         if (validated.review) {
@@ -540,6 +571,7 @@ export function createJevAdapter({
         } else {
           recordOk(bucket, span.id, validated.answers);
         }
+        traceSpan(devTracer, questionSet, { ...traceBase, outcome: validated.review ? 'review' : 'ok' });
       });
 
       return finalizeSpanResult(bucket, startedAt, modelReported);

@@ -1,0 +1,7 @@
+# Eval-only DeepEval sidecar (t1760u). Never installed by package.json, CI,
+# the worker, the browser, or the Pages bundle.
+#
+# Pin verified 2026-10-02 PT against PyPI latest: deepeval==4.2.7 (requires Python >=3.9,<4).
+# Install into a local venv only: python -m venv .venv && .venv\Scripts\pip install -r requirements.txt
+# Telemetry: DEEPEVAL_TELEMETRY_OPT_OUT=YES (set by run_offline_eval.py before import).
+deepeval==4.2.7

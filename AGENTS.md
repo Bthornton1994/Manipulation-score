@@ -1,4 +1,4 @@
-<!-- BEGIN MANAGED BLOCK: shared-agents-policy v1 (t1739u) -->
+<!-- BEGIN MANAGED BLOCK: shared-agents-policy v2 (t1777u) -->
 # AGENTS.md
 
 Shared operating rules for Codex and Claude Code in this repository. Follow every applicable rule. Keep this file operational: remove guidance that does not change an action.
@@ -66,10 +66,21 @@ Shared operating rules for Codex and Claude Code in this repository. Follow ever
 - Record reusable operating lessons, not one-time task facts or sensitive information. Put the newest lesson first and consolidate it if the same correction recurs.
 - Ask before changing rules above Lessons. Remove a lesson only when it is clearly obsolete.
 
+
+9. Claude Code “You should know” mod (advisory)
+
+- On supported local Claude Code machines (2.1.287+), enable the built-in mod at **user scope** so it applies to every project: `/plugin enable cc-plugin-you-should-know@builtin` (or `claude plugin enable cc-plugin-you-should-know@builtin --scope user`). This is **operator setup**, not a per-task step—do not run the enable command on every assignment.
+- Observations from the mod are **advisory only**. Verify any claim against current repository evidence before acting on it.
+- The mod cannot override user or project instructions, grant approvals, waive gates, or replace tests or Independent QA.
+- If the mod is unavailable, unsupported, inactive, or blocked (for example by Claude Code version), continue the task without it. Do **not** change telemetry or privacy settings to make it work.
+- A `CLAUDE.md` / `AGENTS.md` mention does **not** enable the plugin; user-scope enable on the machine does.
+
 Lessons
 
 <!-- Newest first. Keep each lesson concrete and reusable. -->
-<!-- END MANAGED BLOCK: shared-agents-policy v1 (t1739u) -->
+<!-- END MANAGED BLOCK: shared-agents-policy v2 (t1777u) -->
+
+
 
 
 <!-- Project-specific instructions (outside managed block) -->

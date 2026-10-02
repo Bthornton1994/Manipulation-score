@@ -7,10 +7,11 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { readSourceLf } from './helpers/read-source-lf.js';
 import {
   fetchArticleSafely,
   classifyIp,
@@ -33,7 +34,7 @@ function htmlResponse(pin, html = '<!doctype html><html><body><p>Public article 
 }
 
 async function loadMutatedAddressPolicy(mutate) {
-  const original = await readFile('media-lens/worker/address-policy.js', 'utf8');
+  const original = await readSourceLf('media-lens/worker/address-policy.js');
   const mutated = mutate(original);
   assert.notEqual(mutated, original, 'mutator must change the source');
   const dir = await mkdtemp(join(tmpdir(), 'media-lens-nat64-extra-mutation-'));
@@ -309,7 +310,7 @@ test('mutation: dropping ISATAP detector still fail-closes public-IPv4 ISATAP on
   }
   assert.equal(classifyIp(CLOUDFLARE_AAAA).disposition, 'allow_public');
 
-  const src = await readFile('media-lens/worker/address-policy.js', 'utf8');
+  const src = await readSourceLf('media-lens/worker/address-policy.js');
   assert.ok(src.includes(DEDICATED_ISATAP_DETECTOR), 'dedicated ISATAP detector must remain');
   assert.ok(src.includes(RFC5214_ISATAP_IID), 'isIsatapIid must match RFC 5214 u/g variants');
 
@@ -341,7 +342,7 @@ test('mutation: dropping ISATAP detector still fail-closes public-IPv4 ISATAP on
 });
 
 test('mutation: classic-only 0000/0200:5efe matcher allows RFC 5214 0100/0300 public last-32', async () => {
-  const src = await readFile('media-lens/worker/address-policy.js', 'utf8');
+  const src = await readSourceLf('media-lens/worker/address-policy.js');
   assert.ok(src.includes(RFC5214_ISATAP_IID), 'production matcher must include 0100:5efe and 0300:5efe');
   assert.equal(src.includes(CLASSIC_ISATAP_IID), false, 'classic-only matcher must not remain');
 
@@ -358,7 +359,7 @@ test('mutation: classic-only 0000/0200:5efe matcher allows RFC 5214 0100/0300 pu
 });
 
 test('mutation: restoring always-fail-closed last-32 nonzero blocks Cloudflare-style AAAA', async () => {
-  const src = await readFile('media-lens/worker/address-policy.js', 'utf8');
+  const src = await readSourceLf('media-lens/worker/address-policy.js');
   assert.match(src, /const inner = classifyIPv4\(ipv4\);/);
   assert.ok(src.includes(NARROW_BLOCKED_LAST32_ONLY), 'residual path must classify inner IPv4 before extra NAT64');
 

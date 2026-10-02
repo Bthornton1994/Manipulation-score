@@ -1,6 +1,13 @@
 # DIGEST: t1779u Media Lens #118 Slice B residual
 
-Outcome: pending. Issue #118 stays OPEN. Live URL stays OFF. NOT LIVE.
+Outcome: the kill-file NAME_MAX gap is closed by code. The 15 Python-host failures now run hermetically on hosts without the extractor. The three target suites go from 56/73 to 74/74 on this Windows host. Issue #118 stays OPEN. Live URL stays OFF. NOT LIVE.
+
+- Branch: `cos/t1779u-ml-118-slice-b` (local only; not pushed, no PR)
+- Base: `6f65e554e49c5bcbe203050ead56c61c874b2caf`
+- Evidence tip (code + tests + this checklist): `3c43762690a1f544e5bf900ac30770ee226c8f08`
+- Final tip: the docs-only commit on top of the evidence tip that adds STATUS.md and finishes this file. Its SHA is in the handoff report because a commit cannot contain its own hash.
+- Gate matrix: [STATUS.md](STATUS.md)
+- Runtime: `claude-opus-5-5`, permission mode auto. No bypass, no CloudAgent, Fable not used.
 
 ## t1725u assumptions (written before any edit)
 
@@ -20,3 +27,49 @@ Outcome: pending. Issue #118 stays OPEN. Live URL stays OFF. NOT LIVE.
 | 12 | Full `npm test` hangs on this host | Verified (prior memory, not re-run) | Not run, per the brief. Linux CI is the suite authority. |
 
 No assumption is used to bypass an owner gate. No packages installed, no TypeSafe call, no live flag set.
+
+### Checklist status at the end
+
+All verified rows still hold. Row 5 (Linux `ENAMETOOLONG`) stays Inferred: it was not run here, and the new segment rule makes the result the same on both OSes. Row 7 held: `createServer` already threaded `extractImpl`, so `server.js` is unchanged. Row 10 is verified by code inspection only: this host cannot run the real extractor, so the "CI uses the real extractor" path was not run here.
+
+## Files changed
+
+| File | Change |
+| --- | --- |
+| `media-lens/worker/config.js` | `isKillSwitchAsserted` asserts, without a stat, when any path segment (split on `/` and `\`) is over 255 characters. Comment states the Windows `ENOENT` gap. |
+| `media-lens/worker/prepare.js` | `prepareFromPastedText` accepts optional `detectImpl` (default `detectTextLanguage`). |
+| `media-lens/worker/jev-pin-verify.js` | `runJevPinVerify` passes optional `options.extractImpl` to `loadSyntheticFixtureCases`, which passes it to `prepareFromHtml`. |
+| `tests/helpers/python-extractor-host.js` | New. `pythonExtractorDown()` (cached promise; true only for `python_version` or `spawn_failed`), `hermeticExtract`, `hermeticDetect`, `extractSeam()`, `detectSeam()`. |
+| `tests/media-lens-ops-controls.test.js` | New regression: a 256-char segment (`/` and `\`) is asserted when stat would say `ENOENT` or throw if called (0 stat calls); a 255-char segment with `ENOENT` is not asserted. |
+| `tests/media-lens-jev-pin-verify.test.js` | `...(await extractSeam())` in the 9 tests that failed with `no_synthetic_spans`. |
+| `tests/media-lens-security-hardening.test.js` | `...(await extractSeam())` on the H1 `createServer`; `...(await detectSeam())` on the 5 `prepareFromPastedText` calls in H2, H2 timeout, N1 x2, N2. |
+| `docs/audit/t1779u-ml-118-slice-b/DIGEST.md`, `STATUS.md` | New. |
+
+`server.js` is unchanged. Live-URL gating, rate limits, and #172/#175 behavior are untouched.
+
+## Behavior changed
+
+- Production: the kill-switch segment rule only. Exact `MEDIA_LENS_KILL_SWITCH=true`, `TRUE`/`1`/`yes` not asserting, normal `ENOENT` not asserting, and other stat errors failing closed are all unchanged.
+- Seams: `detectImpl` and pin-verify `extractImpl` are off by default. When omitted, the code path is the same as before.
+- Stubs: `hermeticExtract` returns the Python success shape. `text` holds only the visible `h1`-`h3`, `p`, `blockquote`, `li`, and `figcaption` text of the html argument, `detected_language: 'en'`, and `html_lang` read from `<html lang>`. `extractor_version` is the pinned `TRAFILATURA_VERSION` because the schema accepts only that value. `language_detector_version` is `test-hermetic-no-python`. `hermeticDetect` returns `{ status: 'ok', detected_language: 'en', language_detector_version: 'test-hermetic-no-python' }`.
+
+## Tests (Windows host, Git Bash, Node v24.19.0, `node --test --test-force-exit`)
+
+| Check | Base `6f65e55` | Evidence tip | Label |
+| --- | --- | --- | --- |
+| `media-lens-jev-pin-verify` + `media-lens-security-hardening` + `media-lens-ops-controls` | 73 tests, 56 pass, 17 fail | 74 tests, 74 pass, 0 fail (one new test) | PASS |
+| `media-lens-source-lf` | 3/3 | 3/3 | PASS |
+| Mutation: remove the segment rule | n/a | the new test plus both 5000-x real-stat tests fail (3/3) | PASS (the regression catches the gap) |
+| Adjacent: `trafilatura`, `canary-drill`, `jev-production-controls`, `live-gate`, `fetch-limits`, `classifier-dev-adapter`, `source-lf` | 176 tests, 131 pass, 45 fail | 176 tests, 131 pass, 45 fail. Same failing test names as a clean detached base worktree | No regression. The 45 are pre-existing Python-host failures outside this brief and were left alone. |
+| `effectiveLiveFlags(loadConfig({}))` | all false | `{"killSwitch":false,"liveEnabled":false,"liveUrlEnabled":false,"classifierDevEnabled":false}` | PASS |
+| Full `npm test` | NOT RUN | NOT RUN | Hangs on this host. Linux CI is the suite authority. |
+| Linux CI | UNKNOWN | UNKNOWN | Not pushed. |
+
+The security assertions the brief lists are unchanged and now run on this host. An out-of-taxonomy choice is never an observation and `jev.failures > 0`. The per-analysis timeout gives `engine_unavailable`. `jevCallTimeoutMs` is honored. `oversized_input` keeps `consent_at` and `user_asserted_public`. No Jev calls happen after the timeout. Pin-verify fails closed on 401/422/429/529, malformed JSON, missing answers, `jev-9.9.9`, and `jev-latest`, and it records a mock success. Pin-verify spans still come from the fixture file (`Main Street|road closure|repaving`). All network was 127.0.0.1 mocks.
+
+## Confirmations
+
+- LIVE_URL untouched. No `MEDIA_LENS_ENABLE_LIVE` or `MEDIA_LENS_ENABLE_LIVE_URL` set outside the existing in-test configs.
+- #118 not closed. Commits say `Refs #118`.
+- PRs #168, #171, #172, #175, #179 and other branches or worktrees untouched. A temporary detached worktree at the base was created to compare failure sets and then removed.
+- No spend, no TypeSafe call, no pip install, no push, no PR.

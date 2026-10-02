@@ -19,6 +19,7 @@ import { createNewsjackAdapter } from '../media-lens/worker/adapters/newsjack.js
 import { createJevAdapter } from '../media-lens/worker/adapters/jev.js';
 import { analyze } from '../media-lens/worker/analyze.js';
 import { prepareFromPastedText, emptyPreparedArtifactStub } from '../media-lens/worker/prepare.js';
+import { detectSeam, extractSeam } from './helpers/python-extractor-host.js';
 
 function requestJson(server, { method, path, body }) {
   return new Promise((resolve, reject) => {
@@ -101,7 +102,8 @@ test('H1: a mock Jev returning an out-of-taxonomy choice for every span never pr
   });
   const server = await listen(
     createServer(config, {
-      fetchArticle: async () => ({ html: fixtureHtml })
+      fetchArticle: async () => ({ html: fixtureHtml }),
+      ...(await extractSeam())
     })
   );
   try {
@@ -257,7 +259,7 @@ test('H2: analyze() returns an engine_unavailable abstention graph when the whol
   const config = loadConfig({ MEDIA_LENS_MODE: 'fixture' });
   config.limits = { ...config.limits, perAnalysisTimeoutMs: 80 };
 
-  const prepared = await prepareFromPastedText({ text: 'A '.repeat(150) + 'sentence that is long enough to analyze.' });
+  const prepared = await prepareFromPastedText({ text: 'A '.repeat(150) + 'sentence that is long enough to analyze.', ...(await detectSeam()) });
   const hangingJevAdapter = { mode: 'live', analyzeSpans: () => new Promise(() => {}) }; // never settles
   const newsjackAdapter = createNewsjackAdapter({ mode: 'disabled' });
 
@@ -313,7 +315,7 @@ test('H2: server.js passes config.limits.jevCallTimeoutMs into the Jev adapter (
   // shape would take tens of seconds, far past the bound asserted below.
   config.limits = { ...config.limits, jevCallTimeoutMs: 40, perAnalysisTimeoutMs: 30000 };
 
-  const prepared = await prepareFromPastedText({ text: 'A '.repeat(150) + 'short article body for the test.' });
+  const prepared = await prepareFromPastedText({ text: 'A '.repeat(150) + 'short article body for the test.', ...(await detectSeam()) });
   const jevAdapter = createJevAdapter({
     mode: 'live',
     baseUrl: config.jev.baseUrl,
@@ -451,7 +453,8 @@ test('N1: consent_at and user_asserted_public survive the oversized_input (too m
   config.limits = { ...config.limits, maxSpans: 1 };
 
   const prepared = await prepareFromPastedText({
-    text: Array.from({ length: 5 }, (_, i) => `This is paragraph number ${i + 1} with enough words to be its own span.`).join('\n\n')
+    text: Array.from({ length: 5 }, (_, i) => `This is paragraph number ${i + 1} with enough words to be its own span.`).join('\n\n'),
+    ...(await detectSeam())
   });
   assert.ok(prepared.spans.length > config.limits.maxSpans, 'sanity check: this input must actually exceed maxSpans');
 
@@ -475,7 +478,7 @@ test('N1: consent_at and user_asserted_public survive the oversized_input (too m
   const config = loadConfig({ MEDIA_LENS_MODE: 'fixture' });
   config.limits = { ...config.limits, maxPreparedTextChars: 100 };
 
-  const prepared = await prepareFromPastedText({ text: 'A '.repeat(200) + 'sentence that is long enough to exceed the tiny configured limit above.' });
+  const prepared = await prepareFromPastedText({ text: 'A '.repeat(200) + 'sentence that is long enough to exceed the tiny configured limit above.', ...(await detectSeam()) });
   assert.ok(prepared.textLengthChars > config.limits.maxPreparedTextChars, 'sanity check: this input must actually exceed maxPreparedTextChars');
 
   const suppliedConsentAt = '2026-07-04T00:00:00.000Z';
@@ -528,7 +531,7 @@ test('N2: no further Jev requests are made once the per-analysis timeout has fir
     // extra waiting produces a second request.
     config.limits = { ...config.limits, perAnalysisTimeoutMs: 50, jevCallTimeoutMs: 200 };
 
-    const prepared = await prepareFromPastedText({ text: 'A '.repeat(150) + 'sentence that is long enough to analyze in this test.' });
+    const prepared = await prepareFromPastedText({ text: 'A '.repeat(150) + 'sentence that is long enough to analyze in this test.', ...(await detectSeam()) });
     const jevAdapter = createJevAdapter({
       mode: 'live',
       baseUrl: config.jev.baseUrl,

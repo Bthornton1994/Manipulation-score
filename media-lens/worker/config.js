@@ -24,6 +24,9 @@ import { DEFAULT_TYPESAFE_BUDGET_STORE_FILE } from './typesafe-budget-store.js';
 import { BLOCKED_ALERT_TRANSPORT, readAlertCredential, resolveAlertCredentialPath } from './alert.js';
 import { candidateSources, approvedSources } from './discovery/source-registry.js';
 
+// Linux NAME_MAX. A longer kill-file path segment fails closed on every OS.
+const MAX_KILL_FILE_SEGMENT_CHARS = 255;
+
 export const LIVE_URL_OVERSIZED_MESSAGE =
   'This public page is too long for Media Lens live analysis. No manipulation analysis or score was generated. Try a shorter public article.';
 
@@ -295,6 +298,11 @@ export function loadConfig(env = process.env) {
  * leave live paths enabled. `MEDIA_LENS_KILL_SWITCH=true` is checked first
  * and does not consult the file.
  *
+ * A path with any segment longer than 255 characters is asserted without a
+ * stat. Linux reports such a path as `ENAMETOOLONG` (fail-closed), but
+ * Windows can report a missing over-long segment as `ENOENT`, which must
+ * not look like "no kill file".
+ *
  * `io.statSync` is a test seam for stubbing check errors; production callers
  * omit it.
  */
@@ -303,6 +311,7 @@ export function isKillSwitchAsserted(config, io = {}) {
   if (env.MEDIA_LENS_KILL_SWITCH === 'true') return true;
   const file = env.MEDIA_LENS_KILL_SWITCH_FILE || config.killSwitchFile;
   if (typeof file === 'string' && file.length > 0) {
+    if (file.split(/[\\/]/).some((segment) => segment.length > MAX_KILL_FILE_SEGMENT_CHARS)) return true;
     const stat = typeof io.statSync === 'function' ? io.statSync : statSync;
     try {
       stat(file);

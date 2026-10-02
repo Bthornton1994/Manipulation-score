@@ -275,6 +275,25 @@ test('kill-file stat errors fail closed; missing file does not', () => {
   assert.equal(effectiveLiveFlags(live).killSwitch, false);
 });
 
+test('kill-file path segment over 255 chars fails closed without a stat, even when stat would say ENOENT', () => {
+  let statCalls = 0;
+  const neverStat = {
+    statSync: () => {
+      statCalls += 1;
+      throw new Error('over-long kill-file segment must not be stat-ed');
+    }
+  };
+  for (const sep of ['/', '\\']) {
+    const tooLong = loadConfig({ MEDIA_LENS_KILL_SWITCH_FILE: `${tmpdir()}${sep}${'x'.repeat(256)}${sep}KILL` });
+    assert.equal(isKillSwitchAsserted(tooLong, { statSync: throwingStat('ENOENT') }), true, `256-char segment (${sep})`);
+    assert.equal(isKillSwitchAsserted(tooLong, neverStat), true);
+  }
+  assert.equal(statCalls, 0);
+
+  const atLimit = loadConfig({ MEDIA_LENS_KILL_SWITCH_FILE: join(tmpdir(), 'x'.repeat(255)) });
+  assert.equal(isKillSwitchAsserted(atLimit, { statSync: throwingStat('ENOENT') }), false, '255-char segment with ENOENT');
+});
+
 test('unreadable kill-file path fail-closes live /analyze with zero provider calls', async () => {
   const unreadable = join(tmpdir(), 'x'.repeat(5000));
   const audit = collectAudit();

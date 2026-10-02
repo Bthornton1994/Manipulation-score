@@ -10,10 +10,11 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { readSourceLf } from './helpers/read-source-lf.js';
 import { classifyIp } from '../media-lens/worker/address-policy.js';
 import {
   FIXTURE_HTML,
@@ -31,7 +32,7 @@ import {
 } from './helpers/media-lens-real-socket-fixtures.js';
 
 async function loadMutatedAddressPolicy(mutate) {
-  const original = await readFile('media-lens/worker/address-policy.js', 'utf8');
+  const original = await readSourceLf('media-lens/worker/address-policy.js');
   const mutated = mutate(original);
   assert.notEqual(mutated, original, 'mutator must change the source');
   const dir = await mkdtemp(join(tmpdir(), 'media-lens-ssrf-mutation-'));
@@ -41,10 +42,10 @@ async function loadMutatedAddressPolicy(mutate) {
 }
 
 async function loadMutatedFetchStack({ mutatePinned = (src) => src, mutateFetch = (src) => src } = {}) {
-  const policy = await readFile('media-lens/worker/address-policy.js', 'utf8');
-  const pinnedOriginal = await readFile('media-lens/worker/pinned-http.js', 'utf8');
-  const fetchOriginal = await readFile('media-lens/worker/safe-fetch.js', 'utf8');
-  const hostKey = await readFile('media-lens/worker/host-key.js', 'utf8');
+  const policy = await readSourceLf('media-lens/worker/address-policy.js');
+  const pinnedOriginal = await readSourceLf('media-lens/worker/pinned-http.js');
+  const fetchOriginal = await readSourceLf('media-lens/worker/safe-fetch.js');
+  const hostKey = await readSourceLf('media-lens/worker/host-key.js');
   const pinned = mutatePinned(pinnedOriginal);
   const fetchSrc = mutateFetch(fetchOriginal);
   assert.ok(pinned !== pinnedOriginal || fetchSrc !== fetchOriginal, 'mutator must change the fetch stack');
@@ -218,7 +219,7 @@ test('mutation: dropping mapped ::ffff:0:0/96 extraction still blocks via extra-
 });
 
 test('source: live URL gate, pin lookup, and no check-then-global-fetch', async () => {
-  const serverSrc = await readFile('media-lens/worker/server.js', 'utf8');
+  const serverSrc = await readSourceLf('media-lens/worker/server.js');
   const urlBlock = serverSrc.slice(serverSrc.indexOf("if (payload.mode === 'url')"));
   assert.match(urlBlock, /liveUrlEnabled/);
   assert.match(urlBlock, /live_url_disabled/);
@@ -227,24 +228,24 @@ test('source: live URL gate, pin lookup, and no check-then-global-fetch', async 
     'LIVE_URL gate must run before fetchArticleSafely'
   );
 
-  const fetchSrc = await readFile('media-lens/worker/safe-fetch.js', 'utf8');
+  const fetchSrc = await readSourceLf('media-lens/worker/safe-fetch.js');
   assert.doesNotMatch(fetchSrc, /fetchImpl\s*=\s*globalThis\.fetch/);
   assert.match(fetchSrc, /pinHost/);
   assert.match(fetchSrc, /REDIRECT_DOWNGRADE/);
 
-  const pinSrc = await readFile('media-lens/worker/pinned-http.js', 'utf8');
+  const pinSrc = await readSourceLf('media-lens/worker/pinned-http.js');
   assert.match(pinSrc, /makePinnedLookup/);
   assert.match(pinSrc, /remoteAddress/);
   assert.match(pinSrc, /PIN_MISMATCH/);
   assert.doesNotMatch(pinSrc, /process\.env/);
 
-  const configSrc = await readFile('media-lens/worker/config.js', 'utf8');
+  const configSrc = await readSourceLf('media-lens/worker/config.js');
   assert.match(configSrc, /MEDIA_LENS_ENABLE_LIVE_URL/);
   assert.match(configSrc, /liveUrlEnabled/);
 });
 
 test('source: createConnection pins host, sends SNI, and rejects unauthorized certs', async () => {
-  const pinSrc = await readFile('media-lens/worker/pinned-http.js', 'utf8');
+  const pinSrc = await readSourceLf('media-lens/worker/pinned-http.js');
   assert.match(pinSrc, /host: pin\.address/);
   assert.match(pinSrc, /hostname: pin\.address/);
   assert.match(pinSrc, /servername: isIpHostname\(requestHostname\) \? undefined : requestHostname/);
@@ -252,7 +253,7 @@ test('source: createConnection pins host, sends SNI, and rejects unauthorized ce
   assert.match(pinSrc, /tls\.connect/);
   assert.match(pinSrc, /net\.connect/);
 
-  const fetchSrc = await readFile('media-lens/worker/safe-fetch.js', 'utf8');
+  const fetchSrc = await readSourceLf('media-lens/worker/safe-fetch.js');
   const pinCalls = fetchSrc.split('await pinHost(').length - 1;
   assert.equal(pinCalls, 2, 'assertHostIsPublic plus one pinHost per redirect hop');
   assert.match(fetchSrc, /const pin = await pinHost\(parsed\.hostname/);

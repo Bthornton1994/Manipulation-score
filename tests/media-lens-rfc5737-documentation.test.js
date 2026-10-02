@@ -5,10 +5,11 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { readSourceLf } from './helpers/read-source-lf.js';
 import {
   classifyIp,
   parseArticleUrl,
@@ -21,7 +22,7 @@ function hasCode(code) {
 }
 
 async function loadMutatedAddressPolicy(mutate) {
-  const original = await readFile('media-lens/worker/address-policy.js', 'utf8');
+  const original = await readSourceLf('media-lens/worker/address-policy.js');
   const mutated = mutate(original);
   assert.notEqual(mutated, original, 'mutator must change the source');
   const dir = await mkdtemp(join(tmpdir(), 'media-lens-rfc5737-mutation-'));
@@ -202,7 +203,7 @@ test('TEST-NET article literals fail closed before connect', async () => {
 });
 
 test('mutation: dropping each RFC 5737 TEST-NET range allows that range as public', async () => {
-  const src = await readFile('media-lens/worker/address-policy.js', 'utf8');
+  const src = await readSourceLf('media-lens/worker/address-policy.js');
   for (const row of TEST_NET_RANGES) {
     assert.ok(src.includes(row.line), `${row.id} must remain in BLOCKED_IPV4_RANGES`);
     assert.equal(classifyIp(row.ip).reason, 'block_documentation', row.id);

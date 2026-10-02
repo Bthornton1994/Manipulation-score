@@ -25,9 +25,10 @@ Every report sets `claimed_thresholds_met: false`.
 
 ## Run
 
-`requirements.txt` pins `deepeval==4.2.7`. Install that pin into a local
-venv before running (see commands below). The runner imports DeepEval after
-install and does not stop for a missing pin.
+`requirements.txt` pins `deepeval==4.2.7`. Install those pinned requirements
+into a local venv in this directory, then run `run_offline_eval.py` with the
+venv's Python (commands below). If DeepEval cannot be imported, the runner
+prints the same install instruction and exits with an error before scoring.
 
 ```sh
 cd media-lens/eval/deepeval

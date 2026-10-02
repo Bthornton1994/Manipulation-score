@@ -52,9 +52,10 @@ def build_metric_class():
         from deepeval.test_case import LLMTestCase
     except ImportError as exc:
         sys.exit(
-            "deepeval is not installed. Create a venv in this directory and "
-            "`pip install -r requirements.txt` after the pin is filled in (see README). "
-            f"Import error: {exc}"
+            "DeepEval could not be imported. Install the pinned requirements "
+            "(`pip install -r requirements.txt`) into a local venv in "
+            "media-lens/eval/deepeval, then run this script with that venv's Python "
+            f"(see README). Import error: {exc}"
         )
 
     class FixtureLabelMatch(BaseMetric):

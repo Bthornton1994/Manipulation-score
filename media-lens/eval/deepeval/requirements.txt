@@ -1,4 +1,4 @@
-﻿# Eval-only DeepEval sidecar (t1760u). Never installed by package.json, CI,
+# Eval-only DeepEval sidecar (t1760u). Never installed by package.json, CI,
 # the worker, the browser, or the Pages bundle.
 #
 # Pin verified 2026-10-02 PT against PyPI latest: deepeval==4.2.7 (requires Python >=3.9,<4).

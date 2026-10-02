@@ -25,8 +25,9 @@ Every report sets `claimed_thresholds_met: false`.
 
 ## Run
 
-The exact `deepeval` pin is still pending. See `requirements.txt`. Until a
-verified pin is filled in, the runner stops at its import check.
+`requirements.txt` pins `deepeval==4.2.7`. Install that pin into a local
+venv before running (see commands below). The runner imports DeepEval after
+install and does not stop for a missing pin.
 
 ```sh
 cd media-lens/eval/deepeval

@@ -78,7 +78,7 @@ function updateInputState() {
 }
 
 function isHistoryEnabledInThisTab() {
-  return Boolean(historyOptIn?.checked);
+  return isHistoryOptIn();
 }
 
 function setImageUploadStatus(text, tone = 'info') {

@@ -9,6 +9,16 @@ test('history-off analysis does not write raw text to localStorage', async () =>
   assert.match(saveBlock, /isHistoryEnabledInThisTab\(\)/);
 });
 
+test('saveHistory gates on persisted opt-in to avoid multi-tab ghost writes', async () => {
+  const app = await readFile('app.js', 'utf8');
+  const gateFn = app.slice(
+    app.indexOf('function isHistoryEnabledInThisTab'),
+    app.indexOf('function setImageUploadStatus')
+  );
+  assert.match(gateFn, /isHistoryOptIn\(\)/);
+  assert.doesNotMatch(gateFn, /historyOptIn\?\.checked/);
+});
+
 test('app does not transmit messages or images over the network for analysis', async () => {
   const app = await readFile('app.js', 'utf8');
   const scoring = await readFile('scoring.js', 'utf8');

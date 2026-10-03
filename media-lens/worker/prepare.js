@@ -33,7 +33,11 @@ const VOID_ELEMENTS = new Set([
 
 const RAW_TEXT_TAGS = new Set(['script', 'style', 'template']);
 const SKIP_CONTAINER_TAGS = new Set(['nav', 'header', 'footer', 'aside']);
-const BLOCK_TAGS = new Set(['h1', 'h2', 'h3', 'p', 'blockquote', 'figcaption', 'li']);
+// h4/h5/h6 matter: WordPress/Ghost often put claim-bearing section copy in
+// wp-block-heading h4 (and occasionally h5/h6). Without them as blocks, a
+// matching <p>/<h1> keeps walker blocks, skips the Trafilatura-line
+// fallback, and silently drops those headings from preparedText / Jev.
+const BLOCK_TAGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'blockquote', 'figcaption', 'li']);
 // CMS article bodies are often paragraphs in <div>, <section>, or <main>
 // rather than <p>. A leaf container, one with no NON_LEAF_TAGS element
 // anywhere inside it, is walked like <p> so that body is not silently
@@ -463,7 +467,7 @@ function walkBlocks(node, { inSkipContainer } = {}) {
       role = 'headline';
       roleBasis = 'html_structure';
       splitQuotes = false;
-    } else if (node.tag === 'h2' || node.tag === 'h3') {
+    } else if (node.tag === 'h2' || node.tag === 'h3' || node.tag === 'h4' || node.tag === 'h5' || node.tag === 'h6') {
       role = 'subhead';
       roleBasis = 'html_structure';
       splitQuotes = false;

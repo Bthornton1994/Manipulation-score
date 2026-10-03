@@ -1,0 +1,80 @@
+{
+  "disclaimer": "Synthetic/public-safe fixtures for software consistency only. Not news scrapes. Not representative real-world accuracy. Cases added for the hillclimb pilot are human-authored concept coverage: hard context, negative controls, and abstain or insufficient text. They were not selected by searching for current-policy errors.",
+  "taxonomy_version": "cdev-taxonomy-1.0.0",
+  "policy_version": "cdev-cascade-1.0.0",
+  "split": "holdout",
+  "cases": [
+    {
+      "id": "eval-quoted-attribution",
+      "split": "holdout",
+      "set_role": "hard_context",
+      "span": {
+        "id": "span-1",
+        "role": "quoted",
+        "text": "We will act immediately."
+      },
+      "artifact": {
+        "kind": "article",
+        "title": "Synthetic eval fixture"
+      },
+      "label": {
+        "jev": "none",
+        "cdev": "no_detected_signal"
+      }
+    },
+    {
+      "id": "eval-attributed-deadline",
+      "split": "holdout",
+      "set_role": "hard_context",
+      "span": {
+        "id": "span-1",
+        "role": "authorial",
+        "text": "The minutes note that a speaker asked people to decide quickly, and the board recorded no position."
+      },
+      "artifact": {
+        "kind": "article",
+        "title": "Synthetic eval fixture"
+      },
+      "label": {
+        "jev": "none",
+        "cdev": "attribution_quotation_ambiguity"
+      }
+    },
+    {
+      "id": "eval-guarantee-leaflet",
+      "split": "holdout",
+      "set_role": "positive_control",
+      "span": {
+        "id": "span-1",
+        "role": "authorial",
+        "text": "The leaflet states the result is guaranteed for every resident."
+      },
+      "artifact": {
+        "kind": "article",
+        "title": "Synthetic eval fixture"
+      },
+      "label": {
+        "jev": "certainty_beyond_evidence",
+        "cdev": "unsupported_certainty"
+      }
+    },
+    {
+      "id": "eval-ellipsis-only",
+      "split": "holdout",
+      "set_role": "abstain_insufficient",
+      "span": {
+        "id": "span-1",
+        "role": "authorial",
+        "text": "…"
+      },
+      "artifact": {
+        "kind": "article",
+        "title": "Synthetic eval fixture"
+      },
+      "label": {
+        "jev": "none",
+        "cdev": "insufficient_evidence"
+      }
+    }
+  ]
+}

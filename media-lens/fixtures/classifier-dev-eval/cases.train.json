@@ -1,0 +1,134 @@
+{
+  "disclaimer": "Synthetic/public-safe fixtures for software consistency only. Not news scrapes. Not representative real-world accuracy. Cases added for the hillclimb pilot are human-authored concept coverage: hard context, negative controls, and abstain or insufficient text. They were not selected by searching for current-policy errors.",
+  "taxonomy_version": "cdev-taxonomy-1.0.0",
+  "policy_version": "cdev-cascade-1.0.0",
+  "split": "train",
+  "cases": [
+    {
+      "id": "eval-none-neutral",
+      "split": "train",
+      "set_role": "negative_control",
+      "span": {
+        "id": "span-1",
+        "role": "authorial",
+        "text": "The committee met on Tuesday and approved the budget amendment."
+      },
+      "artifact": {
+        "kind": "article",
+        "title": "Synthetic eval fixture"
+      },
+      "label": {
+        "jev": "none",
+        "cdev": "no_detected_signal"
+      }
+    },
+    {
+      "id": "eval-urgency-pressure",
+      "split": "train",
+      "set_role": "positive_control",
+      "span": {
+        "id": "span-1",
+        "role": "authorial",
+        "text": "Act before midnight or there will be no time left to check."
+      },
+      "artifact": {
+        "kind": "article",
+        "title": "Synthetic eval fixture"
+      },
+      "label": {
+        "jev": "urgency",
+        "cdev": "fear_urgency"
+      }
+    },
+    {
+      "id": "eval-certainty-marker",
+      "split": "train",
+      "set_role": "positive_control",
+      "span": {
+        "id": "span-1",
+        "role": "authorial",
+        "text": "This plan will undeniably fix every school in the county."
+      },
+      "artifact": {
+        "kind": "article",
+        "title": "Synthetic eval fixture"
+      },
+      "label": {
+        "jev": "certainty_beyond_evidence",
+        "cdev": "unsupported_certainty"
+      }
+    },
+    {
+      "id": "eval-personal-attack",
+      "split": "train",
+      "set_role": "hard_context",
+      "span": {
+        "id": "span-1",
+        "role": "authorial",
+        "text": "Ignore the proposal; she is a fool and always has been."
+      },
+      "artifact": {
+        "kind": "article",
+        "title": "Synthetic eval fixture"
+      },
+      "label": {
+        "jev": "none",
+        "cdev": "personal_attack"
+      }
+    },
+    {
+      "id": "eval-short-insufficient",
+      "split": "train",
+      "set_role": "abstain_insufficient",
+      "span": {
+        "id": "span-1",
+        "role": "authorial",
+        "text": "See below."
+      },
+      "artifact": {
+        "kind": "article",
+        "title": "Synthetic eval fixture"
+      },
+      "label": {
+        "jev": "none",
+        "cdev": "insufficient_evidence"
+      }
+    },
+    {
+      "id": "eval-hedged-time",
+      "split": "train",
+      "set_role": "negative_control",
+      "span": {
+        "id": "span-1",
+        "role": "authorial",
+        "text": "Readers can look at the notice before Friday if they want to."
+      },
+      "artifact": {
+        "kind": "article",
+        "title": "Synthetic eval fixture"
+      },
+      "label": {
+        "jev": "none",
+        "cdev": "no_detected_signal"
+      }
+    },
+    {
+      "id": "eval-omitted-figure",
+      "split": "train",
+      "set_role": "abstain_insufficient",
+      "span": {
+        "id": "span-1",
+        "role": "authorial",
+        "text": "The figure is omitted in this copy."
+      },
+      "artifact": {
+        "kind": "article",
+        "title": "Synthetic eval fixture"
+      },
+      "label": {
+        "jev": "none",
+        "cdev": "insufficient_evidence"
+      }
+    }
+  ]
+}

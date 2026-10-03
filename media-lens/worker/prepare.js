@@ -1029,9 +1029,10 @@ export async function prepareFromHtml({
 /**
  * Prepare a document from pasted plain text (no HTML structure, no
  * metadata). Paragraphs are split on blank lines; each paragraph is
- * treated as authorial unless it contains quote marks.
+ * treated as authorial unless it contains quote marks. detectImpl is a test
+ * seam; omitted, the local py3langid detector runs.
  */
-export async function prepareFromPastedText({ text, kind = 'other_public' }) {
+export async function prepareFromPastedText({ text, kind = 'other_public', detectImpl = detectTextLanguage }) {
   const paragraphs = text
     .split(/\r?\n\s*\r?\n/)
     .map((p) => collapseWhitespace(p))
@@ -1051,7 +1052,7 @@ export async function prepareFromPastedText({ text, kind = 'other_public' }) {
   const preparedText = builder.text;
   const textSha256 = sha256Text(preparedText);
   const paywallDetected = PAYWALL_CTA_PATTERN.test(preparedText) && preparedText.length < 400;
-  const detected = await detectTextLanguage(text);
+  const detected = await detectImpl(text);
   const language = schemaLanguage({ detected: detected?.detected_language, htmlLang: null });
 
   return {

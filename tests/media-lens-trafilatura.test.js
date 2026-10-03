@@ -28,6 +28,7 @@ import {
   schemaLanguage
 } from '../media-lens/worker/trafilatura-extract.js';
 import { validate } from '../media-lens/schema/validate.js';
+import { isExtractorDownResult } from './helpers/python-extractor-host.js';
 
 const SCRIPT = fileURLToPath(new URL('../media-lens/worker/trafilatura/extract_html.py', import.meta.url));
 const SECRET = 'secret-nav-marker-9f3c2a';
@@ -569,6 +570,16 @@ test('unavailable, timeout, and busy failures do not record Trafilatura 2.2.0', 
     assert.equal(validate(graph).valid, true, extracted.error_code);
     assert.ok(graph.abstentions.some((entry) => entry.reason === 'engine_failure'));
   }
+});
+
+test('test hosts whose extractor cannot run, including missing Python libraries, get the hermetic seams', () => {
+  // extract_html.py returns extractor_unavailable when Python 3.12+ starts but
+  // the pinned Trafilatura stack does not import.
+  for (const errorCode of ['python_version', 'spawn_failed', 'extractor_unavailable']) {
+    assert.equal(isExtractorDownResult({ status: 'error', error_code: errorCode }), true, errorCode);
+  }
+  // A working extractor, as in CI, keeps the real extraction path.
+  assert.equal(isExtractorDownResult({ status: 'ok', error_code: null }), false);
 });
 
 test('non-English pasted text abstains as unsupported_language and does not call Jev', async () => {

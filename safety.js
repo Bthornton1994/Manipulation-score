@@ -36,7 +36,108 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'direct_violence',
-    pattern: /\b(?:i will|i'll)\s+run\s+you\s+over\b/gi
+    pattern:
+      /\b(?:i will|i'll)\s+run\s+you\s+over\b(?!\s+with\s+(?:details|information|updates))/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern:
+      /\b(?:i will|i'll)\s+run\s+over\s+you\b(?!\s+with\s+(?:details|information|updates))/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern:
+      /\b(?:i'?m|i am)\s+going\s+to\s+run\s+over\s+you\b(?!\s+with\s+(?:details|information|updates))/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+smother\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+smother\s+you\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+gas\s+you\b(?!\s+up\b)/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+gas\s+you\b(?!\s+up\b)/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+hold\s+your\s+head\s+underwater\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+hold\s+your\s+head\s+underwater\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern:
+      /\b(?:i will|i'll)\s+blow\s+up\s+your\s+(?:car|house|home|apartment|truck)\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern:
+      /\b(?:i'?m|i am)\s+going\s+to\s+blow\s+up\s+your\s+(?:car|house|home|apartment|truck)\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern:
+      /\b(?:i will|i'll)\s+plant\s+a\s+bomb\s+(?:in|under|on|inside)\s+(?:your\s+)?(?:car|house|home|apartment|truck)\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern:
+      /\b(?:i'?m|i am)\s+going\s+to\s+plant\s+a\s+bomb\s+(?:in|under|on|inside)\s+(?:your\s+)?(?:car|house|home|apartment|truck)\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern:
+      /\b(?:i will|i'll)\s+burn\s+(?:your\s+)?(?:house|home|apartment|car)\s+down\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern:
+      /\b(?:i'?m|i am)\s+going\s+to\s+burn\s+(?:your\s+)?(?:house|home|apartment|car)\s+down\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern:
+      /\b(?:i will|i'll)\s+throw\s+you\s+(?:off|out)\s+(?:(?:a|the)\s+)?(?:building|bridge|cliff|window)\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern:
+      /\b(?:i'?m|i am)\s+going\s+to\s+throw\s+you\s+(?:off|out)\s+(?:(?:a|the)\s+)?(?:building|bridge|cliff|window)\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern:
+      /\b(?:i will|i'll)\s+push\s+you\s+(?:in\s+front\s+of\s+(?:a\s+)?(?:train|bus|car|truck)|into\s+traffic)\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern:
+      /\b(?:i'?m|i am)\s+going\s+to\s+push\s+you\s+(?:in\s+front\s+of\s+(?:a\s+)?(?:train|bus|car|truck)|into\s+traffic)\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+starve\s+you\s+to\s+death\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+starve\s+you\s+to\s+death\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+make\s+sure\s+you\s+die\b(?!\s+of\b)/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+make\s+sure\s+you\s+die\b(?!\s+of\b)/gi
   },
   {
     id: 'direct_violence',
@@ -485,7 +586,9 @@ function findStalkingBehaviors(text) {
 }
 
 function extractHarmVerb(matchText) {
-  const verb = matchText.match(/\b(kill|hurt|harm|murder|shoot|stab)\b/i);
+  const verb = matchText.match(
+    /\b(kill|hurt|harm|murder|shoot|stab|smother|gas|die|starve)\b/i
+  );
   return verb ? verb[1].toLowerCase() : null;
 }
 

@@ -143,6 +143,18 @@ test('app moves focus to main when skip link is activated', async () => {
   assert.match(app, /mainContent\.focus/);
 });
 
+test('thread breakdown renders even when overall result is a safety notice', async () => {
+  const app = await readFile('app.js', 'utf8');
+  assert.match(
+    app,
+    /if \(analysis\.segments\?\.length\)[\s\S]*createThreadSection\(analysis\.segments, analysis\)/
+  );
+  assert.doesNotMatch(
+    app,
+    /if \(!special && analysis\.segments\?\.length\)/
+  );
+});
+
 test('ocr module and vendor assets exist locally', async () => {
   await access('ocr.js');
   await access('vendor/tesseract/tesseract.esm.min.js');

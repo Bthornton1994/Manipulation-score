@@ -92,6 +92,17 @@ test('splits multi-message threads on blank lines', () => {
   assert.equal(result.segments?.length, 2);
 });
 
+test('thread with a safety segment keeps per-message breakdown data', () => {
+  const benign =
+    'This is a normal friendly message with enough words to pass screening thresholds comfortably today.';
+  const threat = 'I will kill you tonight when you get home from work.';
+  const result = analyzeMessage(`${benign}\n\n${threat}`);
+  assert.ok(result.safetyNotice);
+  assert.equal(result.segments?.length, 2);
+  assert.ok(result.segments.some((segment) => segment.analysis.safetyNotice));
+  assert.ok(result.segments.some((segment) => !segment.analysis.safetyNotice));
+});
+
 test('scores classic withdrawal leverage appropriately', () => {
   const result = analyzeMessage(LEVERAGE_EXAMPLE);
   assert.ok(result.score >= 58);

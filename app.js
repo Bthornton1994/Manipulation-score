@@ -263,7 +263,7 @@ function createScoreSection(analysis) {
   if (analysis.safetyNotice) {
     const safetyBox = element('div', 'safety-notice-box');
     const resourcesLink = element('a', 'safety-resources-link', 'View crisis resources');
-    resourcesLink.href = analysis.safetyNotice.resourcesAnchor || '#resources';
+    resourcesLink.href = analysis.safetyNotice.resourcesAnchor || 'index.html#resources';
     safetyBox.append(
       element('p', 'safety-notice-lead', 'Clarity cannot determine whether you are in danger.'),
       resourcesLink

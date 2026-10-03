@@ -106,6 +106,54 @@ const IMMEDIATE_RULES = [
     id: 'self_harm_coercion',
     pattern: /(?:suicide|kill myself).{0,40}(?:your fault|because of you)/gi
   },
+  // Directed suicide encouragement / death wishes aimed at the recipient.
+  // Distinct from speaker-threatens-own-life coercion above.
+  {
+    id: 'self_harm_coercion',
+    pattern: /\b(?:go\s+)?kill\s+yourself\b/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern: /\b(?:go\s+)?end\s+your(?:self|\s+life)\b/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern: /\bend\s+yourself\b/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern: /\bkys\b/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern: /\bi\s+hope\s+you\s+kill\s+yourself\b/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    // Avoid idioms like "die laughing" / "die of embarrassment".
+    pattern: /\bi\s+hope\s+you\s+die(?:\s+already)?(?!\s+(?:of|from|laughing|laugh)\b)/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern: /\bi\s+want\s+you\s+(?:dead|to\s+die)\b(?!\s+(?:of|from|laughing|laugh|happy)\b)/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern: /\byou\s+deserve\s+to\s+die\b(?!\s+(?:of|from|laughing|laugh)\b)/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern: /\byou\s+(?:should|need\s+to)\s+(?:just\s+)?(?:go\s+)?kill\s+yourself\b/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern:
+      /\byou\s+(?:should|need\s+to)\s+(?:just\s+)?die(?:\s+already)?(?!\s+(?:of|from|laughing|laugh)\b)/gi
+  },
+  {
+    id: 'self_harm_coercion',
+    pattern: /\bi\s+will\s+make\s+you\s+kill\s+yourself\b/gi
+  },
   {
     id: 'weapon_threat',
     pattern: /(?:gun|knife|weapon|pistol|rifle|machete).{0,35}(?:\byou\b|threaten|pointed)/gi
@@ -485,7 +533,7 @@ function findStalkingBehaviors(text) {
 }
 
 function extractHarmVerb(matchText) {
-  const verb = matchText.match(/\b(kill|hurt|harm|murder|shoot|stab)\b/i);
+  const verb = matchText.match(/\b(kill|hurt|harm|murder|shoot|stab|die|end)\b/i);
   return verb ? verb[1].toLowerCase() : null;
 }
 

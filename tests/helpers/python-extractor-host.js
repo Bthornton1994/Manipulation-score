@@ -1,22 +1,27 @@
 // Test-only stand-ins for hosts where the pinned Python extractor cannot
-// start (for example, Windows with only the WindowsApps python3 stub). Where
-// the real extractor works, as in CI, the seam helpers return {} so
-// production defaults run. Production code never imports this file.
+// run: no Python 3.12+ (for example, Windows with only the WindowsApps
+// python3 stub), a failed spawn, or Python 3.12+ without the pinned
+// Trafilatura stack. Where the real extractor works, as in CI, the seam
+// helpers return {} so production defaults run. Production code never
+// imports this file.
 
 import { TRAFILATURA_VERSION, detectTextLanguage } from '../../media-lens/worker/trafilatura-extract.js';
 
-const DOWN_CODES = new Set(['python_version', 'spawn_failed']);
+const DOWN_CODES = new Set(['python_version', 'spawn_failed', 'extractor_unavailable']);
 const HERMETIC_VERSION = 'test-hermetic-no-python';
 const TEXT_BLOCK_RE = /<(h[1-3]|p|blockquote|li|figcaption)\b[^>]*>([\s\S]*?)<\/\1>/gi;
 
 let downProbe = null;
 
-/** Resolves true only when the local extractor cannot start here. Cached. */
+/** True when an extractor result means the extractor cannot run on this host. */
+export function isExtractorDownResult(result) {
+  return DOWN_CODES.has(result?.error_code);
+}
+
+/** Resolves true only when the local extractor cannot run here. Cached. */
 export function pythonExtractorDown() {
   if (!downProbe) {
-    downProbe = detectTextLanguage('This is a short English sentence.').then((result) =>
-      DOWN_CODES.has(result?.error_code)
-    );
+    downProbe = detectTextLanguage('This is a short English sentence.').then(isExtractorDownResult);
   }
   return downProbe;
 }

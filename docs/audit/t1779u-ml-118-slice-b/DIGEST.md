@@ -2,10 +2,10 @@
 
 Outcome: the kill-file NAME_MAX gap is closed by code. The 15 Python-host failures now run hermetically on hosts without the extractor. The three target suites go from 56/73 to 74/74 on this Windows host. Issue #118 stays OPEN. Live URL stays OFF. NOT LIVE.
 
-- Branch: `cos/t1779u-ml-118-slice-b` (local only; not pushed, no PR)
+- Branch: `cos/t1779u-ml-118-slice-b`, pushed as PR #180 (https://github.com/Bthornton1994/Manipulation-score/pull/180). PR head when this line was written (t1783u): `b94d506a9279922406a3b5c2a4b52d76ef7d1198`. The t1783u residual commit is on `cos/t1783u-ml-180-codex-p2`, a fast-forward of `b94d506`, and may replace it as the PR head.
 - Base: `6f65e554e49c5bcbe203050ead56c61c874b2caf`
-- Evidence tip (code + tests + this checklist): `3c43762690a1f544e5bf900ac30770ee226c8f08`
-- Final tip: the docs-only commit on top of the evidence tip that adds STATUS.md and finishes this file. Its SHA is in the handoff report because a commit cannot contain its own hash.
+- Evidence tip (code + tests + this checklist): `3c43762690a1f544e5bf900ac30770ee226c8f08`. Its sole parent is the base `6f65e55…`.
+- Final tip: `b94d506a9279922406a3b5c2a4b52d76ef7d1198`, the docs-only commit that adds STATUS.md and finishes this file. Its sole parent is the evidence tip `3c43762…`. PR #180 lists 2 commits (`3c43762`, `b94d506`), which matches this topology. A squash preview of the PR is a single commit on the base and is not the review tip.
 - Gate matrix: [STATUS.md](STATUS.md)
 - Runtime: `claude-opus-5-5`, permission mode auto. No bypass, no CloudAgent, Fable not used.
 
@@ -63,7 +63,7 @@ All verified rows still hold. Row 5 (Linux `ENAMETOOLONG`) stays Inferred: it wa
 | Adjacent: `trafilatura`, `canary-drill`, `jev-production-controls`, `live-gate`, `fetch-limits`, `classifier-dev-adapter`, `source-lf` | 176 tests, 131 pass, 45 fail | 176 tests, 131 pass, 45 fail. Same failing test names as a clean detached base worktree | No regression. The 45 are pre-existing Python-host failures outside this brief and were left alone. |
 | `effectiveLiveFlags(loadConfig({}))` | all false | `{"killSwitch":false,"liveEnabled":false,"liveUrlEnabled":false,"classifierDevEnabled":false}` | PASS |
 | Full `npm test` | NOT RUN | NOT RUN | Hangs on this host. Linux CI is the suite authority. |
-| Linux CI | UNKNOWN | UNKNOWN | Not pushed. |
+| Linux CI | UNKNOWN | Not run on this commit alone; CI ran on the PR head | PASS at final tip `b94d506`: CI run 37071779735 SUCCESS, required checks `test (20)` and `test (22)` passed (`deploy` skipped). The t1783u residual commit re-triggers CI when pushed. |
 
 The security assertions the brief lists are unchanged and now run on this host. An out-of-taxonomy choice is never an observation and `jev.failures > 0`. The per-analysis timeout gives `engine_unavailable`. `jevCallTimeoutMs` is honored. `oversized_input` keeps `consent_at` and `user_asserted_public`. No Jev calls happen after the timeout. Pin-verify fails closed on 401/422/429/529, malformed JSON, missing answers, `jev-9.9.9`, and `jev-latest`, and it records a mock success. Pin-verify spans still come from the fixture file (`Main Street|road closure|repaving`). All network was 127.0.0.1 mocks.
 
@@ -72,4 +72,6 @@ The security assertions the brief lists are unchanged and now run on this host. 
 - LIVE_URL untouched. No `MEDIA_LENS_ENABLE_LIVE` or `MEDIA_LENS_ENABLE_LIVE_URL` set outside the existing in-test configs.
 - #118 not closed. Commits say `Refs #118`.
 - PRs #168, #171, #172, #175, #179 and other branches or worktrees untouched. A temporary detached worktree at the base was created to compare failure sets and then removed.
-- No spend, no TypeSafe call, no pip install, no push, no PR.
+- No spend, no TypeSafe call, no pip install. The t1779u writer did not push or open a PR; the branch was pushed afterwards as PR #180.
+
+t1783u residual (Codex P2 review of PR #180): this file now records PR #180, the commit chain, and CI for `b94d506`; `tests/helpers/python-extractor-host.js` also treats `extractor_unavailable` (Python 3.12+ without the pinned Trafilatura stack) as a down extractor, with a regression test in `tests/media-lens-trafilatura.test.js`; `media-lens/README.md` separates an ordinary missing kill file (`ENOENT`, not asserted) from a path with a segment over 255 characters (asserted without a `stat` call). Issue #118 stays OPEN. Live URL stays OFF.

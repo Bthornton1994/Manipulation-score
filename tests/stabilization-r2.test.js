@@ -18,6 +18,17 @@ test('service worker includes history-storage in app shell', async () => {
   assert.match(worker, /history-storage\.js/);
 });
 
+test('service worker precaches versioned stylesheet URL used by HTML', async () => {
+  const [worker, index] = await Promise.all([
+    readFile('service-worker.js', 'utf8'),
+    readFile('index.html', 'utf8')
+  ]);
+  const versionedStyles = index.match(/styles\.css\?v=[^"']+/)?.[0];
+  assert.ok(versionedStyles, 'expected versioned stylesheet href in HTML');
+  assert.match(worker, new RegExp(versionedStyles.replace('?', '\\?')));
+  assert.match(worker, /ignoreSearch:\s*true/);
+});
+
 test('app suppresses pattern section for safety and abstention results', async () => {
   const app = await readFile('app.js', 'utf8');
   assert.match(app, /analysis\.abstained \|\| analysis\.safetyNotice/);

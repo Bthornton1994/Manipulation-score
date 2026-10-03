@@ -12,7 +12,7 @@ test('web app manifest is valid and its icon exists', async () => {
 test('service worker app shell contains existing local assets', async () => {
   const worker = await readFile('service-worker.js', 'utf8');
   const assets = [...worker.matchAll(/'\.\/(.*?)'/g)].map(([, path]) => path || 'index.html');
-  await Promise.all(assets.map((path) => access(path)));
+  await Promise.all(assets.map((path) => access(path.split('?')[0])));
 });
 
 test('index has no third-party runtime dependencies', async () => {

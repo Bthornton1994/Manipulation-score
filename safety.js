@@ -636,7 +636,7 @@ function isClassBasedFictionOrTraining(clauseText, match) {
   return true;
 }
 
-function isClassBasedRequestedLogistics(clauseText) {
+function isClassBasedRequestedLogistics(clauseText, match) {
   const requested =
     /\b(?:you asked me|you invited|you requested|as we agreed|you asked me to)\b/i.test(
       clauseText
@@ -645,12 +645,24 @@ function isClassBasedRequestedLogistics(clauseText) {
     /\b(?:ride|walk|keys|tracker|schedule|carpool|groceries|outside your|mechanic|luggage)\b/i.test(
       clauseText
     );
-  return requested && logistics;
+  if (!requested || !logistics) return false;
+
+  // Consent/logistics framing must not suppress direct violence in the same clause.
+  if (
+    match &&
+    /\b(?:kill|hurt|harm|murder|stab|shoot|burn|choke|beat|smash|poison|drown|cut)\b/i.test(
+      match.text
+    )
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 function isBenignSafetyContextForMatch(clauseText, match) {
   if (isClassBasedFictionOrTraining(clauseText, match)) return true;
-  if (isClassBasedRequestedLogistics(clauseText)) return true;
+  if (isClassBasedRequestedLogistics(clauseText, match)) return true;
   if (BENIGN_FULL_CLAUSE_CONTEXT.some((pattern) => pattern.test(clauseText))) return true;
 
   if (/point\s+(?:the\s+)?knife\s+away/i.test(clauseText)) return true;

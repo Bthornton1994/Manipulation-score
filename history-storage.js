@@ -2,6 +2,7 @@ export const LEGACY_STORAGE_KEY = 'clarity-history-v1';
 export const STORAGE_KEY = 'clarity-history-v2';
 export const OPT_IN_KEY = 'clarity-history-opt-in-v1';
 export const MIGRATION_KEY = 'clarity-history-migration-v2';
+export const HISTORY_LOCK_NAME = 'clarity-history-v2';
 
 /**
  * Remove legacy auto-saved history from pre-opt-in releases.
@@ -31,4 +32,52 @@ export function isHistoryOptIn(storage) {
   } catch {
     return false;
   }
+}
+
+/**
+ * Serialize cross-tab history mutations. Falls back to running immediately when
+ * Web Locks are unavailable.
+ * @param {() => void | Promise<void>} fn
+ * @param {{ request?: Function } | null | undefined} locks
+ */
+export async function withHistoryLock(fn, locks = globalThis.navigator?.locks) {
+  if (locks?.request) {
+    return locks.request(HISTORY_LOCK_NAME, fn);
+  }
+  return fn();
+}
+
+/**
+ * Read-modify-write helper for clarity-history-v2.
+ * `mutate` receives the current array and returns the next array, or `undefined`
+ * to abort without writing.
+ * @param {Storage} storage
+ * @param {(items: any[]) => any[] | undefined} mutate
+ */
+export function applyHistoryMutation(storage, mutate) {
+  const raw = storage.getItem(STORAGE_KEY);
+  let items;
+  try {
+    const parsed = JSON.parse(raw || '[]');
+    items = Array.isArray(parsed) ? parsed : [];
+  } catch {
+    items = [];
+  }
+
+  const next = mutate(items);
+  if (next === undefined) return { written: false };
+
+  storage.setItem(STORAGE_KEY, JSON.stringify(next));
+  return { written: true };
+}
+
+/**
+ * Remove all stored history entries under the shared lock name when available.
+ * @param {Storage} storage
+ * @param {{ request?: Function } | null | undefined} locks
+ */
+export async function clearHistoryStorage(storage, locks = globalThis.navigator?.locks) {
+  await withHistoryLock(() => {
+    storage.removeItem(STORAGE_KEY);
+  }, locks);
 }

@@ -18,7 +18,7 @@ test('v0.3.2 methodology version and pilot mode', () => {
 test('saveHistory gates on visible checkbox in tab', async () => {
   const app = await readFile('app.js', 'utf8');
   assert.match(app, /isHistoryEnabledInThisTab/);
-  const saveBlock = app.slice(app.indexOf('function saveHistory'), app.indexOf('function loadHistory'));
+  const saveBlock = app.slice(app.indexOf('async function saveHistory'), app.indexOf('function loadHistory'));
   assert.match(saveBlock, /isHistoryEnabledInThisTab\(\)/);
 });
 

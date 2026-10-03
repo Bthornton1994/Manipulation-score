@@ -37,3 +37,18 @@ The script runs `python3 -m venv` and `pip install -r media-lens/worker/trafilat
 After import it also replaces `urllib3.util.connection.create_connection`, `http.client.HTTPConnection.connect`, `urllib.request.urlopen`, `trafilatura.fetch_url`, `trafilatura.downloads.fetch_url`, `htmldate.utils.fetch_url`, and `courlan.network.redirection_test`. Those are the connect and fetch paths used by the pinned packages. `htmldate` and `courlan` build urllib3 pools at import; those pools still call the patched socket methods.
 
 This does not block the `_socket` C API, `ctypes`, an already-open file descriptor, or optional modules that are not in the pin (`pycurl`, PySocks). Transitive packages in `requirements.txt` are installation requirements. They are not given a URL by the worker.
+
+## Troubleshooting
+
+The Node bridge (`media-lens/worker/trafilatura-extract.js`) spawns `python3` with `extract_html.py` on stdin JSON. Failures surface in `engine.preparation.extraction_status` and abstain before Jev runs.
+
+| Symptom | Bridge or Python status | Typical fix |
+| --- | --- | --- |
+| `extractor_version` is `null` on every URL | `python_version`, `extractor_unavailable`, `spawn_failed`, `version_mismatch` | Install Python 3.12+, run `install.sh`, put the venv `bin` on the worker `PATH`, restart |
+| Burst traffic returns errors | `busy` | Wait and retry; at most two extractions run at once |
+| Large page | `input_limit`, `output_limit`, `timeout` | Expected cap; not a misconfig |
+| Paywall or empty shell | `empty` | No extractable text; operational abstention |
+| PDF or JSON body | `unsupported` | Wrong content type for HTML extraction |
+| Garbled HTML | `parse_failed` | Malformed markup or extractor exception |
+
+Operator runbook: `docs/media-lens-ops-runbook-v2.md` §3 (Article preparation). Deploy preflight: `docs/media-lens-frontend-deployment.md` §Before step 3. Block matching after extraction: `docs/media-lens-live-url-v2-architecture.md` §10.2.

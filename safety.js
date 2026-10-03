@@ -119,6 +119,14 @@ const IMMEDIATE_RULES = [
     pattern: /\bpoint\s+(?:a\s+)?(?:gun|knife|weapon)\s+at\s+you/gi
   },
   {
+    id: 'weapon_threat',
+    pattern: /\b(?:gun|knife|weapon|pistol|rifle|machete).{0,120}\bpoint it at you\b/gi
+  },
+  {
+    id: 'weapon_threat',
+    pattern: /\bpoint it at you\b[^.!?]{0,60}\b(?:pull|trigger|shoot|fire)\b/gi
+  },
+  {
     id: 'confinement',
     pattern: /won'?t\s+let\s+you\s+(?:leave|go|out|escape)/gi
   },

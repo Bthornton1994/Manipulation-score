@@ -1837,6 +1837,50 @@ ${body}
   );
 });
 
+test('h4/h5/h6 section headings are not silently dropped when a paragraph still matches', async () => {
+  // WordPress/Ghost put claim-bearing section copy in h4.wp-block-heading
+  // (and sometimes h5/h6). The walker already treated h2/h3 as blocks, so a
+  // matching <p> kept walker blocks and skipped the Trafilatura fallback
+  // while h4/h5/h6 claim lines were discarded.
+  const headline = 'Council approves drainage plan';
+  const claim =
+    'Investigators found that the company hid safety test failures from regulators last year.';
+  const body =
+    'City officials said work would finish before the autumn storms arrive in the valley.';
+  for (const tag of ['h4', 'h5', 'h6']) {
+    const html = `<!doctype html>
+<html lang="en"><head><title>Heading levels</title></head>
+<body>
+<article>
+<h1>${headline}</h1>
+<div class="entry-content">
+<${tag} class="wp-block-heading">${claim}</${tag}>
+<p>${body}</p>
+</div>
+</article>
+</body></html>`;
+    const prepared = await prepareFromHtml({
+      html,
+      sourceUrl: `https://fictional-daily.example/${tag}-heading`,
+      inputMode: 'fixture'
+    });
+    assert.equal(prepared.extraction.status, 'ok', tag);
+    assert.match(prepared.preparedText, /hid safety test failures/, tag);
+    assert.match(prepared.preparedText, /autumn storms arrive/, tag);
+    assert.ok(
+      prepared.spans.some((span) => span.text === claim),
+      `${tag} claim span missing`
+    );
+    assert.ok(
+      prepared.spans.some((span) => span.text === body),
+      `${tag} body span missing`
+    );
+    for (const span of prepared.spans) {
+      assert.equal(prepared.preparedText.slice(span.start, span.end), span.text);
+    }
+  }
+});
+
 test('direct text under body without article is not silently dropped when headline still matches', async () => {
   // Legacy CMS, email-HTML wrappers, and minimal templates with no <article>
   // put the body as a text node sibling of <h1> under <body>. The walker

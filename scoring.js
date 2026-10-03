@@ -276,7 +276,9 @@ const LEVERAGE_CLUSTERS = [
     label: 'Stacked pressure tactics',
     function:
       'Several distinct pressure functions appear together, narrowing room to pause, question, seek support, or respond at your own pace.',
-    minDistinctSignals: 3
+    // Count clear pressure functions only. Soft absolutes/minimization must not
+    // unlock this cluster (and the High band) on top of two clear signals.
+    minDistinctClearSignals: 3
   },
   {
     id: 'urgency_consequence',
@@ -548,6 +550,14 @@ function detectLeverageClusters(signalIds) {
   for (const cluster of LEVERAGE_CLUSTERS) {
     if (cluster.required) {
       if (cluster.required.every((id) => ids.has(id))) clusters.push(cluster);
+      continue;
+    }
+    if (cluster.minDistinctClearSignals) {
+      let clearDistinct = 0;
+      for (const id of ids) {
+        if (CLEAR_PRESSURE_IDS.has(id)) clearDistinct += 1;
+      }
+      if (clearDistinct >= cluster.minDistinctClearSignals) clusters.push(cluster);
       continue;
     }
     if (cluster.minDistinctSignals && ids.size >= cluster.minDistinctSignals) {

@@ -131,6 +131,26 @@ test('analyze keeps a disabled image-upload control for a future OCR gate', asyn
   assert.match(html, /\.heic/);
 });
 
+test('analyze hosts crisis resources for safety notice CTA', async () => {
+  const [{ detectSafetyNotice }, analyzeHtml, safetySource, appSource] = await Promise.all([
+    import('../safety.js'),
+    readFile('analyze.html', 'utf8'),
+    readFile('safety.js', 'utf8'),
+    readFile('app.js', 'utf8')
+  ]);
+
+  assert.match(analyzeHtml, /id="resources"/);
+  assert.match(analyzeHtml, /tel:988/);
+  assert.match(analyzeHtml, /988lifeline\.org/);
+  assert.match(analyzeHtml, /thehotline\.org/);
+  assert.match(safetySource, /resourcesAnchor:\s*'#resources'/);
+  assert.match(appSource, /safetyNotice\.resourcesAnchor \|\| '#resources'/);
+
+  const notice = detectSafetyNotice("I'm going to kill you right now after everything that happened.");
+  assert.ok(notice, 'expected an immediate safety notice');
+  assert.equal(notice.resourcesAnchor, '#resources');
+});
+
 test('analyze CSP allows on-device OCR if the gate is later enabled', async () => {
   const html = await readFile('analyze.html', 'utf8');
   assert.match(html, /wasm-unsafe-eval/);

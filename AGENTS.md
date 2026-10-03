@@ -148,6 +148,12 @@ These files are vendored from `https://github.com/ibelick/ui-skills` at commit `
 Apply the guidance to the public landing, Learn, trust, and analyzer shell only. Preserve no-account operation, history-off-by-default behavior, local-only message handling, uncertainty, evidence-linked language, safety notices, and non-diagnostic framing. Do not change scoring, signal definitions, methodology, or message handling.
 
 
+## Test audit skill
+
+For adding, changing, reviewing, or auditing tests, read `.claude/skills/test-audit/SKILL.md` before editing. Use **authoring mode** when writing or reviewing test changes for a feature or bug fix. Use **audit mode** only when explicitly asked to find low-value, duplicated, or brittle tests, and start read-only with evidence before deleting anything.
+
+This skill guides test design and review. It does not authorize broad test cleanup during unrelated work, production-behavior changes for test convenience, or merge, deployment, or release actions.
+
 ## External agent stack from linked Grok and Cursor setup
 
 For UI, copy, source verification, and completion claims, read `docs/EXTERNAL-AGENT-SKILLS.md` and load only the smallest relevant vendored skill. Use `frontend-ui-engineering` for interface implementation, `source-driven-development` for framework-specific decisions, `no-ai-slop` for visible copy, `no-ai-design-slop` for product-specific UI audits, and `verification-before-completion` before claiming a fix or passing check.

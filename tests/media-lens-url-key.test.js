@@ -58,6 +58,61 @@ test('url key keeps encoded query delimiters so distinct URLs never share a key'
   assert.ok(!normalizedURLKey('https://news.example/story?p=1%232').includes('#'), 'key must not contain a raw fragment delimiter');
 });
 
+// Expected keys below are derived from source, not executed in Go: Newsjack
+// origin.go normalizedURLKey (blob 365890b9, pinned in newsjack-pin.js) with
+// Go net/url ParseQuery, QueryUnescape, Values.Encode, QueryEscape and the
+// ForceQuery rule in url.Parse/URL.String.
+const GO_DERIVED_QUERY_VECTORS = [
+  // Spaces: literal, "+" and %20 all decode to a space and encode as "+".
+  ['https://news.example/a?q=transit fare', 'https://news.example/a?q=transit+fare'],
+  ['https://news.example/a?q=transit+fare', 'https://news.example/a?q=transit+fare'],
+  ['https://news.example/a?q=transit%20fare', 'https://news.example/a?q=transit+fare'],
+  // Non-ASCII: literal and encoded UTF-8 give the same uppercase escapes; a
+  // lone byte that is not valid UTF-8 is kept as a byte.
+  ['https://news.example/a?q=café', 'https://news.example/a?q=caf%C3%A9'],
+  ['https://news.example/a?q=caf%c3%a9', 'https://news.example/a?q=caf%C3%A9'],
+  ['https://news.example/a?q=%e9', 'https://news.example/a?q=%E9'],
+  // "/" and ":" in values are escaped; "*" and "'" are escaped; "~" is not.
+  ['https://news.example/a?next=/b:c', 'https://news.example/a?next=%2Fb%3Ac'],
+  ['https://news.example/a?q=a*b~c', 'https://news.example/a?q=a%2Ab~c'],
+  ['https://news.example/a?q=a*b%7Ec', 'https://news.example/a?q=a%2Ab~c'],
+  ["https://news.example/a?q=it's", 'https://news.example/a?q=it%27s'],
+  // Repeated names group together and keep their values in input order.
+  ['https://news.example/a?x=2&y=1&x=1', 'https://news.example/a?x=2&x=1&y=1'],
+  // Names sort bytewise, so uppercase sorts before lowercase.
+  ['https://news.example/a?b=1&B=2&a=3', 'https://news.example/a?B=2&a=3&b=1'],
+  // Empty and missing values both encode as "name="; empty pairs vanish.
+  ['https://news.example/a?flag&&empty=', 'https://news.example/a?empty=&flag='],
+  ['https://news.example/a?=x', 'https://news.example/a?=x'],
+  ['https://news.example/a?%41=1', 'https://news.example/a?A=1'],
+  // Go drops any pair containing ";" or an invalid escape.
+  ['https://news.example/a?a=1;b=2&id=7', 'https://news.example/a?id=7'],
+  ['https://news.example/a?a=%zz&id=7', 'https://news.example/a?id=7'],
+  ['https://news.example/a?a=100%', 'https://news.example/a'],
+  // A lone trailing "?" is kept (ForceQuery); a query emptied by tracking
+  // removal is not.
+  ['https://news.example/a?', 'https://news.example/a?'],
+  ['https://news.example/a?#top', 'https://news.example/a?'],
+  ['https://news.example/a?utm_source=x', 'https://news.example/a'],
+  // Root with and without a trailing slash.
+  ['https://news.example?b=2&a=1', 'https://news.example/?a=1&b=2'],
+  ['https://news.example/?b=2&a=1', 'https://news.example/?a=1&b=2'],
+];
+
+test('url key query matches keys derived from the Newsjack Go source (derived from source, not executed in Go)', () => {
+  for (const [input, goDerived] of GO_DERIVED_QUERY_VECTORS) {
+    assert.equal(normalizedURLKey(input), goDerived, `${input} should key to the Go-derived ${goDerived}`);
+  }
+});
+
+// Known deviations from Go outside the query, left in place on purpose
+// (derived from source, not executed in Go):
+// - no-hostname input: Go returns the lowercased input with trailing slashes
+//   trimmed; this returns null;
+// - path: Go re-escapes an already-escaped path (/caf%C3%A9 -> /caf%25C3%25A9)
+//   and trims every trailing slash; this keeps WHATWG's path, minus one slash;
+// - host: Go keeps userinfo and :443 and percent-escapes a non-ASCII host;
+//   this drops userinfo and default ports and uses punycode.
 test('url key returns null for non-string, blank, or unparseable input without throwing', () => {
   for (const input of [undefined, null, 42, {}, '', '   ', 'not a url', '/relative/path']) {
     assert.equal(normalizedURLKey(input), null, `expected null for ${JSON.stringify(input)}`);
@@ -82,6 +137,7 @@ test('url key agrees with every recorded Newsjack url_key, including case, fragm
   }
 });
 
+// The host and path pairs below are JS-only behavior; Go keys them apart.
 test('url key treats encoded and literal unicode the same in host, path and query', () => {
   const pairs = [
     ['https://Café.Example/a', 'https://xn--caf-dma.example/a'],
@@ -116,4 +172,21 @@ test('fusion counts URLs that differ only by encoded query delimiters as separat
   assert.equal(coverage.member_count, 2);
   assert.equal(coverage.independent_sources_estimate, 2);
   assert.equal(coverage.duplicate_or_syndicated_count, 0);
+});
+
+test('fusion treats a Go-style url_key and a computed key for the same query-bearing URL as one source', () => {
+  // Recorded keys are derived from source, not executed in Go.
+  const pairs = [
+    ['https://first-outlet.example/s?B=1&a=2', 'https://first-outlet.example/s?a=2&B=1'],
+    ['https://first-outlet.example/s?q=a%2Ab~c', 'https://first-outlet.example/s?q=a*b%7Ec'],
+    ['https://first-outlet.example/s?', 'https://first-outlet.example/s?'],
+  ];
+  for (const [goKey, url] of pairs) {
+    const coverage = clusterCoverage([
+      { url: goKey, url_key: goKey, relation: 'surfaced' },
+      { url, relation: 'same_story' },
+    ]);
+    assert.equal(coverage.independent_sources_estimate, 1, `${url} should match the recorded ${goKey}`);
+    assert.equal(coverage.duplicate_or_syndicated_count, 1);
+  }
 });

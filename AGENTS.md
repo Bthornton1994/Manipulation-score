@@ -165,3 +165,9 @@ Read `DESIGN.md` together with `docs/DESIGN_ENGINEERING.md`, `AGENTS.md`, and th
 ## Stack rules
 
 When editing stack-specific code, load the matching `.cursor/rules/*.mdc` file. These rules are versioned guidance and are scoped by their frontmatter. Confirm `package.json` and active framework configuration before applying them; the Prisma rule is dormant unless Prisma is present.
+
+<!-- BEGIN POINTER: product-discovery-build (skill-sync sha256:e089002f5fd06bdcda4ab9392bbc3f4c6b883042d0552d492009779380fa20e1) -->
+## Product Discovery & Build
+
+For new products and substantial user-facing work, use the `product-discovery-build` workflow. Read the repository-local skill (a generated adapter under this repository's `.agents/skills/`, `.claude/skills/` or `.grok/skills/` folder, where present) before implementation; the canonical source is `Bthornton1994/OpenMausBot` `standards/shared-skills/product-discovery-build/`. Follow this repository's vision, design authority, architecture, privacy, security, and release gates; the workflow does not override them. For narrow maintenance work, use the smallest relevant parts. If the skill is unavailable, use the task's explicit research, design, acceptance, and verification brief and report the missing adapter. This workflow is guidance, not permission enforcement.
+<!-- END POINTER: product-discovery-build -->

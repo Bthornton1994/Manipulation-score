@@ -2,6 +2,7 @@
 // commit bdb41b8, MIT License, Copyright (c) 2026 Elvis Sun.
 // Adapted from Go to JavaScript; behavior (not code) is ported: lowercase
 // scheme/host, drop fragment, trim trailing slash, strip tracking params.
+// Kept query names and values are re-encoded in the key (local fix).
 //
 // Used by worker/fusion.js to group cluster members into the same story by
 // normalized URL and to detect syndicated/duplicate links.
@@ -40,7 +41,9 @@ export function normalizedURLKey(rawUrl) {
 
   const keptParams = [...parsed.searchParams.entries()].filter(([name]) => !isTrackingParam(name));
   keptParams.sort(([a], [b]) => a.localeCompare(b));
-  const query = keptParams.length > 0 ? `?${keptParams.map(([k, v]) => `${k}=${v}`).join('&')}` : '';
+  // Re-encode names and values so an encoded &, = or # in one URL cannot
+  // produce the same key as a different URL's literal delimiters.
+  const query = keptParams.length > 0 ? `?${new URLSearchParams(keptParams).toString()}` : '';
 
   return `${scheme}//${host}${port}${pathname}${query}`;
 }

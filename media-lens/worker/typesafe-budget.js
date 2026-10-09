@@ -95,13 +95,26 @@ export function createTypesafeBudget({
     try {
       mutateBudgetStore(
         storePath,
-        () => ({
-          version: TYPESAFE_BUDGET_STORE_VERSION,
-          month,
-          calls,
-          estimatedTokens,
-          warnEmitted
-        }),
+        (current) => {
+          // Never clobber a same-month durable counter with a lower in-memory
+          // view (e.g. a stale process that rolled before refreshing).
+          if (current && current.month === month) {
+            return {
+              version: TYPESAFE_BUDGET_STORE_VERSION,
+              month,
+              calls: Math.max(calls, current.calls),
+              estimatedTokens: Math.max(estimatedTokens, current.estimatedTokens),
+              warnEmitted: warnEmitted || current.warnEmitted
+            };
+          }
+          return {
+            version: TYPESAFE_BUDGET_STORE_VERSION,
+            month,
+            calls,
+            estimatedTokens,
+            warnEmitted
+          };
+        },
         io
       );
     } catch {
@@ -111,13 +124,33 @@ export function createTypesafeBudget({
 
   function roll() {
     const current = utcMonthKey(now());
-    if (current !== month) {
-      month = current;
-      calls = 0;
-      estimatedTokens = 0;
-      warnEmitted = false;
-      persistInMemoryRecord();
+    if (current === month) return;
+
+    // Prefer the durable same-month record before zeroing. A blind persist of
+    // zeros after a transient read failure was wiping peer spend and reopening
+    // the monthly stop headroom on the next process start.
+    if (storePath) {
+      try {
+        const record = readBudgetStore(storePath, io);
+        if (record && record.month === current) {
+          syncFromRecord(record);
+          return;
+        }
+      } catch {
+        month = current;
+        calls = 0;
+        estimatedTokens = 0;
+        warnEmitted = false;
+        storeUnavailable = true;
+        return;
+      }
     }
+
+    month = current;
+    calls = 0;
+    estimatedTokens = 0;
+    warnEmitted = false;
+    persistInMemoryRecord();
   }
 
   function estimatedUsdForCallCount(callCount) {

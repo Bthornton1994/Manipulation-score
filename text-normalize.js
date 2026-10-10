@@ -36,6 +36,19 @@ export function normalizeAnalysisText(text) {
     .trim();
 }
 
+/**
+ * Remove line/paragraph separators and CR/LF that sit between letters.
+ *
+ * Default normalization preserves U+2028/U+2029 and CR/LF so between-token
+ * separators still match via `\s` (`kill\u2028you`). The same characters
+ * mid-word (`ki\u2028ll`) break `\bkill\s+you\b`. Safety dual-paths this
+ * repair after the default normalize; between-token cases already match
+ * before repair runs.
+ */
+export function repairMidwordLineBreaks(text) {
+  return (text || '').replace(/(?<=\p{L})[\u2028\u2029\r\n]+(?=\p{L})/gu, '');
+}
+
 export function normalizeForMatching(text) {
   return normalizeAnalysisText(text).replace(/\n+/g, ' ');
 }

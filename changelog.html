@@ -24,7 +24,34 @@
     </header>
     <main class="legal-content">
       <h1>Changelog</h1>
-      <p class="legal-updated">Last updated: September 26, 2026</p>
+      <p class="legal-updated">Last updated: October 12, 2026</p>
+
+      <h2>October 12, 2026 | Documentation sync (Media Lens ops and evaluation)</h2>
+      <ul>
+        <li>Operator runbook and classifier.dev evaluation docs now describe live-URL rate-limit ordering (allowlist and SSRF rejects do not consume the live-URL budget), Jev <code>capReached</code> abstention billing, optional DeepEval and redacted Jev dev tracing, and the SSRF regression gate matrix under <code>docs/audit/t1773u-ml-118-ssrf-a/</code>.</li>
+        <li>Clarity user-facing pages are unchanged in this documentation-only update. Service worker cache stays <code>clarity-v38</code>.</li>
+      </ul>
+
+      <h2>October 2, 2026 | Media Lens developer evaluation tooling</h2>
+      <ul>
+        <li>Added an optional DeepEval sidecar under <code>media-lens/eval/deepeval/</code> for offline fixture label-match checks. It is not installed by CI, makes no network calls, and never supports a production-readiness claim.</li>
+        <li>Added optional redacted Jev adapter dev tracing (<code>media-lens/worker/dev-tracing/jev-trace.js</code>) for local pilots. Production and CI analysis paths do not construct a tracer.</li>
+        <li>Expanded SSRF and allowlist regression tests (Issue #118 gate matrix). Clarity is unchanged.</li>
+      </ul>
+
+      <h2>September 30, 2026 | Media Lens live URL preparation and Jev spend accounting</h2>
+      <ul>
+        <li>Article preparation now keeps more CMS body shapes (leaf table cells, leaf <code>div</code>/<code>section</code>/<code>main</code>, Trafilatura <code>br</code> splits, direct <code>body</code> text without an <code>article</code> wrapper). See <code>docs/media-lens-live-url-v2-architecture.md</code> §10.2.</li>
+        <li>Live URL fetch limits are fail-closed on omitted caps (wire and decoded byte budgets, shared redirect timeout). Rejected allowlist and SSRF-policy URLs no longer consume the per-minute live-URL budget.</li>
+        <li>When live Jev hits the per-analysis call cap mid-run (<code>capReached</code>), billed calls still appear on the abstention graph and in the ESTIMATED monthly budget record, matching timeout accounting.</li>
+        <li>Clarity is unchanged. Service worker cache stays <code>clarity-v38</code>.</li>
+      </ul>
+
+      <h2>September 29, 2026 | Clarity safety normalization</h2>
+      <ul>
+        <li>Safety and scoring now normalize pasted text with NFKC and map C0/C1 control and format separator characters between words to spaces so hidden characters cannot split explicit threat phrases. Methodology describes the behavior. Screening version stays v0.3.3; pattern lists and bands are unchanged.</li>
+        <li>Service worker cache: <code>clarity-v38</code> (refreshes cached analyzer scripts after the normalization fix).</li>
+      </ul>
 
       <h2>September 26, 2026 | Media Lens coverage wording</h2>
       <ul>

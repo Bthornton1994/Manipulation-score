@@ -45,3 +45,20 @@ These numbers exist so a later owner-approved evaluation has named gates. They a
 | Disagreement must become review, never a silent winner | policy requirement | harness checks software behavior only |
 
 Do not publish these as sensitivity, specificity, fairness, or real-world accuracy.
+
+## Optional tooling (not CI, not production)
+
+These paths are for local evaluation only. `package.json`, the worker default startup path, GitHub Pages, and CI never install or enable them.
+
+| Tool | Location | Purpose |
+| --- | --- | --- |
+| DeepEval sidecar | `media-lens/eval/deepeval/` | Offline “Fixture Label Match” metric on the same `classifier-dev-eval` fixtures; `claimed_thresholds_met` stays false. See `media-lens/eval/deepeval/README.md`. |
+| Redacted Jev dev tracing | `media-lens/worker/dev-tracing/jev-trace.js` | Optional allowlisted metadata records for local Langfuse-style pilots. `server.js` does not construct a tracer; span text and credentials never enter traces. Gated by `tests/media-lens-jev-dev-tracing.test.js`. |
+
+Run the Node harness gates (default CI path):
+
+```bash
+node --test tests/media-lens-classifier-dev-eval.test.js
+```
+
+DeepEval is separate Python venv setup; see `media-lens/eval/deepeval/README.md`.

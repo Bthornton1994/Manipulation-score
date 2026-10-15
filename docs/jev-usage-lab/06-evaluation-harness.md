@@ -8,6 +8,8 @@ CLI: `node scripts/jev-usage-lab.js` (requires `MEDIA_LENS_JEV_SHADOW=true` to r
 
 The harness scores fixture replays. It does not call Jev, does not fit thresholds, and does not sample live articles.
 
+Headline triage is a separate hypothesis. This span-question harness does not measure headline relevance or feed-scale savings; any such work must follow [the design-only headline triage plan](11-headline-triage-shadow-plan.md).
+
 ## Splits
 
 | Split | Role |

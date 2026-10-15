@@ -149,6 +149,8 @@ Other existing caps: 512 KiB request body, 60k prepared chars, 200 spans, 160 Je
 | Jev calls / analysis | 160 | `MEDIA_LENS_MAX_JEV_CALLS_PER_ANALYSIS` | Live Jev fail-closes to a controlled abstention graph when the span budget would exceed the cap |
 | Whole analysis timeout | 15s | `MEDIA_LENS_PER_ANALYSIS_TIMEOUT_MS` | Aborts in-flight Jev requests and retries via the shared pipeline `AbortController`; newsjack and downstream adapters do not run after the fail-closed timeout response |
 
+When `spansForJev.length` exceeds the cap before any call, the worker abstains with zero provider calls. When the adapter stops mid-pipeline because `capReached` is true, the worker still abstains (no manipulation graph) but records every Jev call already billed: `engine.jev.calls`, `engine.jev.mode: "live"`, the TypeSafe `privacy.external_processing` entry with `occurred: true`, increments on the ESTIMATED budget file, and `jev_calls` on the `analyze_complete` audit line—the same accounting path as a timeout after partial Jev work (PR #145 and #170).
+
 ### TypeSafe ESTIMATED monthly budget (Jev only)
 
 Figures are **ESTIMATED** planning math unless the operator has verified provider billing separately. The worker records call counts and ESTIMATED token inputs only; it never stores article or span text in budget records.

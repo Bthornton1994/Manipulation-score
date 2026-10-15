@@ -91,10 +91,8 @@ test('trust pages changed for the Media Lens operator preview carry the Septembe
 });
 
 test('trust pages changed for the Media Lens coverage wording carry the September 26, 2026 date and a changelog entry', async () => {
-  for (const page of ['limitations.html', 'methodology.html', 'changelog.html']) {
-    const html = await readFile(page, 'utf8');
-    assert.match(html, /<p class="legal-updated">Last updated: September 26, 2026<\/p>/, page);
-  }
+  const limitations = await readFile('limitations.html', 'utf8');
+  assert.match(limitations, /<p class="legal-updated">Last updated: September 26, 2026<\/p>/);
   const html = await readFile('changelog.html', 'utf8');
   const entryIdx = html.indexOf('<h2>September 26, 2026 | Media Lens coverage wording</h2>');
   const previousIdx = html.indexOf('<h2>September 25, 2026 | Media Lens preview disclosures</h2>');
@@ -103,4 +101,25 @@ test('trust pages changed for the Media Lens coverage wording carry the Septembe
   assert.match(entry, /reads no Newsjack output or other coverage data/);
   assert.match(entry, /clarity-v37/);
   assert.doesNotMatch(entry, /accura|live coverage is available|multi-outlet coverage is live/i);
+});
+
+test('methodology and changelog record safety normalization and October 5, 2026 documentation updates', async () => {
+  const methodology = await readFile('methodology.html', 'utf8');
+  assert.match(methodology, /<p class="legal-updated">Last updated: October 5, 2026<\/p>/);
+  assert.match(methodology, /NFKC/);
+  assert.match(methodology, /format characters/);
+
+  const html = await readFile('changelog.html', 'utf8');
+  assert.match(html, /<p class="legal-updated">Last updated: October 5, 2026<\/p>/);
+  const safetyIdx = html.indexOf('<h2>September 29, 2026 | Safety normalization (screening v0.3.3)</h2>');
+  const octIdx = html.indexOf('<h2>October 5, 2026 | Media Lens operator documentation</h2>');
+  const sept26Idx = html.indexOf('<h2>September 26, 2026 | Media Lens coverage wording</h2>');
+  assert.ok(octIdx !== -1 && safetyIdx !== -1 && sept26Idx !== -1);
+  assert.ok(octIdx < safetyIdx && safetyIdx < sept26Idx);
+  const safetyEntry = html.slice(safetyIdx, sept26Idx);
+  assert.match(safetyEntry, /audit-control-format-safety/);
+  assert.match(safetyEntry, /clarity-v38/);
+  const octEntry = html.slice(octIdx, safetyIdx);
+  assert.match(octEntry, /capReached/);
+  assert.doesNotMatch(octEntry, /accura|production-ready|generally available/i);
 });

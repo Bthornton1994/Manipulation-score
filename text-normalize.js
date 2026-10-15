@@ -4,6 +4,17 @@ const UNICODE_SPACES = /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g;
 const FORMAT_CHARS = /[\u200B-\u200D\uFEFF]/g;
 /** Combining grapheme joiner — Mn, not Cf; same between-token joiner class as U+2060. */
 const COMBINING_GRAPHEME_JOINER = /\u034F/g;
+/**
+ * Reserved Default_Ignorable Cn code points — not Cc/Cf/Mn and not JS `\s`.
+ * Distinct from assigned DI handled elsewhere (Cf tags, VS Supplement #193,
+ * Hangul/Braille/BMP VS #190, Khmer/Mongolian #191).
+ * Ranges: U+2065; U+FFF0–FFF8; tag-plane Cn gaps U+E0000, U+E0002–E001F,
+ * U+E0080–E00FF, U+E01F0–E0FFF.
+ */
+const RESERVED_DI_CN_CHARS =
+  /[\u2065\uFFF0-\uFFF8\u{E0000}\u{E0002}-\u{E001F}\u{E0080}-\u{E00FF}\u{E01F0}-\u{E0FFF}]/gu;
+const MIDWORD_RESERVED_DI_CN =
+  /(?<=\p{L})[\u2065\uFFF0-\uFFF8\u{E0000}\u{E0002}-\u{E001F}\u{E0080}-\u{E00FF}\u{E01F0}-\u{E0FFF}]+(?=\p{L})/gu;
 
 /**
  * Map C0/C1 controls to spaces while preserving newline/CR for paragraph splits.
@@ -14,11 +25,25 @@ function mapControlChars(ch) {
 }
 
 /**
+ * Strip reserved Default_Ignorable Cn marks that sit between letters.
+ *
+ * Default normalization space-maps these so between-token separators still match
+ * (`kill\u2065you` → `kill you`). The same characters mid-word (`ki\u2065ll`)
+ * become `ki ll` under space-mapping and break `\bkill\s+you\b`. Safety dual-paths
+ * this repair on the original string after the default normalize.
+ */
+export function repairMidwordReservedDiCn(text) {
+  return (text || '').normalize('NFKC').replace(MIDWORD_RESERVED_DI_CN, '');
+}
+
+/**
  * Normalize text for scoring and safety matching while preserving paragraph breaks.
  *
  * Between-token Cc/Cf separators are space-mapped (not stripped) so patterns like
  * `\bkill\s+you\b` still match. FORMAT_CHARS / soft hyphen remain strip-mode for
  * mid-word repair; between-word strip-glue for those is tracked separately (#57).
+ * Reserved Default_Ignorable Cn are space-mapped the same way (they are not `\s`);
+ * mid-word repair is handled in safety via `repairMidwordReservedDiCn`.
  */
 export function normalizeAnalysisText(text) {
   return (text || '')
@@ -28,6 +53,7 @@ export function normalizeAnalysisText(text) {
     .replace(SMART_APOSTROPHE, "'")
     .replace(SMART_QUOTE, '"')
     .replace(UNICODE_SPACES, ' ')
+    .replace(RESERVED_DI_CN_CHARS, ' ')
     .replace(/\p{Cc}/gu, mapControlChars)
     .replace(/\p{Cf}/gu, ' ')
     .replace(COMBINING_GRAPHEME_JOINER, ' ')

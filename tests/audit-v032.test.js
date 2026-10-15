@@ -50,6 +50,21 @@ test('cross-message threat is not suppressed by prior benign message', () => {
   assert.ok(notice, 'expected safety notice in second message block');
 });
 
+test('cross-block menace still escalates stalking in later message', () => {
+  const text =
+    'You said no.\n\nI am still following you home from the office tonight after you asked me to stop waiting outside.';
+  const notice = detectSafetyNotice(text);
+  assert.ok(notice, 'expected stalking safety notice across message blocks');
+  assert.equal(notice.category, 'stalking');
+});
+
+test('cross-block menace pairs with location knowledge for stalking', () => {
+  const text = 'You cannot stop me.\n\nI know where you work and I will be there when you leave.';
+  const notice = detectSafetyNotice(text);
+  assert.ok(notice, 'expected stalking safety notice when menace precedes location knowledge');
+  assert.equal(notice.category, 'stalking');
+});
+
 test('zero-width character inside kill still triggers safety', () => {
   const text = 'I will k\u200Bill you tonight after everyone leaves the house.';
   assert.ok(detectSafetyNotice(text));

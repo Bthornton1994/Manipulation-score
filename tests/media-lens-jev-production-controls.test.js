@@ -412,6 +412,59 @@ test('timeout after live Jev still exposes calls for ESTIMATED budget accounting
   assert.equal(budget.getSnapshot().calls, billedCalls);
 });
 
+test('timeout while live Jev settles after abort grace still records billed calls', async () => {
+  const config = loadConfig({ MEDIA_LENS_MODE: 'live', MEDIA_LENS_ENABLE_LIVE: 'true', MEDIA_LENS_TYPESAFE_API_KEY: 'k' });
+  config.limits = { ...config.limits, perAnalysisTimeoutMs: 30, maxJevCallsPerAnalysis: 160 };
+
+  const prepared = await prepareFromPastedText({
+    text: 'A '.repeat(150) + 'long enough body for slow post-abort Jev accounting.'
+  });
+  const budget = createTypesafeBudget({ estimatedUsdPerCall: 1, warnUsd: 100, stopUsd: 200 });
+
+  const jevAdapter = {
+    mode: 'live',
+    analyzeSpans: (_spans, _artifact, { signal } = {}) =>
+      new Promise((resolve) => {
+        signal?.addEventListener(
+          'abort',
+          () => {
+            setTimeout(() => {
+              resolve({
+                answersBySpanId: new Map(),
+                failedSpanIds: new Set(['span-1']),
+                reviewSpanIds: new Set(),
+                unavailableSpanIds: new Set(['span-1']),
+                dispositionsBySpanId: new Map(),
+                calls: 7,
+                failures: 1,
+                elapsedMs: 0,
+                modelReported: 'jev-1.13.0',
+                modelMatch: true,
+                capReached: false
+              });
+            }, 150);
+          },
+          { once: true }
+        );
+      })
+  };
+
+  const graph = await analyze({
+    prepared,
+    config,
+    jevAdapter,
+    newsjackAdapter: createNewsjackAdapter({ mode: 'disabled' }),
+    typesafeBudget: budget,
+    userAssertedPublic: true,
+    consentAt: '2026-09-21T00:00:00.000Z'
+  });
+
+  assert.ok(graph.abstentions.some((a) => a.reason === 'engine_unavailable'));
+  assert.equal(graph.engine.jev.calls, 7);
+  if (graph.engine.jev.calls > 0) budget.recordCalls(graph.engine.jev.calls);
+  assert.equal(budget.getSnapshot().calls, 7);
+});
+
 test('timeout while live Jev is in-flight still records calls once the adapter settles', async () => {
   const config = loadConfig({ MEDIA_LENS_MODE: 'live', MEDIA_LENS_ENABLE_LIVE: 'true', MEDIA_LENS_TYPESAFE_API_KEY: 'k' });
   config.limits = { ...config.limits, perAnalysisTimeoutMs: 30, maxJevCallsPerAnalysis: 160 };

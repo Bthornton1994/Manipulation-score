@@ -145,7 +145,8 @@ export async function listSyntheticArticleFixtureIds(articlesDir = DEFAULT_ARTIC
 export async function loadSyntheticFixtureCases({
   articlesDir = DEFAULT_ARTICLES_DIR,
   fixtureIds = [DEFAULT_PIN_VERIFY_FIXTURE],
-  repoRoot = REPO_ROOT
+  repoRoot = REPO_ROOT,
+  extractImpl
 } = {}) {
   const dir = assertArticlesDir(articlesDir, repoRoot);
   const available = new Set(await listSyntheticArticleFixtureIds(dir, repoRoot));
@@ -161,7 +162,8 @@ export async function loadSyntheticFixtureCases({
       html,
       kind: 'article',
       sourceUrl: `https://fictional-daily.example/articles/${fixtureId}`,
-      inputMode: 'fixture'
+      inputMode: 'fixture',
+      extractImpl
     });
     const spans = prepared.spans.filter((span) => !SPAN_ROLES_EXCLUDED_FROM_JEV.has(span.role));
     cases.push({
@@ -302,7 +304,8 @@ async function parseResponseCopy(response) {
  * Run isolated pin verification. Live HTTP happens only when
  * MEDIA_LENS_JEV_VERIFY=true and a key is present, and the kill switch is
  * not asserted. The gate never falls back to jev-latest. Default CI must
- * call this with a mock fetchImpl.
+ * call this with a mock fetchImpl. options.extractImpl is a test seam for
+ * hosts without the Python extractor; omitted, local Trafilatura runs.
  */
 export async function runJevPinVerify(options = {}) {
   const env = options.env || {};
@@ -343,7 +346,7 @@ export async function runJevPinVerify(options = {}) {
 
   let cases;
   try {
-    cases = await loadSyntheticFixtureCases({ articlesDir, fixtureIds, repoRoot });
+    cases = await loadSyntheticFixtureCases({ articlesDir, fixtureIds, repoRoot, extractImpl: options.extractImpl });
   } catch (err) {
     return writeReport(
       emptyReport({

@@ -30,6 +30,7 @@ import {
   repoRootFromModule,
   runJevPinVerify
 } from '../media-lens/worker/jev-pin-verify.js';
+import { extractSeam } from './helpers/python-extractor-host.js';
 
 const PIN_VERIFY_KEY = 'pin-verify-test-key';
 const VERIFY_ENV = {
@@ -286,7 +287,7 @@ test('pin-verify may only read invented fixture articles', async () => {
   const ids = await listSyntheticArticleFixtureIds();
   assert.ok(ids.includes(DEFAULT_PIN_VERIFY_FIXTURE));
   assert.equal(ids.some((id) => id.includes('..')), false);
-  const cases = await loadSyntheticFixtureCases({ fixtureIds: [DEFAULT_PIN_VERIFY_FIXTURE] });
+  const cases = await loadSyntheticFixtureCases({ fixtureIds: [DEFAULT_PIN_VERIFY_FIXTURE], ...(await extractSeam()) });
   assert.equal(cases.length, 1);
   assert.ok(cases[0].spans.length >= 1);
   assert.ok(
@@ -353,7 +354,8 @@ test('successful mock pin verify records SHA, timestamp, model match, and ignore
         now: () => new Date('2026-09-19T12:00:00.000Z'),
         artifactPath,
         tmpRoot: dest,
-        fixtureIds: [DEFAULT_PIN_VERIFY_FIXTURE]
+        fixtureIds: [DEFAULT_PIN_VERIFY_FIXTURE],
+        ...(await extractSeam())
       });
       assert.equal(report.pass, true);
       assert.equal(report.reason, JEV_PIN_VERIFY_REASONS.OK);
@@ -388,7 +390,8 @@ test('pin-verify fails the gate on model jev-9.9.9 and does not treat it as a pi
       const report = await runJevPinVerify({
         env: { ...VERIFY_ENV, MEDIA_LENS_TYPESAFE_BASE_URL: baseUrl },
         commitSha: 'mismatch-sha',
-        fixtureIds: [DEFAULT_PIN_VERIFY_FIXTURE]
+        fixtureIds: [DEFAULT_PIN_VERIFY_FIXTURE],
+        ...(await extractSeam())
       });
       assert.equal(report.pass, false);
       assert.equal(report.reason, JEV_PIN_VERIFY_REASONS.MODEL_MISMATCH);
@@ -409,7 +412,8 @@ test('pin-verify fails if the API reports jev-latest instead of the pinned id', 
     async (baseUrl) => {
       const report = await runJevPinVerify({
         env: { ...VERIFY_ENV, MEDIA_LENS_TYPESAFE_BASE_URL: baseUrl },
-        fixtureIds: [DEFAULT_PIN_VERIFY_FIXTURE]
+        fixtureIds: [DEFAULT_PIN_VERIFY_FIXTURE],
+        ...(await extractSeam())
       });
       assert.equal(report.pass, false);
       assert.equal(report.reason, JEV_PIN_VERIFY_REASONS.MODEL_MISMATCH);
@@ -431,6 +435,7 @@ test('HTTP 401, 422, 429, and 529 fail the pin-verify gate without falling back 
         const report = await runJevPinVerify({
           env: { ...VERIFY_ENV, MEDIA_LENS_TYPESAFE_BASE_URL: baseUrl },
           fixtureIds: [DEFAULT_PIN_VERIFY_FIXTURE],
+          ...(await extractSeam()),
           timeoutMs: 1000
         });
         assert.equal(report.pass, false, `status ${status} must fail the gate`);
@@ -457,7 +462,8 @@ test('malformed JSON fails the pin-verify gate', async () => {
     async (baseUrl) => {
       const report = await runJevPinVerify({
         env: { ...VERIFY_ENV, MEDIA_LENS_TYPESAFE_BASE_URL: baseUrl },
-        fixtureIds: [DEFAULT_PIN_VERIFY_FIXTURE]
+        fixtureIds: [DEFAULT_PIN_VERIFY_FIXTURE],
+        ...(await extractSeam())
       });
       assert.equal(report.pass, false);
       assert.equal(report.reason, JEV_PIN_VERIFY_REASONS.MALFORMED);
@@ -475,7 +481,8 @@ test('missing answers fail the pin-verify gate', async () => {
     async (baseUrl) => {
       const report = await runJevPinVerify({
         env: { ...VERIFY_ENV, MEDIA_LENS_TYPESAFE_BASE_URL: baseUrl },
-        fixtureIds: [DEFAULT_PIN_VERIFY_FIXTURE]
+        fixtureIds: [DEFAULT_PIN_VERIFY_FIXTURE],
+        ...(await extractSeam())
       });
       assert.equal(report.pass, false);
       assert.equal(report.reason, JEV_PIN_VERIFY_REASONS.MISSING_ANSWERS);
@@ -506,7 +513,8 @@ test('out-of-taxonomy choices are rejected by the existing adapter path and fail
     async (baseUrl) => {
       const report = await runJevPinVerify({
         env: { ...VERIFY_ENV, MEDIA_LENS_TYPESAFE_BASE_URL: baseUrl },
-        fixtureIds: [DEFAULT_PIN_VERIFY_FIXTURE]
+        fixtureIds: [DEFAULT_PIN_VERIFY_FIXTURE],
+        ...(await extractSeam())
       });
       assert.equal(report.pass, false);
       assert.equal(report.reason, JEV_PIN_VERIFY_REASONS.TYPED_SHAPE);
@@ -526,7 +534,8 @@ test('optional diagnostic diff compares live choices to fixture answers without 
     async (baseUrl) => {
       const report = await runJevPinVerify({
         env: { ...VERIFY_ENV, MEDIA_LENS_TYPESAFE_BASE_URL: baseUrl },
-        fixtureIds: ['synthetic-01-quoted-vs-authorial']
+        fixtureIds: ['synthetic-01-quoted-vs-authorial'],
+        ...(await extractSeam())
       });
       assert.equal(report.pass, true);
       assert.equal(report.diagnosticDiff.not_an_accuracy_claim, true);

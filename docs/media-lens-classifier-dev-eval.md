@@ -45,3 +45,9 @@ These numbers exist so a later owner-approved evaluation has named gates. They a
 | Disagreement must become review, never a silent winner | policy requirement | harness checks software behavior only |
 
 Do not publish these as sensitivity, specificity, fairness, or real-world accuracy.
+
+## Hillclimb pilot
+
+The hillclimb scaffold is an extension of this harness, not a second metric system. Workflow, sealed holdout, round-1 result, and the Sonnet 5.5 routing note: `docs/media-lens-classifier-dev-hillclimb.md`.
+
+`claimed_thresholds_met` stays `false` there too. The pilot does not enable live URL, feeds, Medialyst, or classifier.dev.

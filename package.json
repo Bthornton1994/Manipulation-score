@@ -5,7 +5,8 @@
   "description": "Privacy-first on-device language pressure analyzer",
   "type": "module",
   "scripts": {
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "eval:cdev-hillclimb": "node scripts/classifier-dev-hillclimb.js tune"
   },
   "dependencies": {
     "heic2any": "^0.0.4",

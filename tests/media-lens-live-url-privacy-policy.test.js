@@ -375,8 +375,8 @@ test('limitations.html and acceptable-use.html describe the operator preview wit
   const acceptableUse = await readFile('acceptable-use.html', 'utf8');
 
   assert.match(limitations, /always "not checked" in this preview/);
-  assert.match(limitations, /A limited Jev-only live URL preview runs on a separate operator host, ml-jev\.manipulationscore\.com\./);
-  assert.match(limitations, /It is experimental and not production-ready, and the operator can pause it at any time\./);
+  assert.match(limitations, /A limited Jev-only live URL preview is not running on the separate operator host ml-jev\.manipulationscore\.com\./);
+  assert.match(limitations, /When an operator turns the flag on, the preview is still experimental and not production-ready, and the operator can pause it at any time\./);
   assert.match(limitations, /one public page at a time from a short list of hosts the operator allows/);
   assert.match(limitations, /On a page Media Lens recognizes as paywalled, only the visible excerpt is analyzed\./);
   assert.match(limitations, /TypeSafe's Jev classifier/);

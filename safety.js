@@ -943,10 +943,10 @@ function detectSafetyInBlock(blockText, blockOffset, fullNormalized) {
 }
 
 /**
+ * @param {string} normalized
  * @returns {typeof SAFETY_NOTICE & { category?: string, evidenceSpan?: { start: number, end: number, text: string } } | null}
  */
-export function detectSafetyNotice(text) {
-  const normalized = normalizeAnalysisText(text);
+function detectSafetyNoticeOnNormalized(normalized) {
   if (!normalized) return null;
 
   const blocks = splitMessageBlocks(normalized);
@@ -956,4 +956,20 @@ export function detectSafetyNotice(text) {
   }
 
   return null;
+}
+
+/**
+ * @returns {typeof SAFETY_NOTICE & { category?: string, evidenceSpan?: { start: number, end: number, text: string } } | null}
+ */
+export function detectSafetyNotice(text) {
+  // Space mode first: keeps between-token Cc/Cf/CGJ as `\s` (kill\u0000you).
+  const spaced = normalizeAnalysisText(text);
+  const spacedNotice = detectSafetyNoticeOnNormalized(spaced);
+  if (spacedNotice) return spacedNotice;
+
+  // Strip mode: repairs mid-word Cc/Cf/CGJ insertions (k\u0000ill → kill) that
+  // space-mapping would split into `k ill`. Skip when identical to space mode.
+  const stripped = normalizeAnalysisText(text, { controlMode: 'strip' });
+  if (!stripped || stripped === spaced) return null;
+  return detectSafetyNoticeOnNormalized(stripped);
 }

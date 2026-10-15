@@ -6,21 +6,33 @@ const FORMAT_CHARS = /[\u200B-\u200D\uFEFF]/g;
 const COMBINING_GRAPHEME_JOINER = /\u034F/g;
 
 /**
- * Map C0/C1 controls to spaces while preserving newline/CR for paragraph splits.
+ * Map C0/C1 controls while preserving newline/CR for paragraph splits.
  * JS `\s` does not treat most Cc (including NEL U+0085) as whitespace.
+ *
+ * @param {'space' | 'strip'} controlMode
  */
-function mapControlChars(ch) {
-  return ch === '\n' || ch === '\r' ? ch : ' ';
+function mapControlChars(ch, controlMode) {
+  if (ch === '\n' || ch === '\r') return ch;
+  return controlMode === 'strip' ? '' : ' ';
 }
 
 /**
  * Normalize text for scoring and safety matching while preserving paragraph breaks.
  *
- * Between-token Cc/Cf separators are space-mapped (not stripped) so patterns like
- * `\bkill\s+you\b` still match. FORMAT_CHARS / soft hyphen remain strip-mode for
- * mid-word repair; between-word strip-glue for those is tracked separately (#57).
+ * Default `controlMode: 'space'` space-maps Cc/Cf/CGJ so between-token separators
+ * like `kill\u0000you` still match `\bkill\s+you\b` (#126). FORMAT_CHARS / soft
+ * hyphen remain strip-mode for mid-word repair; between-word strip-glue for those
+ * is tracked separately (#57).
+ *
+ * `controlMode: 'strip'` removes Cc/Cf/CGJ instead (except newline/CR) so mid-word
+ * insertions like `k\u0000ill` repair to `kill`. Safety runs both modes.
+ *
+ * @param {string} text
+ * @param {{ controlMode?: 'space' | 'strip' }} [options]
  */
-export function normalizeAnalysisText(text) {
+export function normalizeAnalysisText(text, { controlMode = 'space' } = {}) {
+  const mode = controlMode === 'strip' ? 'strip' : 'space';
+  const mapCfOrCgj = mode === 'strip' ? '' : ' ';
   return (text || '')
     .normalize('NFKC')
     .replace(FORMAT_CHARS, '')
@@ -28,16 +40,16 @@ export function normalizeAnalysisText(text) {
     .replace(SMART_APOSTROPHE, "'")
     .replace(SMART_QUOTE, '"')
     .replace(UNICODE_SPACES, ' ')
-    .replace(/\p{Cc}/gu, mapControlChars)
-    .replace(/\p{Cf}/gu, ' ')
-    .replace(COMBINING_GRAPHEME_JOINER, ' ')
+    .replace(/\p{Cc}/gu, (ch) => mapControlChars(ch, mode))
+    .replace(/\p{Cf}/gu, mapCfOrCgj)
+    .replace(COMBINING_GRAPHEME_JOINER, mapCfOrCgj)
     .replace(/[ \t\f\v]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
-export function normalizeForMatching(text) {
-  return normalizeAnalysisText(text).replace(/\n+/g, ' ');
+export function normalizeForMatching(text, options) {
+  return normalizeAnalysisText(text, options).replace(/\n+/g, ' ');
 }
 
 /**

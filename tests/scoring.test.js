@@ -158,3 +158,39 @@ test('intensity tags use Mild Clear and Strong labels', () => {
   assert.equal(getSignalSeverity({ weight: 18, points: 22 }).label, 'Clear');
   assert.equal(getSignalSeverity({ weight: 18, points: 30 }).label, 'Strong');
 });
+
+test('soft absolutes do not unlock High via pressure_stack on two clear signals', () => {
+  const base =
+    "If you really cared about me you would stay with me. Don't tell anyone about this conversation we are having.";
+  const baseResult = analyzeMessage(base);
+  assert.equal(baseResult.level, 'Moderate');
+  assert.ok(baseResult.score <= 60);
+  assert.ok(!baseResult.leverageInsights.some((i) => i.id === 'pressure_stack'));
+
+  const withSoftAbsolute = `${base} You always do this.`;
+  const softResult = analyzeMessage(withSoftAbsolute);
+  assert.ok(
+    softResult.signals.some((s) => s.id === 'absolutes'),
+    'expected absolutes match on "always"'
+  );
+  assert.equal(softResult.level, 'Moderate');
+  assert.ok(softResult.score <= 60);
+  assert.ok(
+    !softResult.leverageInsights.some((i) => i.id === 'pressure_stack'),
+    'soft absolutes must not count toward pressure_stack'
+  );
+});
+
+test('three clear pressure functions still form pressure_stack High', () => {
+  const result = analyzeMessage(
+    withEvidence(
+      "If you really cared about me, you'd answer right now. Don't tell anyone, I'm the only one who understands you."
+    )
+  );
+  assert.ok(result.signals.some((s) => s.id === 'guilt'));
+  assert.ok(result.signals.some((s) => s.id === 'urgency'));
+  assert.ok(result.signals.some((s) => s.id === 'isolation'));
+  assert.ok(result.leverageInsights.some((i) => i.id === 'pressure_stack'));
+  assert.equal(result.level, 'High');
+  assert.ok(result.score >= 61);
+});

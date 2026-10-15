@@ -11,7 +11,7 @@ Baselines:
 
 Nothing here called Jev or TypeSafe, used an API key, or changed `MEDIA_LENS_ENABLE_LIVE_URL`.
 
-Vision classification: **Aligns with constraints** (`VISION.md` "Uncertainty must be visible", "Evidence comes before a score", and "Decision tests": "Strengthens abstention ... or transparent validation"). Any proposal that changes which observations reach the user is a methodology change and needs owner approval. Fixture metrics must not be presented as real-world accuracy (`VISION.md:47`).
+Vision classification: **Aligns with constraints** (`VISION.md` "Uncertainty must be visible", "Evidence comes before a score", and "Decision tests": "Strengthens abstention ... or transparent validation"). Any proposal that changes which observations reach the user is a methodology change and needs owner approval. Fixture metrics must not be presented as real-world accuracy (`VISION.md:47-49`).
 
 ## 1. The upstream pattern
 
@@ -54,7 +54,7 @@ jev-mcp keeps the model as a typed judge and puts every decision in code:
 | Budget stop | ESTIMATED budget, default warn $20 and stop $30. Live analysis abstains if the store is unavailable, the stop is reached, or the planned call count would exceed the stop. Calls are recorded after the analysis | `media-lens/worker/typesafe-budget.js:12-17`, `media-lens/worker/typesafe-budget.js:170-192`, `media-lens/worker/analyze.js:219-248`, `media-lens/worker/server.js:683-695`, `media-lens/worker/config.js:206-207` |
 | Kill switch | Exact `true` env or an existing kill file asserts it; check errors fail closed; kill wins over every enable flag | `media-lens/worker/config.js:309-324`, `media-lens/worker/config.js:330-337` |
 | Live URL | Requires exact `MEDIA_LENS_ENABLE_LIVE_URL=true`, live enabled, and no kill switch. Default mode is fixture | `media-lens/worker/config.js:75-78`, `media-lens/worker/config.js:334`, `media-lens/worker/server.js:282-318` |
-| Optional cascade | When `MEDIA_LENS_ENABLE_CLASSIFIER_DEV=true`, spans with `review` disposition or confidence `< 0.7` escalate to classifier.dev; non-agreeing outcomes set `needs_review` | `media-lens/worker/classifier-dev/cascade.js:70-105`, `media-lens/worker/classifier-dev/contract.js:29`, `media-lens/worker/classifier-dev/cascade.js:340-365`, `media-lens/worker/config.js:335` |
+| Optional cascade | When `MEDIA_LENS_ENABLE_CLASSIFIER_DEV=true`, `review` disposition and confidence `< 0.7` are escalation reasons, among others (including unavailable or invalid input, close probabilities, high-impact choices, and injected or other deterministic conflicts); non-agreeing outcomes set `needs_review` | `media-lens/worker/classifier-dev/cascade.js:70-105`, `media-lens/worker/classifier-dev/contract.js:29`, `media-lens/worker/classifier-dev/cascade.js:340-365`, `media-lens/worker/config.js:335` |
 | Shadow decision contract | Lab-only `auto` / `human_review` / `hold` mapping, margin gate 0.15, `should_abstain` question. Not called from `analyze.js` | `docs/jev-usage-lab/02-decision-contract.md:1-3`, `docs/jev-usage-lab/02-decision-contract.md:44-80` |
 
 ### Budget reservation (#150): not on main
@@ -128,7 +128,7 @@ Upstream says its thresholds are starting points to tune against your own data (
 - The lab manifest has 19 cases (12 calibration, 4 holdout, 3 adversarial) with confidence bins `[0,0.5)`, `[0.5,0.7)`, `[0.7,1]` (`docs/jev-usage-lab/06-evaluation-harness.md:39`). Those labels are for the proposed narrow question set (`authorial_vs_quotation`, `emotionally_loaded_language`, `false_dilemma`, and others), not for production `influence_signal` (`media-lens/fixtures/jev-usage-lab/manifest.json`).
 - No fixture comes from a labelled real-article anchor. Every answer file is recorded or synthetic. That means no current number, here or in the lab report, can support an accuracy, sensitivity, or specificity claim (`VISION.md:47-49`, `docs/jev-usage-lab/09-accuracy-abstention-report.md:5`).
 
-The gap: there is no set of human-labelled anchor spans for each production option, with recorded `jev-1.13.0` answers and a held-out split, against which the five production cutoffs and the 0.5 review flag could be checked or fitted.
+The gap: there is no set of human-labelled anchor spans for each production option, with recorded `jev-1.13.0` answers and a held-out split, against which the four fusion cutoffs and the 0.5 review flag could be checked or fitted.
 
 ## 5. Proposals (not authorized)
 

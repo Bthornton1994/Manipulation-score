@@ -942,6 +942,18 @@ function detectSafetyInBlock(blockText, blockOffset, fullNormalized) {
   return stalking;
 }
 
+/** Immediate-harm patterns can span two short chat bubbles separated by a blank line. */
+function detectSafetyAcrossAdjacentBlocks(blocks, fullNormalized) {
+  for (let i = 0; i < blocks.length - 1; i += 1) {
+    const left = blocks[i];
+    const right = blocks[i + 1];
+    const joined = `${left.text} ${right.text}`;
+    const notice = detectSafetyInBlock(joined, left.start, fullNormalized);
+    if (notice) return notice;
+  }
+  return null;
+}
+
 /**
  * @returns {typeof SAFETY_NOTICE & { category?: string, evidenceSpan?: { start: number, end: number, text: string } } | null}
  */
@@ -954,6 +966,9 @@ export function detectSafetyNotice(text) {
     const notice = detectSafetyInBlock(block.text, block.start, normalized);
     if (notice) return notice;
   }
+
+  const crossBlock = detectSafetyAcrossAdjacentBlocks(blocks, normalized);
+  if (crossBlock) return crossBlock;
 
   return null;
 }

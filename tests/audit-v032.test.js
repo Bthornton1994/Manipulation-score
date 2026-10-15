@@ -50,6 +50,27 @@ test('cross-message threat is not suppressed by prior benign message', () => {
   assert.ok(notice, 'expected safety notice in second message block');
 });
 
+test('cross-block confinement still triggers safety notice', () => {
+  const text = 'You are not leaving\n\nuntil I say so';
+  assert.ok(detectSafetyNotice(text));
+  const result = analyzeMessage(text);
+  assert.ok(result.safetyNotice, 'thread analysis should surface cross-block confinement');
+});
+
+test('cross-block stalking phrase still triggers safety notice', () => {
+  const text = 'I will find you\n\neven if you change your address';
+  assert.ok(detectSafetyNotice(text));
+  const result = analyzeMessage(text);
+  assert.ok(result.safetyNotice, 'thread analysis should surface cross-block stalking threat');
+});
+
+test('cross-block self-harm coercion still triggers safety notice', () => {
+  const text = 'I have all the pills ready\n\nif you decide to leave me';
+  assert.ok(detectSafetyNotice(text));
+  const result = analyzeMessage(text);
+  assert.ok(result.safetyNotice, 'thread analysis should surface cross-block self-harm coercion');
+});
+
 test('zero-width character inside kill still triggers safety', () => {
   const text = 'I will k\u200Bill you tonight after everyone leaves the house.';
   assert.ok(detectSafetyNotice(text));

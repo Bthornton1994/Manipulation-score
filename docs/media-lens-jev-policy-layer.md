@@ -25,10 +25,10 @@ jev-mcp keeps the model as a typed judge and puts every decision in code:
 | Unknown or low confidence escalates | Unknown confidence never satisfies a threshold | `jev-mcp@435d5d4:src/lib.ts:376-416` |
 | Worst action wins | Any `escalate` beats `review` beats `auto` | `jev-mcp@435d5d4:src/lib.ts:418-423` |
 | Truncated input never stays `auto` | Demoted to `review` | `jev-mcp@435d5d4:src/lib.ts:350-353` |
-| Malformed answer fails closed | Screen returns `review` with `status: invalid_response`; audit escalates | `jev-mcp@435d5d4:src/server.ts:353-371`, `src/server.ts:1443-1447` |
+| Malformed answer fails closed | Screen returns `review` with `status: invalid_response`; audit escalates | `jev-mcp@435d5d4:src/server.ts:353-374`, `src/server.ts:1443-1447` |
 | Escape hatches | `ask_user`, `investigate`, `none` let the model decline to rank; `escaped: true` marks it | `jev-mcp@435d5d4:src/lib.ts:164-169`, `README.md:381` |
 | Escalation by withdrawal | `escalate_on_contradiction` returns `selected: null`, `status: "escalate"`, and never re-selects the runner-up | `jev-mcp@435d5d4:src/server.ts:780-786`, `src/server.ts:866-886`, `README.md:383` |
-| Jev only flags; the gate decides | Hook gate emits `deny` only on a confident, valid `block`; errors, timeouts, invalid answers and escapes defer with exit 0. There is no auto-allow | `jev-mcp@435d5d4:examples/hook-gate.md:31-36`, `examples/hook-gate.md:62` |
+| Jev only flags; the gate decides | Hook gate emits `deny` only on a confident, valid `block`; errors, timeouts, invalid answers and escapes defer with exit 0. `--ask` maps `ask_user` to `permissionDecision: "ask"` for Claude Code. There is no auto-allow | `jev-mcp@435d5d4:examples/hook-gate.md:31-36`, `examples/hook-gate.md:60-61`, `examples/hook-gate.md:62` |
 | Thresholds are starting points | "Tune them against your own data before you enforce them" | `jev-mcp@435d5d4:README.md:739-740` |
 | Confidence is not correctness | Choice `confidence` measures how peaked the distribution is, not the probability the answer is right | `jev-mcp@435d5d4:README.md:735` |
 | Model default | `JEV_MCP_MODEL ?? "jev-latest"` | `jev-mcp@435d5d4:src/server.ts:88` |
@@ -48,14 +48,14 @@ jev-mcp keeps the model as a typed judge and puts every decision in code:
 | Dimension failure gate | If more than 20% of calls fail, all Jev language observations are dropped and Language is unreviewed | `media-lens/worker/fusion.js:19`, `media-lens/worker/fusion.js:369-381` |
 | Strength cutoffs | Top probability `>= 0.60` is `observed`, `>= 0.45` is `candidate`, else dropped | `media-lens/worker/fusion.js:16-17`, `media-lens/worker/fusion.js:124-132` |
 | Deterministic marker rule | `certainty_beyond_evidence` and `vague_authority` cannot stay `observed` without a regex marker | `media-lens/worker/fusion.js:134-141` |
-| Injection | Regex-detected injection forces `candidate` and `needs_review`, plus a span abstention | `media-lens/worker/fusion.js:42-47`, `media-lens/worker/fusion.js:143-151`, `media-lens/worker/fusion.js:346-354` |
+| Injection | Regex-detected injection creates a span abstention; it forces `candidate` strength and `needs_review` on an observation only after the 0.45 strength gate passes | `media-lens/worker/fusion.js:15-17`, `media-lens/worker/fusion.js:124-132`, `media-lens/worker/fusion.js:143-151`, `media-lens/worker/fusion.js:346-354` |
 | Quoted noul | `noul >= 0.7` moves an `authorial` span to `uncertain` only, never to `quoted` | `media-lens/worker/fusion.js:18`, `media-lens/worker/fusion.js:77-97` |
 | Call cap | Live analysis abstains when spans exceed `maxJevCallsPerAnalysis` (default 160) or the adapter reports the cap reached | `media-lens/worker/config.js:42`, `media-lens/worker/analyze.js:207-218`, `media-lens/worker/analyze.js:276-286`, `media-lens/worker/adapters/jev.js:520-530` |
 | Budget stop | ESTIMATED budget, default warn $20 and stop $30. Live analysis abstains if the store is unavailable, the stop is reached, or the planned call count would exceed the stop. Calls are recorded after the analysis | `media-lens/worker/typesafe-budget.js:12-17`, `media-lens/worker/typesafe-budget.js:170-192`, `media-lens/worker/analyze.js:219-248`, `media-lens/worker/server.js:683-695`, `media-lens/worker/config.js:206-207` |
 | Kill switch | Exact `true` env or an existing kill file asserts it; check errors fail closed; kill wins over every enable flag | `media-lens/worker/config.js:309-324`, `media-lens/worker/config.js:330-337` |
 | Live URL | Requires exact `MEDIA_LENS_ENABLE_LIVE_URL=true`, live enabled, and no kill switch. Default mode is fixture | `media-lens/worker/config.js:75-78`, `media-lens/worker/config.js:334`, `media-lens/worker/server.js:282-318` |
 | Optional cascade | When `MEDIA_LENS_ENABLE_CLASSIFIER_DEV=true`, `review` disposition and confidence `< 0.7` are escalation reasons, among others (including unavailable or invalid input, close probabilities, high-impact choices, and injected or other deterministic conflicts); non-agreeing outcomes set `needs_review` | `media-lens/worker/classifier-dev/cascade.js:70-105`, `media-lens/worker/classifier-dev/contract.js:29`, `media-lens/worker/classifier-dev/cascade.js:340-365`, `media-lens/worker/config.js:335` |
-| Shadow decision contract | Lab-only `auto` / `human_review` / `hold` mapping, margin gate 0.15, `should_abstain` question. Not called from `analyze.js` | `docs/jev-usage-lab/02-decision-contract.md:1-3`, `docs/jev-usage-lab/02-decision-contract.md:44-80` |
+| Shadow decision contract | Lab-only mapping uses escalation `none` / `human_review` / `hold` and final actions `shadow_record` / `no_ui_change` / `shadow_abstain` / `hold_for_human`; margin gate 0.15 and `should_abstain` question. Not wired into `analyze.js` | `docs/jev-usage-lab/02-decision-contract.md:1-3`, `docs/jev-usage-lab/02-decision-contract.md:48-50`, `docs/jev-usage-lab/02-decision-contract.md:64`, `docs/jev-usage-lab/02-decision-contract.md:72-76`, `docs/jev-usage-lab/08-risks-assumptions.md:40` |
 
 ### Budget reservation (#150): not on main
 
@@ -99,7 +99,7 @@ Fact: `analyze()` passes `jevAnswersBySpanId` and `jevFailedSpanIds` to `fuse()`
 
 Local offline reproduction at `076a2720` (no network, no file change): an answer with `urgency` probability 0.62 and confidence 0.30 passes `validateAndSanitizeAnswers` with `review: true`, and `fuse()` then emits an `urgency` observation with `strength: observed` and `review_status: auto`.
 
-The shadow decision contract already says confidence below 0.5 should route to `human_review` (`docs/jev-usage-lab/02-decision-contract.md:50`, `docs/jev-usage-lab/02-decision-contract.md:72`), but it is not wired into `analyze.js` (`docs/jev-usage-lab/02-decision-contract.md:66`).
+The shadow decision contract already says confidence below 0.5 should route to `human_review` (`docs/jev-usage-lab/02-decision-contract.md:50`, `docs/jev-usage-lab/02-decision-contract.md:72`), but it is not wired into `analyze.js` (`docs/jev-usage-lab/08-risks-assumptions.md:40`).
 
 UNKNOWN: whether a live `jev-1.13.0` answer can have top probability at or above 0.45 and confidence below 0.5 at the same time. That depends on TypeSafe's confidence formula, which upstream describes only as peakedness scaled from 0 to 1 (`jev-mcp@435d5d4:README.md:735`). Fixture mode does not constrain confidence against the probabilities (`media-lens/worker/adapters/jev.js:500`).
 
@@ -144,7 +144,7 @@ Each proposal needs an owner decision. P1, P2, P4 and P5 change what users see a
 | P6 | Merge or close PR #150 deliberately so the budget stop is enforced atomically | G5 | Vision is silent (operational control) | Separate review lane. Not part of this note |
 | P7 | Add a runtime check that the computed question-set hash equals the committed hash, failing closed to `engine_unavailable` | Hash pinning currently test-only | Vision is silent | Low priority. The test already guards CI (`tests/media-lens-jev-adapter.test.js:62`) |
 
-Not proposed: adopting jev-mcp, its MCP server, or `jev-latest`. Media Lens's pinned `jev-1.13.0` and forbidden `jev-latest` (`media-lens/worker/jev-pin-verify.js:30`) are stricter than the upstream default (`jev-mcp@435d5d4:src/server.ts:88`). Adding jev-mcp as a dependency would need the separate review in `docs/EXTERNAL-AGENT-REPOSITORIES.md`.
+Not proposed: adopting jev-mcp, its MCP server, or `jev-latest`. Media Lens's pinned `jev-1.13.0` and forbidden `jev-latest` (`media-lens/worker/jev-pin-verify.js:30`) are stricter than the upstream default (`jev-mcp@435d5d4:src/server.ts:88`). Adding jev-mcp as a dependency remains an owner gate.
 
 ## 6. UNKNOWN
 

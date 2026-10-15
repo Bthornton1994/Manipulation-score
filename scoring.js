@@ -376,9 +376,12 @@ function isOffsetExcluded(signalId, text, offset) {
   }
 
   const rules = EXCLUSION_CONTEXT_RULES[signalId];
-  if (rules?.some((rule) => rule.test(context) || rule.test(clause.text))) return true;
+  const clauseRelativeStart = offset.start - clause.start;
+  const clauseRelativeEnd = offset.end - clause.start;
+  const clauseContext = getMatchContext(clause.text, clauseRelativeStart, clauseRelativeEnd);
+  if (rules?.some((rule) => rule.test(clauseContext))) return true;
 
-  if (signalId === 'urgency' && /(?:^|\s)no\s+[^.!?]{0,30}right\s+now/i.test(context)) return true;
+  if (signalId === 'urgency' && /(?:^|\s)no\s+[^.!?]{0,30}right\s+now/i.test(clause.text)) return true;
   if (signalId === 'absolutes' && /(?:care|understand|choices|invited|welcome|required\s+to\s+participate|feel\s+safe)/i.test(context)) {
     if (/always\s+have\s+choices|everyone\s+is\s+invited|nobody\s+is\s+required|never\s+(?:hurt|harm|kill)\s+you/i.test(context)) return true;
   }

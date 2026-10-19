@@ -24,7 +24,7 @@
     </header>
     <main class="legal-content">
       <h1>Methodology</h1>
-      <p class="legal-updated">Last updated: September 26, 2026</p>
+      <p class="legal-updated">Last updated: October 19, 2026</p>
 
       <h2>What Clarity measures</h2>
       <p>Clarity screens observable <strong>language functions</strong> in a pasted message, patterns that may compress informed, voluntary choice. Examples include guilt leverage, forced urgency, isolation framing, conditional access, and similar pressure functions described in the taxonomy below.</p>
@@ -63,6 +63,9 @@
       <h2>Safety notices (separate from scoring)</h2>
       <p>Safety classification runs before pattern scoring. When language about violence, weapons, confinement, self-harm coercion, or contextual stalking is detected, Clarity shows a <strong>safety notice</strong> instead of a manipulation score. This is not a safety assessment and cannot determine whether you are in danger.</p>
       <p>Stalking-related language uses a two-stage model: intrusive behaviors paired with menace, severe intrusion, or multiple eligible behaviors. Explicit future threats and continuous present-tense stalking with refusal phrases are handled separately.</p>
+
+      <h2>Text normalization (before safety and scoring)</h2>
+      <p>Clarity normalizes pasted text in the browser before safety checks and pattern matching. The pipeline applies Unicode <strong>NFKC</strong>, maps smart quotes and non-breaking spaces to ordinary ASCII, removes zero-width and other invisible <strong>format</strong> characters (including soft hyphens), and maps most <strong>control</strong> characters (C0/C1) and remaining format characters between words to spaces so phrases such as “kill you” cannot be hidden by inserting null bytes, direction overrides, or other invisible separators. Newlines are preserved for paragraph splits. This is regression-tested; it is not a guarantee against every evasion tactic.</p>
 
       <h2>Context handling</h2>
       <p>Attribution and context rules are applied locally to quotations and clauses:</p>

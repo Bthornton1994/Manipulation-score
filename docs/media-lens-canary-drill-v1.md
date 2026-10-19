@@ -124,7 +124,7 @@ Do not put IP literals, credentials, or query strings in the allowlist field rec
 Two equivalent controls, re-checked on each `/analyze` (kill-file `stat` each time):
 
 1. `MEDIA_LENS_KILL_SWITCH=true` — exact string `true` only.
-2. `touch` the path in `MEDIA_LENS_KILL_SWITCH_FILE` (existence, not file contents). Permission, IO, and other non-`ENOENT` `stat` errors on that path fail-closed (treat as asserted). Only a missing path is not a kill.
+2. `touch` the path in `MEDIA_LENS_KILL_SWITCH_FILE` (existence, not file contents). Permission, IO, and other non-`ENOENT` `stat` errors on that path fail-closed (treat as asserted). Only a missing path (`ENOENT`) is not a kill. A path with any segment longer than 255 characters asserts without `stat`, even when the OS would report `ENOENT` for an over-long segment.
 
 `TRUE`, `1`, and `yes` do not assert the kill switch.
 

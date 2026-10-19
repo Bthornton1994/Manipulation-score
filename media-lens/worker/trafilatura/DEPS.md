@@ -25,6 +25,8 @@ media-lens/worker/trafilatura/install.sh /opt/media-lens/trafilatura-venv
 
 The script runs `python3 -m venv` and `pip install -r media-lens/worker/trafilatura/requirements.txt`. It does not change live flags, contact Jev, or deploy by itself.
 
+On a developer machine without this venv, `extract_html.py` may return `python_version`, `spawn_failed`, or `extractor_unavailable`. Preparation then abstains before Jev. Automated tests that need extraction on such hosts use optional seams in `tests/helpers/python-extractor-host.js`; CI always installs the pin above and exercises the real extractor (`tests/media-lens-trafilatura.test.js`).
+
 ## Network refusal
 
 `extract_html.py` is not a kernel network namespace. Before importing the pin, it replaces these Python methods so they raise `RuntimeError("network_refused")`:

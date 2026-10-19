@@ -45,3 +45,15 @@ These numbers exist so a later owner-approved evaluation has named gates. They a
 | Disagreement must become review, never a silent winner | policy requirement | harness checks software behavior only |
 
 Do not publish these as sensitivity, specificity, fairness, or real-world accuracy.
+
+## Optional dev tooling (not CI, not production)
+
+These paths are for local evaluation only. They do not run in default CI, do not enable live URL or live Jev, and must not be cited as release gates.
+
+| Tool | Location | Purpose |
+| --- | --- | --- |
+| DeepEval sidecar | `media-lens/eval/deepeval/` | Offline fixture label-match check on recorded classifier-dev paths; see `media-lens/eval/deepeval/README.md`. Requires a local Python venv; `DEEPEVAL_TELEMETRY_OPT_OUT=YES`. |
+| Jev trace helper | `media-lens/worker/dev-tracing/jev-trace.js` | Redacted local tracing around Jev adapter calls for debugging; never ships to the browser bundle. |
+| Hermetic extractor seams | `tests/helpers/python-extractor-host.js` | When `python3` is missing, too old, or lacks the pinned Trafilatura stack, selected Media Lens tests inject deterministic extract/language stubs so security and ops suites still run; CI uses the real extractor from `media-lens/worker/trafilatura/install.sh`. |
+
+Regression coverage for the Node harness remains `node --test tests/media-lens-classifier-dev*.test.js` and the main `tests/*.test.js` suite.

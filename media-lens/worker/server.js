@@ -348,17 +348,8 @@ function liveUrlGate({ payload, config, audit, consumeLiveUrl, consumeLiveUrlHos
     return { error: 'live_url_not_allowlisted', status: 400, message: 'This host is not on the operator URL allowlist.' };
   }
 
-  if (!consumeLiveUrl()) {
-    audit.emit(AUDIT_EVENTS.RATE_LIMIT, {
-      mode: config.mode,
-      input_mode: 'url',
-      error: 'rate_limited',
-      limiter: 'live_url',
-      ...urlFields
-    });
-    return { error: 'rate_limited', status: 429, message: 'Too many live URL attempts. Wait a minute and try again.' };
-  }
-
+  // Check per-host limits before the global live-URL budget so a host-level
+  // reject does not burn quota that other allowlisted hosts still need.
   const hostKeys = rateLimitHostKeys(parsedHost);
   for (const key of hostKeys) {
     if (!consumeLiveUrlHost(key)) {
@@ -371,6 +362,17 @@ function liveUrlGate({ payload, config, audit, consumeLiveUrl, consumeLiveUrlHos
       });
       return { error: 'rate_limited', status: 429, message: 'Too many live URL attempts for this host. Wait a minute and try again.' };
     }
+  }
+
+  if (!consumeLiveUrl()) {
+    audit.emit(AUDIT_EVENTS.RATE_LIMIT, {
+      mode: config.mode,
+      input_mode: 'url',
+      error: 'rate_limited',
+      limiter: 'live_url',
+      ...urlFields
+    });
+    return { error: 'rate_limited', status: 429, message: 'Too many live URL attempts. Wait a minute and try again.' };
   }
 
   return { ok: true };

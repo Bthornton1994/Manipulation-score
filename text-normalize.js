@@ -4,6 +4,12 @@ const UNICODE_SPACES = /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g;
 const FORMAT_CHARS = /[\u200B-\u200D\uFEFF]/g;
 /** Combining grapheme joiner — Mn, not Cf; same between-token joiner class as U+2060. */
 const COMBINING_GRAPHEME_JOINER = /\u034F/g;
+/**
+ * Variation Selectors Supplement (U+E0100–U+E01EF) — Mn Default_Ignorable, not Cc/Cf,
+ * not JS `\s`. Distinct from BMP variation selectors U+FE00–U+FE0F (open #190).
+ */
+const VS_SUPPLEMENT_CHARS = /[\u{E0100}-\u{E01EF}]/gu;
+const MIDWORD_VS_SUPPLEMENT = /(?<=\p{L})[\u{E0100}-\u{E01EF}]+(?=\p{L})/gu;
 
 /**
  * Map C0/C1 controls to spaces while preserving newline/CR for paragraph splits.
@@ -14,11 +20,25 @@ function mapControlChars(ch) {
 }
 
 /**
+ * Strip Variation Selectors Supplement marks that sit between letters.
+ *
+ * Default normalization space-maps these so between-token separators still match
+ * (`kill\u{E0100}you` → `kill you`). The same characters mid-word (`ki\u{E0100}ll`)
+ * become `ki ll` under space-mapping and break `\bkill\s+you\b`. Safety dual-paths
+ * this repair on the original string after the default normalize.
+ */
+export function repairMidwordVsSupplement(text) {
+  return (text || '').normalize('NFKC').replace(MIDWORD_VS_SUPPLEMENT, '');
+}
+
+/**
  * Normalize text for scoring and safety matching while preserving paragraph breaks.
  *
  * Between-token Cc/Cf separators are space-mapped (not stripped) so patterns like
  * `\bkill\s+you\b` still match. FORMAT_CHARS / soft hyphen remain strip-mode for
  * mid-word repair; between-word strip-glue for those is tracked separately (#57).
+ * Variation Selectors Supplement are space-mapped the same way (they are not `\s`);
+ * mid-word repair is handled in safety via `repairMidwordVsSupplement`.
  */
 export function normalizeAnalysisText(text) {
   return (text || '')
@@ -28,6 +48,7 @@ export function normalizeAnalysisText(text) {
     .replace(SMART_APOSTROPHE, "'")
     .replace(SMART_QUOTE, '"')
     .replace(UNICODE_SPACES, ' ')
+    .replace(VS_SUPPLEMENT_CHARS, ' ')
     .replace(/\p{Cc}/gu, mapControlChars)
     .replace(/\p{Cf}/gu, ' ')
     .replace(COMBINING_GRAPHEME_JOINER, ' ')

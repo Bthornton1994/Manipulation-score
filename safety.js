@@ -3,7 +3,12 @@
  * Direct violence is immediate; stalking requires behavior plus menace or severe intrusion.
  */
 
-import { normalizeAnalysisText, normalizeForMatching, splitMessageBlocks } from './text-normalize.js';
+import {
+  normalizeAnalysisText,
+  normalizeForMatching,
+  repairMidwordVsSupplement,
+  splitMessageBlocks
+} from './text-normalize.js';
 
 export const SAFETY_NOTICE = {
   id: 'conditional_harm_language',
@@ -943,10 +948,10 @@ function detectSafetyInBlock(blockText, blockOffset, fullNormalized) {
 }
 
 /**
+ * @param {string} normalized
  * @returns {typeof SAFETY_NOTICE & { category?: string, evidenceSpan?: { start: number, end: number, text: string } } | null}
  */
-export function detectSafetyNotice(text) {
-  const normalized = normalizeAnalysisText(text);
+function detectSafetyNoticeOnNormalized(normalized) {
   if (!normalized) return null;
 
   const blocks = splitMessageBlocks(normalized);
@@ -956,4 +961,21 @@ export function detectSafetyNotice(text) {
   }
 
   return null;
+}
+
+/**
+ * @returns {typeof SAFETY_NOTICE & { category?: string, evidenceSpan?: { start: number, end: number, text: string } } | null}
+ */
+export function detectSafetyNotice(text) {
+  // Default normalize first: space-maps between-token VS Supplement
+  // (`kill\u{E0100}you` → `kill you`).
+  const normalized = normalizeAnalysisText(text);
+  const notice = detectSafetyNoticeOnNormalized(normalized);
+  if (notice) return notice;
+
+  // Mid-word marks (`ki\u{E0100}ll`) space-map into `ki ll` and miss threat verbs.
+  // Repair only letter-bounded insertions on the original string, then normalize.
+  const repaired = normalizeAnalysisText(repairMidwordVsSupplement(text));
+  if (!repaired || repaired === normalized) return null;
+  return detectSafetyNoticeOnNormalized(repaired);
 }

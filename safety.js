@@ -40,6 +40,37 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+run\s+you\s+down\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+run\s+you\s+down\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern:
+      /\b(?:i will|i'll)\s+hit\s+you\s+with\s+(?:my\s+|the\s+|a\s+)?(?:car|truck|vehicle)\b(?!\s*keys)/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern:
+      /\b(?:i'?m|i am)\s+going\s+to\s+hit\s+you\s+with\s+(?:my\s+|the\s+|a\s+)?(?:car|truck|vehicle)\b(?!\s*keys)/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i will|i'll)\s+put\s+(?:a\s+)?pillow\s+over\s+your\s+face\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern: /\b(?:i'?m|i am)\s+going\s+to\s+put\s+(?:a\s+)?pillow\s+over\s+your\s+face\b/gi
+  },
+  {
+    id: 'direct_violence',
+    pattern:
+      /\bpillow\s+over\s+your\s+face\b[^.!?]{0,50}\b(?:stop\s+breathing|suffocat(?:e|ing)|smother(?:ed|ing)?|die|dies|dead)\b/gi
+  },
+  {
+    id: 'direct_violence',
     pattern: /\b(?:i will|i'll)\s+smash\s+your\s+face\b/gi
   },
   {

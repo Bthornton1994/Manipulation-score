@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 test('history-off analysis does not write raw text to localStorage', async () => {
   const app = await readFile('app.js', 'utf8');
   assert.match(app, /isHistoryEnabledInThisTab/);
-  const saveBlock = app.slice(app.indexOf('function saveHistory'), app.indexOf('function loadHistory'));
+  const saveBlock = app.slice(app.indexOf('async function saveHistory'), app.indexOf('function loadHistory'));
   assert.match(saveBlock, /isHistoryEnabledInThisTab\(\)/);
 });
 

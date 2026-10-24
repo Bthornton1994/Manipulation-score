@@ -13,6 +13,22 @@ test('service worker uses network-first for safety-critical assets', async () =>
   assert.match(worker, /cacheFirst/);
 });
 
+test('service worker cache fallback ignores query strings for shell assets', async () => {
+  const [worker, analyzeHtml, learnHtml] = await Promise.all([
+    readFile('service-worker.js', 'utf8'),
+    readFile('analyze.html', 'utf8'),
+    readFile('learn.html', 'utf8')
+  ]);
+
+  // Versioned stylesheet URLs and Learn example deep-links must still resolve
+  // to APP_SHELL entries cached without search params when offline.
+  assert.match(worker, /ignoreSearch:\s*true/);
+  assert.match(worker, /caches\.match\(request,\s*CACHE_MATCH_OPTIONS\)/);
+  assert.match(worker, /'\.\/styles\.css'/);
+  assert.match(analyzeHtml, /styles\.css\?v=/);
+  assert.match(learnHtml, /analyze\.html\?e=/);
+});
+
 test('service worker includes history-storage in app shell', async () => {
   const worker = await readFile('service-worker.js', 'utf8');
   assert.match(worker, /history-storage\.js/);

@@ -158,3 +158,27 @@ test('intensity tags use Mild Clear and Strong labels', () => {
   assert.equal(getSignalSeverity({ weight: 18, points: 22 }).label, 'Clear');
   assert.equal(getSignalSeverity({ weight: 18, points: 30 }).label, 'Strong');
 });
+
+test('benign exclusion phrases in a prior clause do not suppress coercive signals after but', () => {
+  const text =
+    'There is no pressure to decide right now, but you need to answer immediately or I will be very upset with you today please.';
+  const result = analyzeMessage(text);
+  assert.equal(result.abstained, false);
+  assert.ok(result.score >= 31, `expected Moderate+ score, got ${result.score}`);
+  assert.ok(
+    result.signals.some((signal) => signal.id === 'urgency'),
+    'expected urgency signal after benign no-pressure clause'
+  );
+});
+
+test('benign exclusion phrases earlier in the same clause do not suppress distant coercive urgency', () => {
+  const text =
+    'No pressure to answer quickly and you are completely okay to say no to me, you must respond immediately this is your last chance before it is too late.';
+  const result = analyzeMessage(text);
+  assert.equal(result.abstained, false);
+  assert.ok(result.score >= 31, `expected Moderate+ score, got ${result.score}`);
+  assert.ok(
+    result.signals.some((signal) => signal.id === 'urgency'),
+    'expected urgency signal when benign phrasing precedes coercive language in one clause'
+  );
+});

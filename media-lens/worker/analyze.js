@@ -15,6 +15,27 @@ import { enginePreparation } from './prepare.js';
 
 const SPAN_ROLES_EXCLUDED_FROM_JEV = new Set(['boilerplate', 'byline_meta']);
 const TIMED_OUT = Symbol('media-lens-analysis-timed-out');
+/** Max wait after per-analysis timeout for live Jev to report billed calls post-abort. */
+const POST_ABORT_JEV_CALLS_GRACE_MS = 500;
+
+function waitForLiveJevCallsAfterTimeout({ pipelinePromise, getCalls, setCalls, graceMs = POST_ABORT_JEV_CALLS_GRACE_MS }) {
+  const deadline = Date.now() + graceMs;
+  return Promise.race([
+    pipelinePromise.then((result) => {
+      if (result && result !== TIMED_OUT) {
+        const reported = result?.engine?.jev?.calls;
+        if (Number.isInteger(reported) && reported > 0) setCalls(reported);
+      }
+    }, () => {}),
+    new Promise((resolve) => {
+      const poll = () => {
+        if (getCalls() > 0 || Date.now() >= deadline) resolve();
+        else setTimeout(poll, 10);
+      };
+      poll();
+    })
+  ]);
+}
 
 function oversizedInputMessage(prepared) {
   if (prepared.artifact.inputMode === 'url') return LIVE_URL_OVERSIZED_MESSAGE;
@@ -422,13 +443,13 @@ export async function analyze({
       // and report its calls — but never wait forever (hanging adapters
       // must not block the timeout abstention).
       if (liveJevCalls === 0 && jevAdapter.mode === 'live') {
-        await Promise.race([
-          pipelinePromise.then(
-            () => {},
-            () => {}
-          ),
-          new Promise((resolve) => setTimeout(resolve, 100))
-        ]);
+        await waitForLiveJevCallsAfterTimeout({
+          pipelinePromise,
+          getCalls: () => liveJevCalls,
+          setCalls: (n) => {
+            liveJevCalls = n;
+          }
+        });
       } else {
         // Keep the losing pipeline from becoming an unhandled rejection if
         // it later throws after abort, without delaying the response.

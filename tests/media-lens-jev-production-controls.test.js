@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { openSync, writeFileSync as fsWriteFileSync } from 'node:fs';
+import { openSync, readFileSync as fsReadFileSync, renameSync, writeFileSync as fsWriteFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from '../media-lens/worker/server.js';
@@ -672,6 +672,122 @@ test('R2g: a budget record that becomes unreadable after startup fails closed', 
   await writeFile(storePath, '{not-json', 'utf8');
   assert.equal(budget.isStopped(), true);
   assert.equal(budget.isStoreUnavailable(), true);
+});
+
+test('R2g2: month-roll getSnapshot must not wipe peer same-month durable spend on a transient read failure', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'media-lens-budget-month-wipe-'));
+  const storePath = join(dir, 'typesafe-budget.json');
+  let nowMs = Date.UTC(2026, 8, 15);
+  let failReads = 0;
+  const io = {
+    readFileSync(path, encoding) {
+      if (path === storePath && failReads > 0) {
+        failReads -= 1;
+        throw Object.assign(new Error('EIO'), { code: 'EIO' });
+      }
+      return fsReadFileSync(path, encoding);
+    }
+  };
+
+  const stale = createTypesafeBudget({
+    estimatedUsdPerCall: 0.002,
+    warnUsd: 20,
+    stopUsd: 30,
+    storePath,
+    io,
+    now: () => nowMs
+  });
+  stale.recordCalls(100);
+  assert.equal(stale.getSnapshot().month, '2026-09');
+
+  // Peer already recorded October spend near the stop.
+  nowMs = Date.UTC(2026, 9, 2);
+  await writeFile(
+    storePath,
+    `${JSON.stringify({
+      version: 1,
+      month: '2026-10',
+      calls: 14000,
+      estimatedTokens: 21000000,
+      warnEmitted: true
+    })}\n`,
+    'utf8'
+  );
+
+  // Fail both refreshFromStore and roll's follow-up read so the process cannot
+  // learn peer October spend before deciding whether to persist a roll.
+  failReads = 2;
+  const snap = stale.getSnapshot();
+  assert.equal(snap.month, '2026-10');
+  assert.equal(snap.calls, 0);
+  assert.equal(snap.storeUnavailable, true);
+  assert.equal(JSON.parse(await readFile(storePath, 'utf8')).calls, 14000);
+
+  const reloaded = createTypesafeBudget({
+    estimatedUsdPerCall: 0.002,
+    warnUsd: 20,
+    stopUsd: 30,
+    storePath,
+    now: () => nowMs
+  });
+  assert.equal(reloaded.getSnapshot().calls, 14000);
+  assert.equal(reloaded.wouldExceed(2000), true);
+});
+
+test('R2g3: month-roll recordCalls write failure must not persist zeros over peer October spend', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'media-lens-budget-month-rename-'));
+  const storePath = join(dir, 'typesafe-budget.json');
+  let nowMs = Date.UTC(2026, 8, 15);
+  let renameFails = 0;
+  const io = {
+    renameSync(from, to) {
+      if (renameFails > 0) {
+        renameFails -= 1;
+        throw Object.assign(new Error('EXDEV'), { code: 'EXDEV' });
+      }
+      return renameSync(from, to);
+    }
+  };
+
+  const stale = createTypesafeBudget({
+    estimatedUsdPerCall: 0.002,
+    warnUsd: 20,
+    stopUsd: 30,
+    storePath,
+    io,
+    now: () => nowMs
+  });
+  stale.recordCalls(50);
+
+  nowMs = Date.UTC(2026, 9, 2);
+  await writeFile(
+    storePath,
+    `${JSON.stringify({
+      version: 1,
+      month: '2026-10',
+      calls: 14000,
+      estimatedTokens: 21000000,
+      warnEmitted: true
+    })}\n`,
+    'utf8'
+  );
+
+  renameFails = 1;
+  const result = stale.recordCalls(1);
+  assert.equal(result.calls, 14001);
+  assert.equal(stale.isStoreUnavailable(), true);
+  assert.equal(JSON.parse(await readFile(storePath, 'utf8')).calls, 14000);
+
+  const reloaded = createTypesafeBudget({
+    estimatedUsdPerCall: 0.002,
+    warnUsd: 20,
+    stopUsd: 30,
+    storePath,
+    now: () => nowMs
+  });
+  assert.equal(reloaded.getSnapshot().calls, 14000);
+  assert.equal(reloaded.isStopped(), false);
+  assert.equal(reloaded.wouldExceed(2000), true);
 });
 
 test('R2h: through the server, a budget write failure lets one analysis finish and stops the next before any provider call', async () => {

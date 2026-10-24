@@ -3,7 +3,12 @@
  * Direct violence is immediate; stalking requires behavior plus menace or severe intrusion.
  */
 
-import { normalizeAnalysisText, normalizeForMatching, splitMessageBlocks } from './text-normalize.js';
+import {
+  normalizeAnalysisText,
+  normalizeForMatching,
+  repairMidwordLineBreaks,
+  splitMessageBlocks
+} from './text-normalize.js';
 
 export const SAFETY_NOTICE = {
   id: 'conditional_harm_language',
@@ -943,10 +948,10 @@ function detectSafetyInBlock(blockText, blockOffset, fullNormalized) {
 }
 
 /**
+ * @param {string} normalized
  * @returns {typeof SAFETY_NOTICE & { category?: string, evidenceSpan?: { start: number, end: number, text: string } } | null}
  */
-export function detectSafetyNotice(text) {
-  const normalized = normalizeAnalysisText(text);
+function detectSafetyNoticeOnNormalized(normalized) {
   if (!normalized) return null;
 
   const blocks = splitMessageBlocks(normalized);
@@ -956,4 +961,22 @@ export function detectSafetyNotice(text) {
   }
 
   return null;
+}
+
+/**
+ * @returns {typeof SAFETY_NOTICE & { category?: string, evidenceSpan?: { start: number, end: number, text: string } } | null}
+ */
+export function detectSafetyNotice(text) {
+  // Default normalize first: keeps between-token LS/PS/CR/LF as `\s`
+  // (`kill\u2028you`) and preserves paragraph splits.
+  const normalized = normalizeAnalysisText(text);
+  const notice = detectSafetyNoticeOnNormalized(normalized);
+  if (notice) return notice;
+
+  // Mid-word LS/PS/CR/LF (`ki\u2028ll`) survive default normalize and split
+  // threat verbs. Repair only letter-bounded breaks so between-token cases
+  // are not glued when this path runs.
+  const repaired = repairMidwordLineBreaks(normalized);
+  if (!repaired || repaired === normalized) return null;
+  return detectSafetyNoticeOnNormalized(repaired);
 }

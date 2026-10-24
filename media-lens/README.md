@@ -129,6 +129,12 @@ MEDIA_LENS_MODE=fixture node media-lens/worker/server.js      # http://127.0.0.1
 python3 -m http.server 4173                                    # open http://localhost:4173/media-lens/
 ```
 
+## Developer evaluation (optional, not CI)
+
+- **classifier.dev harness:** `docs/media-lens-classifier-dev-eval.md` and `media-lens/worker/classifier-dev/eval-harness.js` (fixture-only; default-off flag).
+- **DeepEval sidecar:** `media-lens/eval/deepeval/` — offline Python label-match checks on the same fixtures; never part of the product bundle.
+- **Redacted Jev dev tracing:** `media-lens/worker/dev-tracing/jev-trace.js` — opt-in metadata only; production `server.js` never enables it.
+
 ## Isolated Jev pin verify (Issue #118 Phase 4)
 
 Default CI stays fixture-only. This does not enable live URL. It does not enable live pasted-text. It is not production-ready and not a quality study.

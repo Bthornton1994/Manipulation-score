@@ -142,12 +142,16 @@ Host budget keys on the exact hostname and a registrable-domain approximation (n
 
 Other existing caps: 512 KiB request body, 60k prepared chars, 200 spans, 160 Jev calls/analysis, 8s Jev call, 15s analysis, 8s URL fetch (one budget for the whole redirect chain, not per hop), 3s connect per hop, 8 KiB response headers, 2 MiB URL bytes (wire and decoded), 3 redirects. Omitted limits fall back to these defaults; none can be unset to unbounded. Live URL oversized input uses the exact abstention copy: “This public page is too long for Media Lens live analysis. No manipulation analysis or score was generated. Try a shorter public article.” Oversized bodies are `413` unless the analyze rate limit already fired (`429` wins).
 
+Allowlist blocks (`live_url_not_allowlisted`) and SSRF policy rejects (`BLOCKED_HOST`, `BAD_URL`, `BAD_SCHEME`, and related codes) run **before** the per-minute live-URL and per-host counters increment, so rejected URLs do not burn the live-URL budget (PR #127; `tests/media-lens-ops-controls.test.js`, “allowlist and SSRF rejects do not burn the live-URL rate budget”).
+
 ### Jev call cap and analysis timeout
 
 | Control | Default | Env override | Effect |
 | --- | --- | --- | --- |
 | Jev calls / analysis | 160 | `MEDIA_LENS_MAX_JEV_CALLS_PER_ANALYSIS` | Live Jev fail-closes to a controlled abstention graph when the span budget would exceed the cap |
 | Whole analysis timeout | 15s | `MEDIA_LENS_PER_ANALYSIS_TIMEOUT_MS` | Aborts in-flight Jev requests and retries via the shared pipeline `AbortController`; newsjack and downstream adapters do not run after the fail-closed timeout response |
+
+**Mid-analysis cap (`capReached`, PR #170):** when the Jev adapter stops after billing calls but before finishing every span, `analyze.js` returns the same controlled abstention graph as a pre-check overflow. `engine.jev.calls`, `privacy.external_processing`, and the ESTIMATED monthly budget still record those billed calls (same accounting rule as timeout abstention, PR #145).
 
 ### TypeSafe ESTIMATED monthly budget (Jev only)
 

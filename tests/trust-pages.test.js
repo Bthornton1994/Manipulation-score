@@ -91,10 +91,8 @@ test('trust pages changed for the Media Lens operator preview carry the Septembe
 });
 
 test('trust pages changed for the Media Lens coverage wording carry the September 26, 2026 date and a changelog entry', async () => {
-  for (const page of ['limitations.html', 'methodology.html', 'changelog.html']) {
-    const html = await readFile(page, 'utf8');
-    assert.match(html, /<p class="legal-updated">Last updated: September 26, 2026<\/p>/, page);
-  }
+  const limitations = await readFile('limitations.html', 'utf8');
+  assert.match(limitations, /<p class="legal-updated">Last updated: September 26, 2026<\/p>/, 'limitations.html');
   const html = await readFile('changelog.html', 'utf8');
   const entryIdx = html.indexOf('<h2>September 26, 2026 | Media Lens coverage wording</h2>');
   const previousIdx = html.indexOf('<h2>September 25, 2026 | Media Lens preview disclosures</h2>');
@@ -103,4 +101,19 @@ test('trust pages changed for the Media Lens coverage wording carry the Septembe
   assert.match(entry, /reads no Newsjack output or other coverage data/);
   assert.match(entry, /clarity-v37/);
   assert.doesNotMatch(entry, /accura|live coverage is available|multi-outlet coverage is live/i);
+});
+
+test('changelog and methodology record Clarity safety normalization and October 2026 Media Lens ops docs', async () => {
+  const [methodology, changelog] = await Promise.all([
+    readFile('methodology.html', 'utf8'),
+    readFile('changelog.html', 'utf8')
+  ]);
+  assert.match(methodology, /<p class="legal-updated">Last updated: October 12, 2026<\/p>/);
+  assert.match(methodology, /Unicode NFKC folding/);
+  assert.match(changelog, /<p class="legal-updated">Last updated: October 12, 2026<\/p>/);
+  const safetyIdx = changelog.indexOf('<h2>September 29, 2026 | Clarity safety normalization</h2>');
+  const sept26Idx = changelog.indexOf('<h2>September 26, 2026 | Media Lens coverage wording</h2>');
+  assert.ok(safetyIdx !== -1 && safetyIdx < sept26Idx, 'safety entry sits above September 26');
+  assert.match(changelog, /clarity-v38/);
+  assert.match(changelog, /capReached/);
 });

@@ -148,6 +148,14 @@ const IMMEDIATE_RULES = [
   },
   {
     id: 'confinement',
+    pattern: /\byou(?:'re|\s+are)\s+not\s+going\s+anywhere\s+until\b/gi
+  },
+  {
+    id: 'confinement',
+    pattern: /\byou\s+(?:will\s+not|won't)\s+go\s+anywhere\s+until\b/gi
+  },
+  {
+    id: 'confinement',
     pattern: /\b(?:i\s+)?blocked\s+the\s+exit\b[^.!?]{0,50}\byou\s+cannot\s+(?:go|leave|escape)\b/gi
   },
   {

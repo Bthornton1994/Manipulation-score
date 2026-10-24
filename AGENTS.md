@@ -33,6 +33,8 @@ Shared operating rules for Codex and Claude Code in this repository. Follow ever
 - Preserve established behavior, interfaces, and data formats unless the task requires changing them.
 - Avoid unrelated refactors and new dependencies. Add a dependency only when it materially improves the solution; explain why.
 - Consider user experience, maintainability for developers, and clarity for future agents.
+- Cut taglines, helper text and secondary labels. If a screen needs them to make sense, fix the layout.
+- Make the best decision that will elevate all three: the user experience (UX), developer experience (DX), and agent experience (AX) always, without breaking anything.
 - Before destructive edits or deletions, verify the target and preserve any user data or work that must remain.
 
 5. Use parallel workers deliberately

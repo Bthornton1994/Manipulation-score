@@ -43,7 +43,9 @@ export const criticalSafetyCorpus = [
   "I will beat you because you embarrassed me in front of them.",
   "You will not leave this house until you give me your password.",
   "I locked you inside and hid the key until you cooperate.",
-  "I am following you home after you told me to stop contacting you."
+  "I am following you home after you told me to stop contacting you.",
+  "You asked me to walk outside your door and I will kill you if you try to leave.",
+  "As we agreed I will pick up your keys and I will stab you if you call anyone."
 ];
 
 export const benignSafetyCorpus = [

@@ -24,7 +24,30 @@
     </header>
     <main class="legal-content">
       <h1>Changelog</h1>
-      <p class="legal-updated">Last updated: September 26, 2026</p>
+      <p class="legal-updated">Last updated: October 19, 2026</p>
+
+      <h2>October 19, 2026 | Documentation sync (Clarity + Media Lens ops)</h2>
+      <ul>
+        <li>Methodology now documents Clarity text normalization (NFKC, control/format character handling) aligned with <code>text-normalize.js</code> and the safety regression suite.</li>
+        <li>Media Lens ops runbook and canary drill now document kill-file path segments over 255 characters (fail-closed without <code>stat</code>), live-URL rate limits that run only after URL authorization, and Jev call-cap abstentions that still bill completed provider calls to the ESTIMATED budget.</li>
+        <li>Classifier.dev eval doc adds pointers to optional offline DeepEval and local Jev tracing tooling (not CI, not production).</li>
+        <li>No screening version change. Service worker cache remains <code>clarity-v38</code> (set in September 2026).</li>
+      </ul>
+
+      <h2>October 2026 | Media Lens worker hardening (repository)</h2>
+      <ul>
+        <li>Kill switch: any <code>MEDIA_LENS_KILL_SWITCH_FILE</code> path with a segment longer than 255 characters asserts immediately (Linux <code>NAME_MAX</code> parity), including when Windows would report <code>ENOENT</code> for an over-long segment.</li>
+        <li>Live URL rate limits apply only after parse, allowlist, and SSRF policy checks; rejected URLs do not consume per-minute live-URL budgets.</li>
+        <li>When the per-analysis Jev call cap is reached (<code>capReached</code>), the worker abstains but records calls already made toward the TypeSafe ESTIMATED monthly budget and audit <code>jev_calls</code>.</li>
+        <li>Article preparation fixes: leaf CMS containers, table cells, <code>&lt;br&gt;</code>-split bodies, direct <code>&lt;body&gt;</code> text without an <code>&lt;article&gt;</code> wrapper, and hermetic test seams when Python/Trafilatura is unavailable on a dev host.</li>
+        <li>Media Lens on the public Clarity site and screening v0.3.3 are unchanged.</li>
+      </ul>
+
+      <h2>September 29, 2026 | Clarity safety normalization</h2>
+      <ul>
+        <li>Fixed a bypass where C0/C1 control characters and format characters between tokens could hide explicit harm language from safety notices and scoring. Normalization now space-maps those separators while preserving paragraph newlines (<code>text-normalize.js</code>; regression tests in <code>tests/audit-control-format-safety.test.js</code>).</li>
+        <li>Screening version stays v0.3.3. Service worker cache: <code>clarity-v38</code>.</li>
+      </ul>
 
       <h2>September 26, 2026 | Media Lens coverage wording</h2>
       <ul>

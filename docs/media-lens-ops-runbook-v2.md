@@ -53,7 +53,7 @@ Repository and CI defaults:
 | `MEDIA_LENS_ENABLE_CLASSIFIER_DEV` | unset / false | Exact string `true` required before the evaluation-only classifier.dev adapter may make outbound calls. Default-off. Not a second independent model |
 | `MEDIA_LENS_CLASSIFIER_DEV_TIER` | `fast` | Unset/empty → `fast`. Smart escalation requires exact `MEDIA_LENS_CLASSIFIER_DEV_TIER=smart`. `SMART` / `Smart` do not select smart |
 | `MEDIA_LENS_KILL_SWITCH` | unset / false | Exact string `true` only (same rule as the ENABLE flags). Forces live URL, live Jev, isolated pin verification, and classifier.dev off |
-| `MEDIA_LENS_KILL_SWITCH_FILE` | unset | If set and the path exists, same as kill switch. Missing file does not assert. Permission/IO/`stat` errors fail-closed as asserted |
+| `MEDIA_LENS_KILL_SWITCH_FILE` | unset | If set and the path exists, same as kill switch. An ordinary missing file (`ENOENT`) does not assert. Any path segment longer than 255 characters asserts without a `stat` call (fail-closed; Windows can report `ENOENT` for over-long segments). Permission/IO/other `stat` errors fail-closed as asserted |
 | `MEDIA_LENS_URL_ALLOWLIST` | empty | Empty means public-address policy only. Canary should set exact hostnames. When set, every redirect hop is re-checked before pin/connect; off-list hops are `live_url_not_allowlisted` |
 
 Misspellings and `TRUE` / `1` / `yes` do not enable anything. They also do not assert the kill switch; use exact `true` or `touch` the kill file.
@@ -138,6 +138,8 @@ Per worker process, fixed one-minute windows (except concurrency, which is in-fl
 
 Only the analyses/minute limiter runs before the body is read. Live-URL, per-host, and concurrent limiters need `payload.mode` and the URL, so they run after JSON parse.
 
+Live-URL budgets are charged only after URL authorization in `liveUrlGate` (parse, public-address policy, and hop-scoped allowlist when configured). Rejected SSRF or off-allowlist attempts return `400` without incrementing per-minute or per-host live-URL counters, so a burst of blocked URLs cannot lock out legitimate fetches.
+
 Host budget keys on the exact hostname and a registrable-domain approximation (not the full Public Suffix List). Concurrent fetch is also serialized inside `safe-fetch.js`. Exhaustion returns `429 rate_limited`. Setting a live-URL max to `0` rejects all live URL attempts (an extra local brake, not a substitute for the kill switch).
 
 Other existing caps: 512 KiB request body, 60k prepared chars, 200 spans, 160 Jev calls/analysis, 8s Jev call, 15s analysis, 8s URL fetch (one budget for the whole redirect chain, not per hop), 3s connect per hop, 8 KiB response headers, 2 MiB URL bytes (wire and decoded), 3 redirects. Omitted limits fall back to these defaults; none can be unset to unbounded. Live URL oversized input uses the exact abstention copy: “This public page is too long for Media Lens live analysis. No manipulation analysis or score was generated. Try a shorter public article.” Oversized bodies are `413` unless the analyze rate limit already fired (`429` wins).
@@ -146,7 +148,7 @@ Other existing caps: 512 KiB request body, 60k prepared chars, 200 spans, 160 Je
 
 | Control | Default | Env override | Effect |
 | --- | --- | --- | --- |
-| Jev calls / analysis | 160 | `MEDIA_LENS_MAX_JEV_CALLS_PER_ANALYSIS` | Live Jev fail-closes to a controlled abstention graph when the span budget would exceed the cap |
+| Jev calls / analysis | 160 | `MEDIA_LENS_MAX_JEV_CALLS_PER_ANALYSIS` | Live Jev fail-closes to a controlled abstention graph when the adapter sets `capReached` or reported calls exceed the cap. Calls already completed before the cap are still recorded in `engine.jev.calls`, the `analyze_complete` audit line, and the TypeSafe ESTIMATED monthly budget (same rule as timeout abstention in PR #145) |
 | Whole analysis timeout | 15s | `MEDIA_LENS_PER_ANALYSIS_TIMEOUT_MS` | Aborts in-flight Jev requests and retries via the shared pipeline `AbortController`; newsjack and downstream adapters do not run after the fail-closed timeout response |
 
 ### TypeSafe ESTIMATED monthly budget (Jev only)
@@ -193,7 +195,7 @@ On ml-jev, email alert delivery is **WAIVED** by the owner (§0). Do not claim t
 Two equivalent controls, re-checked on each `/analyze` (and kill-file `stat` each time). Isolated pin verification uses the same assertion before any TypeSafe call:
 
 1. `MEDIA_LENS_KILL_SWITCH=true` — the exact string `true` only, same rule as `MEDIA_LENS_ENABLE_LIVE`, `MEDIA_LENS_ENABLE_LIVE_URL`, and `MEDIA_LENS_ENABLE_CLASSIFIER_DEV`. `TRUE`, `1`, and `yes` do not assert the kill switch.
-2. `touch` the path in `MEDIA_LENS_KILL_SWITCH_FILE` (existence, not file contents). Permission, IO, and other non-`ENOENT` `stat` errors on that path fail-closed (treat as asserted). Only a missing path (`ENOENT`) is not a kill. `existsSync` is not used: Node reports permission failures as missing, which would fail open.
+2. `touch` the path in `MEDIA_LENS_KILL_SWITCH_FILE` (existence, not file contents). Permission, IO, and other non-`ENOENT` `stat` errors on that path fail-closed (treat as asserted). Only a missing path (`ENOENT`) is not a kill. A path with any segment longer than 255 characters asserts without calling `stat`, even when nothing exists at that path (fail-closed on every OS). `existsSync` is not used: Node reports permission failures as missing, which would fail open.
 
 The kill switch stops every external Jev-capable path, including isolated pin verification and classifier.dev:
 

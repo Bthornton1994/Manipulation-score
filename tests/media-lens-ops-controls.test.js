@@ -713,6 +713,60 @@ test('fetchArticle on createServer is a test seam and is unused by startServer',
   assert.doesNotMatch(startBlock.slice(0, 250), /options = \{\}/);
 });
 
+test('per-host live-URL rejects do not burn the global per-minute budget', async () => {
+  const config = liveUrlConfig({ MEDIA_LENS_URL_ALLOWLIST: 'allowed.example,other.example' });
+  config.limits = {
+    ...config.limits,
+    maxAnalysesPerMinute: 20,
+    maxLiveUrlPerMinute: 2,
+    maxLiveUrlPerHostPerMinute: 1,
+    maxConcurrentLiveUrl: 2
+  };
+  let fetchHits = 0;
+  const server = await listen(
+    createServer(config, {
+      fetchArticle: async () => {
+        fetchHits += 1;
+        return {
+          html: '<html><body><p>fixture body</p></body></html>',
+          finalUrl: 'http://allowed.example/article',
+          contentType: 'text/html',
+          fetchedAt: new Date().toISOString(),
+          fetchStatus: '200'
+        };
+      }
+    })
+  );
+  try {
+    const first = await requestJson(server, {
+      method: 'POST',
+      path: '/analyze',
+      body: { user_asserted_public: true, mode: 'url', url: 'http://allowed.example/first' }
+    });
+    assert.equal(first.status, 200);
+    assert.equal(fetchHits, 1);
+
+    const sameHost = await requestJson(server, {
+      method: 'POST',
+      path: '/analyze',
+      body: { user_asserted_public: true, mode: 'url', url: 'http://allowed.example/second' }
+    });
+    assert.equal(sameHost.status, 429);
+    assert.match(sameHost.body.message, /this host/i);
+    assert.equal(fetchHits, 1);
+
+    const otherHost = await requestJson(server, {
+      method: 'POST',
+      path: '/analyze',
+      body: { user_asserted_public: true, mode: 'url', url: 'http://other.example/article' }
+    });
+    assert.equal(otherHost.status, 200);
+    assert.equal(fetchHits, 2);
+  } finally {
+    server.close();
+  }
+});
+
 test('allowlist and SSRF rejects do not burn the live-URL rate budget', async () => {
   const audit = collectAudit();
   const config = liveUrlConfig({ MEDIA_LENS_URL_ALLOWLIST: 'allowed.example' });

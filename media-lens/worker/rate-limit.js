@@ -5,7 +5,7 @@
 export function createFixedWindowLimiter(maxPerWindow, windowMs = 60000) {
   let windowStart = Date.now();
   let count = 0;
-  return function checkAndIncrement() {
+  function checkAndIncrement() {
     const now = Date.now();
     if (now - windowStart >= windowMs) {
       windowStart = now;
@@ -13,7 +13,15 @@ export function createFixedWindowLimiter(maxPerWindow, windowMs = 60000) {
     }
     count += 1;
     return count <= maxPerWindow;
+  }
+  // Undo one successful consume in the current window. Used when a later
+  // gate (for example per-host live-URL) rejects after the worker-wide
+  // budget already incremented, so the rejected attempt does not lock out
+  // other hosts for the rest of the minute.
+  checkAndIncrement.releaseOne = function releaseOne() {
+    if (count > 0) count -= 1;
   };
+  return checkAndIncrement;
 }
 
 export function createKeyedFixedWindowLimiter(maxPerWindow, windowMs = 60000, { maxKeys = 1024 } = {}) {
@@ -25,7 +33,7 @@ export function createKeyedFixedWindowLimiter(maxPerWindow, windowMs = 60000, { 
     }
   }
 
-  return function tryConsume(key) {
+  function tryConsume(key) {
     const now = Date.now();
     if (maxPerWindow <= 0) return false;
     let slot = keys.get(key);
@@ -38,7 +46,15 @@ export function createKeyedFixedWindowLimiter(maxPerWindow, windowMs = 60000, { 
     if (slot.count >= maxPerWindow) return false;
     slot.count += 1;
     return true;
+  }
+  // Undo one successful consume for a key. Paired with releaseOne on the
+  // worker-wide limiter when a multi-key host check fails mid-loop.
+  tryConsume.release = function release(key) {
+    const slot = keys.get(key);
+    if (!slot || slot.count <= 0) return;
+    slot.count -= 1;
   };
+  return tryConsume;
 }
 
 export function createConcurrencyGate(maxConcurrent) {

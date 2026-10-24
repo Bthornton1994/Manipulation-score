@@ -359,9 +359,18 @@ function liveUrlGate({ payload, config, audit, consumeLiveUrl, consumeLiveUrlHos
     return { error: 'rate_limited', status: 429, message: 'Too many live URL attempts. Wait a minute and try again.' };
   }
 
+  // Consume host keys after the worker-wide budget. If any host key rejects,
+  // refund the global slot (and any host keys already taken in this attempt)
+  // so a host-limited 429 does not exhaust the per-minute live-URL budget for
+  // other allowlisted hosts.
   const hostKeys = rateLimitHostKeys(parsedHost);
+  const consumedHostKeys = [];
   for (const key of hostKeys) {
     if (!consumeLiveUrlHost(key)) {
+      for (const consumed of consumedHostKeys) {
+        consumeLiveUrlHost.release?.(consumed);
+      }
+      consumeLiveUrl.releaseOne?.();
       audit.emit(AUDIT_EVENTS.RATE_LIMIT, {
         mode: config.mode,
         input_mode: 'url',
@@ -371,6 +380,7 @@ function liveUrlGate({ payload, config, audit, consumeLiveUrl, consumeLiveUrlHos
       });
       return { error: 'rate_limited', status: 429, message: 'Too many live URL attempts for this host. Wait a minute and try again.' };
     }
+    consumedHostKeys.push(key);
   }
 
   return { ok: true };

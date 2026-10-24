@@ -4,6 +4,13 @@ const UNICODE_SPACES = /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g;
 const FORMAT_CHARS = /[\u200B-\u200D\uFEFF]/g;
 /** Combining grapheme joiner — Mn, not Cf; same between-token joiner class as U+2060. */
 const COMBINING_GRAPHEME_JOINER = /\u034F/g;
+/**
+ * Blank / ignorable characters that are not Cc/Cf and are not JS `\s`.
+ * Hangul fillers + Braille blank render as empty; variation selectors are
+ * Default_Ignorable. NFKC maps U+FFA0 → U+1160 before this class is applied.
+ */
+const BLANK_IGNORABLE_CHARS = /[\u115F\u1160\u3164\u2800\uFE00-\uFE0F]/gu;
+const MIDWORD_BLANK_IGNORABLES = /(?<=\p{L})[\u115F\u1160\u3164\u2800\uFE00-\uFE0F]+(?=\p{L})/gu;
 
 /**
  * Map C0/C1 controls to spaces while preserving newline/CR for paragraph splits.
@@ -14,11 +21,26 @@ function mapControlChars(ch) {
 }
 
 /**
+ * Strip Hangul fillers, Braille blank, and variation selectors that sit between letters.
+ *
+ * Default normalization space-maps these so between-token separators still match
+ * (`kill\u115Fyou` → `kill you`). The same characters mid-word (`ki\u115Fll`)
+ * become `ki ll` under space-mapping and break `\bkill\s+you\b`. Safety dual-paths
+ * this repair on the original string after the default normalize.
+ */
+export function repairMidwordBlankIgnorables(text) {
+  return (text || '').normalize('NFKC').replace(MIDWORD_BLANK_IGNORABLES, '');
+}
+
+/**
  * Normalize text for scoring and safety matching while preserving paragraph breaks.
  *
  * Between-token Cc/Cf separators are space-mapped (not stripped) so patterns like
  * `\bkill\s+you\b` still match. FORMAT_CHARS / soft hyphen remain strip-mode for
  * mid-word repair; between-word strip-glue for those is tracked separately (#57).
+ * Hangul fillers / Braille blank / variation selectors are space-mapped the same
+ * way (they are not `\s`); mid-word repair is handled in safety via
+ * `repairMidwordBlankIgnorables`.
  */
 export function normalizeAnalysisText(text) {
   return (text || '')
@@ -28,6 +50,7 @@ export function normalizeAnalysisText(text) {
     .replace(SMART_APOSTROPHE, "'")
     .replace(SMART_QUOTE, '"')
     .replace(UNICODE_SPACES, ' ')
+    .replace(BLANK_IGNORABLE_CHARS, ' ')
     .replace(/\p{Cc}/gu, mapControlChars)
     .replace(/\p{Cf}/gu, ' ')
     .replace(COMBINING_GRAPHEME_JOINER, ' ')

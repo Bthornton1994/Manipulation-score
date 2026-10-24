@@ -24,7 +24,22 @@
     </header>
     <main class="legal-content">
       <h1>Changelog</h1>
-      <p class="legal-updated">Last updated: September 26, 2026</p>
+      <p class="legal-updated">Last updated: October 5, 2026</p>
+
+      <h2>October 5, 2026 | Media Lens operator documentation</h2>
+      <ul>
+        <li>Operator runbook and README now state that a live Jev <code>capReached</code> abstention still records every billed call in the abstention graph, the ESTIMATED monthly budget file, and audit lines (same accounting path as a timeout after partial Jev work).</li>
+        <li>Jev usage-lab audit doc clarifies when the per-analysis call cap abstains with zero provider calls versus after billed calls.</li>
+        <li>Issue #118 SSRF mutation-test portability on Windows is recorded in <code>docs/audit/t1773u-ml-118-ssrf-a/</code>. No live URL enablement change.</li>
+        <li>Clarity screening logic and on-device privacy behavior are unchanged. Service worker cache stays <code>clarity-v38</code>.</li>
+      </ul>
+
+      <h2>September 29, 2026 | Safety normalization (screening v0.3.3)</h2>
+      <ul>
+        <li>Before safety matching, Clarity maps Unicode control and format characters between words to spaces (after NFKC normalization). Invisible separators can no longer hide phrases such as “kill you” from harm detection.</li>
+        <li>Methodology describes the rule. Regression: <code>tests/audit-control-format-safety.test.js</code>.</li>
+        <li>Screening version remains <strong>v0.3.3</strong>. Service worker cache: <code>clarity-v38</code>.</li>
+      </ul>
 
       <h2>September 26, 2026 | Media Lens coverage wording</h2>
       <ul>

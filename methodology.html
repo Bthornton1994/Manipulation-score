@@ -24,7 +24,7 @@
     </header>
     <main class="legal-content">
       <h1>Methodology</h1>
-      <p class="legal-updated">Last updated: September 26, 2026</p>
+      <p class="legal-updated">Last updated: October 5, 2026</p>
 
       <h2>What Clarity measures</h2>
       <p>Clarity screens observable <strong>language functions</strong> in a pasted message, patterns that may compress informed, voluntary choice. Examples include guilt leverage, forced urgency, isolation framing, conditional access, and similar pressure functions described in the taxonomy below.</p>
@@ -62,6 +62,7 @@
 
       <h2>Safety notices (separate from scoring)</h2>
       <p>Safety classification runs before pattern scoring. When language about violence, weapons, confinement, self-harm coercion, or contextual stalking is detected, Clarity shows a <strong>safety notice</strong> instead of a manipulation score. This is not a safety assessment and cannot determine whether you are in danger.</p>
+      <p>Input is normalized with Unicode NFKC before safety and scoring. Control characters (C0/C1) and format characters (Cf) that sit between words are mapped to spaces so invisible separators cannot glue tokens (for example turning “kill” and “you” into one word) or slip past word-boundary checks for harm phrases. Paragraph line breaks are preserved.</p>
       <p>Stalking-related language uses a two-stage model: intrusive behaviors paired with menace, severe intrusion, or multiple eligible behaviors. Explicit future threats and continuous present-tense stalking with refusal phrases are handled separately.</p>
 
       <h2>Context handling</h2>

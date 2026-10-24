@@ -1,0 +1,19 @@
+{
+  "generator": "scripts/skill-sync.mjs",
+  "skill": "product-discovery-build",
+  "version": "1.0.0",
+  "canonicalSha256": "13c9bbb591040a900373539413c82334f294b8ffcab6a7855cedd96d4b077d24",
+  "source": {
+    "repo": "Bthornton1994/OpenMausBot",
+    "path": "standards/shared-skills/product-discovery-build",
+    "ref": "eeca95c9653a082095d14b10030474ce25533598"
+  },
+  "files": {
+    "SKILL.md": "f3665f90f3a4431296e825a09b231980b053e1bf411127d2afe6b98a7ef0de53",
+    "agents/openai.yaml": "a9ba0cabf1a885a6d1823ea316eef503b84508c0a789f4afadeea717b28c25e9",
+    "assets/icon.svg": "72343cc4b66256ae7de8474c7cad14e711ad84a94c473732a44f96a56124c42d",
+    "references/host-adapters.md": "62cf3ec053187abdd1c0fc9b367a823ef560c2eabb289f5ae29b9b4206f5036a",
+    "references/ios-apps.md": "5532d1691fd306e4715fa6bb69b3804ee5c9dd307acd79acaf2574dc08481b0a"
+  },
+  "notice": "Generated adapter. Do not edit; change the canonical skill and re-run skill-sync."
+}

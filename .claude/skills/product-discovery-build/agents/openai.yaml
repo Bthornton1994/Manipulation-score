@@ -1,0 +1,14 @@
+interface:
+  display_name: Product Discovery & Build
+  short_description: Research, design, and build products with evidence
+  default_prompt: Use $product-discovery-build to turn this product idea into a researched,
+    designed, verifiable build plan.
+  icon_small: assets/icon.svg
+  icon_large: assets/icon.svg
+policy:
+  products:
+  - chatgpt
+  - codex
+  - api
+  - atlas
+  allow_implicit_invocation: true
